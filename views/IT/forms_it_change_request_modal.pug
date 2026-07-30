@@ -1,0 +1,409 @@
+include ../mixins/modal-container
+include ../mixins/floating-input
+include ../mixins/floating-select
+include ../mixins/floating-textarea
+include ../mixins/floating-file
+
+//- ── UNIFIED CHANGE REQUEST MODAL (create + view/detail) ─────────────────
++modal-container('crModal', 'crModalTitle', 'crModalClose', 'crModalCancel', 'crModalSave', 'Change Request')
+  //- Hidden IDs (used in view mode)
+  input#crv_id(type="hidden")
+  input#crv_log_id(type="hidden")
+
+  //- View-only info header (status, date, go-to-approval) — hidden in create mode
+  div#crViewInfo(style="display:none;")
+    div.row.mb-1
+      div.col-md-2
+        p.text-muted.small.mb-0 Status
+        span#crv_status -
+      div.col-md-8
+        p.text-muted.small.mb-0 Date Created
+        p#crv_date_created.mb-0 -
+      div.col-md-2.d-flex.align-items-center
+        a#crv_goto_approval.btn.btn-sm(href="#" style="background-color:#00586f;color:#e9ecef;display:none;")
+          i.fas.fa-external-link-alt.me-1
+          | Go to Approval
+    hr.mt-2.mb-3
+  //- ── Shared fields (editable in create, locked in view) ──────────────
+  div.row.Not
+    div.col-md-4.mb-2
+      +floating-input('Department', 'crc_collaborator_department', 'text', false, '', '', '', {}, true)
+    div.col-md-4.mb-2
+      +floating-input('Requestor Name', 'crc_collaborator_name', 'text', false, '', '', '', {}, true)
+    div.col-md-4.mb-2
+      +floating-input('Position', 'crc_collaborator_position', 'text', false, '', '', '', {}, true)
+  div.row
+    - var crcAppOptions = [{value:'SIR',label:'SIR'},{value:'Dashboard',label:'Dashboard'},{value:'Sage',label:'Sage'},{value:'Web Page',label:'Web Page'},{value:'CAS',label:'CAS'},{value:'Other',label:'Other'}]
+    div.col-md-6.mb-2
+      +floating-select('Application Name', 'crc_application_name', crcAppOptions, true, 'Select application', '', '', { onchange: "crcHandleOtherSelection(this,'crcOtherApplication')" })
+    div.col-md-6.mb-2#crcOtherApplication(style="display:none;")
+      +floating-input('Specify Application', 'crc_application_other', 'text', false, 'Specify the application', '', '', { maxlength: '50' })
+    - var crcPriorityOptions = [{value:'Critical',label:'Critical'},{value:'High',label:'High'},{value:'Medium',label:'Medium'},{value:'Low',label:'Low'}]
+    div.col-md-6.mb-2
+      +floating-select('Priority of request', 'crc_priority', crcPriorityOptions, true, 'Select the priority')
+    - var crcTypeOptions = [{value:'Report',label:'Report'},{value:'Adecuacy',label:'Adecuacy'},{value:'New Module',label:'New Module'},{value:'New Form',label:'New Form'},{value:'Other',label:'Other'}]
+    div.col-md-6.mb-2
+      +floating-select('Type of Request', 'crc_type', crcTypeOptions, true, 'Type of request', '', '', { onchange: "crcHandleOtherSelection(this,'crcOtherType')" })
+    div.col-md-6.mb-2#crcOtherType(style="display:none;")
+      +floating-input('Specify Type', 'crc_type_other', 'text', false, 'Specify the type', '', '', { maxlength: '50' })
+    div.col-md-6.mb-2
+      +floating-input('Title', 'crc_title', 'text', true, 'Example: New Module for the Marketing Module... (MAX 50 characters)', '', '', { maxlength: '50' })
+  div.row
+    div.col-md-6.mb-2#crcReportField(style="display:none;")
+      +floating-textarea('Report Structure', 'crc_report', false, 'A reporting style module... (MAX 250 characters)', '', '', { maxlength: '250' }, 4)
+    div.col-md-6.mb-2
+      +floating-textarea('Required Fields', 'crc_fields', false, 'Example: Name, Email, Department... (MAX 500 characters)', '', '', { maxlength: '500' }, 4)
+    div.col-md-6.mb-2
+      +floating-textarea('Required Functions', 'crc_functions', false, 'Example: I need to create a new form... (MAX 500 characters)', '', '', { maxlength: '500' }, 4)
+    div.col-md-6.mb-2
+      +floating-textarea('Additional Comments', 'crc_comments', false, 'Add any additional comments... (MAX 500 characters)', '', '', { maxlength: '500' }, 4)
+  //- Files row — hidden in view mode
+  div.row#crcFilesRow
+    div.col-md-12.mb-2
+      +floating-file('Supporting Documents', 'crc_files', false, true, false, '*')
+  //- View-only files section (same source as approvals detail)
+  div#crViewFiles(style="display:none;")
+    div#crApprovalFiles
+
+
+style.
+  .app-modal[data-mode="view"] .floating-input,
+  .app-modal[data-mode="view"] .floating-select,
+  .app-modal[data-mode="view"] .floating-textarea {
+    cursor: default;
+  }
+
+script.
+  (function () {
+    const get = id => document.getElementById(id);
+    const esc = v => (v || '').toString()
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+    // ── FIELD HELPERS ──────────────────────────────────────────────────────
+    function resetFloatingField(id) {
+      const el = get(id);
+      if (!el) return;
+      el.value = '';
+      el.classList.remove('valid', 'error', 'has-value');
+      el.removeAttribute('data-touched');
+      const errEl = document.querySelector('[data-error-for="' + id + '"]');
+      if (errEl) { errEl.textContent = ''; errEl.classList.remove('show'); }
+    }
+
+    function fillFloatingField(id, value) {
+      const el = get(id);
+      if (!el) return;
+      el.value = value || '';
+      el.classList.remove('error');
+      el.classList.toggle('has-value', !!el.value);
+    }
+
+    // ── MODE CONTROL ────────────────────────────────────────────────────────
+    function setViewMode() {
+      const modal = get('crModal');
+      modal.dataset.mode = 'view';
+      ['crc_application_name', 'crc_priority', 'crc_type'].forEach(id => {
+        const el = get(id); if (el) el.disabled = true;
+      });
+      ['crc_application_other', 'crc_type_other', 'crc_title',
+       'crc_report', 'crc_fields', 'crc_functions', 'crc_comments'].forEach(id => {
+        const el = get(id); if (el) el.readOnly = true;
+      });
+      get('crViewInfo').style.display    = '';
+      get('crViewFiles').style.display   = '';
+      get('crcFilesRow').style.display   = 'none';
+      get('crModalSave').style.display   = 'none';
+    }
+
+    function setCreateMode() {
+      const modal = get('crModal');
+      modal.dataset.mode = 'create';
+      ['crc_application_name', 'crc_priority', 'crc_type'].forEach(id => {
+        const el = get(id); if (el) el.disabled = false;
+      });
+      ['crc_application_other', 'crc_type_other', 'crc_title',
+       'crc_report', 'crc_fields', 'crc_functions', 'crc_comments'].forEach(id => {
+        const el = get(id); if (el) el.readOnly = false;
+      });
+      get('crViewInfo').style.display    = 'none';
+      get('crViewFiles').style.display   = 'none';
+      get('crApprovalFiles').innerHTML   = '';
+      get('crcFilesRow').style.display   = '';
+      get('crModalSave').style.display   = '';
+    }
+
+    // ── STATUS BADGE ───────────────────────────────────────────────────────
+    function getStatusColor(status) {
+      const map = {
+        'Verify':   'rgb(45,124,194)', 'Verified': '#00586f',
+        'Approve':  '#6c757d',         'Approved': '#ffc107',
+        'Rejected': 'rgb(150,17,17)',
+      };
+      return map[status] || '#6c757d';
+    }
+
+    function loadChangeRequestFiles(approvalRowId) {
+      const filesBox = get('crApprovalFiles');
+      const filesWrap = get('crViewFiles');
+      if (!filesBox || !filesWrap) return;
+
+      if (!approvalRowId) {
+        filesWrap.style.display = 'none';
+        filesBox.innerHTML = '';
+        return;
+      }
+
+      filesWrap.style.display = '';
+      filesBox.innerHTML = '<p class="text-muted mb-0">Loading files...</p>';
+
+      if (typeof window.ArchivosApproval === 'function') {
+        window.ArchivosApproval(Number(approvalRowId), { containerId: 'crApprovalFiles' });
+      } else {
+        filesBox.innerHTML = '<p class="text-danger mb-0">File viewer is not available.</p>';
+      }
+    }
+
+    // ── VIEW MODAL ─────────────────────────────────────────────────────────
+    window.openChangeRequestViewModal = async function (id) {
+      setViewMode();
+      get('crModalTitle').textContent = 'Loading…';
+      get('crViewFiles').style.display = 'none';
+      get('crApprovalFiles').innerHTML = '';
+      // Clear all shared fields
+      ['crc_collaborator_department', 'crc_collaborator_name', 'crc_collaborator_position',
+       'crc_application_name', 'crc_priority', 'crc_type',
+       'crc_application_other', 'crc_type_other', 'crc_title',
+       'crc_report', 'crc_fields', 'crc_functions', 'crc_comments'].forEach(resetFloatingField);
+      get('crcOtherApplication').style.display = 'none';
+      get('crcOtherType').style.display        = 'none';
+      get('crcReportField').style.display      = 'none';
+      get('crModal').classList.add('open');
+      document.body.style.overflow = 'hidden';
+
+      try {
+        const res = await fetch('/get_forms_it_software_change_request_json/' + encodeURIComponent(id));
+        if (!res.ok) throw new Error('Status ' + res.status);
+        const { formData: f = {} } = await res.json();
+
+        get('crv_id').value     = f.id     || '';
+        get('crv_log_id').value = f.log_id || '';
+        get('crModalTitle').textContent = 'Change Request #' + (f.id || '');
+
+        fillFloatingField('crc_collaborator_department', f.collaborator_department);
+        fillFloatingField('crc_collaborator_name',       f.collaborator_name);
+        fillFloatingField('crc_collaborator_position',   f.collaborator_position);
+
+        // Application name — handle custom values
+        const stdApps = ['SIR','Dashboard','Sage','Web Page','CAS','Other'];
+        if (stdApps.includes(f.application_name)) {
+          fillFloatingField('crc_application_name', f.application_name);
+        } else {
+          fillFloatingField('crc_application_name', 'Other');
+          get('crcOtherApplication').style.display = 'block';
+          fillFloatingField('crc_application_other', f.application_name);
+        }
+
+        fillFloatingField('crc_priority', f.priority);
+
+        // Type — handle custom values
+        const stdTypes = ['Report','Adecuacy','New Module','New Form','Other'];
+        if (stdTypes.includes(f.type)) {
+          fillFloatingField('crc_type', f.type);
+        } else {
+          fillFloatingField('crc_type', 'Other');
+          get('crcOtherType').style.display = 'block';
+          fillFloatingField('crc_type_other', f.type);
+        }
+
+        fillFloatingField('crc_title',     f.title);
+        fillFloatingField('crc_fields',    f.fields);
+        fillFloatingField('crc_functions', f.functions);
+        fillFloatingField('crc_comments',  f.comments);
+
+        if (f.type === 'Report' && f.report) {
+          get('crcReportField').style.display = 'block';
+          fillFloatingField('crc_report', f.report);
+        }
+
+        // Status badge
+        const statusEl = get('crv_status');
+        if (statusEl) {
+          statusEl.innerHTML = f.approval_status
+            ? '<span style="border-radius:10px;padding:3px 8px;color:white;font-size:.85rem;background-color:'
+              + getStatusColor(f.approval_status) + '">' + esc(f.approval_status) + '</span>'
+            : '-';
+        }
+        const dateEl = get('crv_date_created');
+        if (dateEl) {
+          const rawDate = String(f.date_created || '').split(',')[0].trim();
+          dateEl.textContent = rawDate || '-';
+        }
+        const gotoBtn = get('crv_goto_approval');
+        const onApprovalPage = window.location.pathname.includes('approvals-detalle');
+        if (f.log_id && !onApprovalPage) {
+          gotoBtn.href = '/approvals-detalle?RowID=' + encodeURIComponent(f.log_id);
+          gotoBtn.style.display = '';
+        } else {
+          gotoBtn.style.display = 'none';
+        }
+
+        loadChangeRequestFiles(f.log_id);
+      } catch (err) {
+        console.error(err);
+        loadChangeRequestFiles(null);
+        get('crModalTitle').textContent = 'Error loading detail';
+      }
+    };
+
+    // ── CREATE MODAL ───────────────────────────────────────────────────────
+    function resetAllFields() {
+      ['crc_application_name', 'crc_priority', 'crc_type',
+       'crc_application_other', 'crc_type_other', 'crc_title',
+       'crc_report', 'crc_fields', 'crc_functions', 'crc_comments',
+       'crc_collaborator_department', 'crc_collaborator_name', 'crc_collaborator_position'].forEach(resetFloatingField);
+      const arr = window['getFiles_crc_files'] ? window['getFiles_crc_files']() : null;
+      if (arr) arr.length = 0;
+      const fileListEl = document.getElementById('filelist-crc_files');
+      const fileIn = get('crc_files');
+      if (fileListEl) fileListEl.innerHTML = '';
+      if (fileIn) { try { const dt = new DataTransfer(); fileIn.files = dt.files; } catch(e){} }
+      get('crcOtherApplication').style.display = 'none';
+      get('crcOtherType').style.display        = 'none';
+      get('crcReportField').style.display      = 'none';
+    }
+
+    window.openChangeRequestCreateModal = function () {
+      resetAllFields();
+      setCreateMode();
+      const fillFromHidden = (id, srcId) => {
+        const el = get(id), src = get(srcId);
+        if (el && src && src.value) { el.value = src.value; el.classList.add('has-value'); }
+      };
+      fillFromHidden('crc_collaborator_department', 'hidden_collaborator_department');
+      fillFromHidden('crc_collaborator_name',       'hidden_collaborator_name');
+      fillFromHidden('crc_collaborator_position',   'hidden_collaborator_position');
+      get('crModalTitle').textContent = 'New Change Request';
+      get('crModal').classList.add('open');
+      document.body.style.overflow = 'hidden';
+    };
+
+    function closeModal() {
+      get('crModal').classList.remove('open');
+      document.body.style.overflow = '';
+    }
+
+    window.crcHandleOtherSelection = function (selectEl, colId) {
+      const col = get(colId);
+      if (!col) return;
+      col.style.display = selectEl.value === 'Other' ? 'block' : 'none';
+      if (selectEl.value !== 'Other') {
+        const inp = col.querySelector('input, textarea');
+        if (inp) resetFloatingField(inp.id);
+      }
+      if (selectEl.id === 'crc_type') {
+        const rf = get('crcReportField');
+        rf.style.display = selectEl.value === 'Report' ? 'block' : 'none';
+        if (selectEl.value !== 'Report') resetFloatingField('crc_report');
+      }
+    };
+
+    // ── VALIDATION ─────────────────────────────────────────────────────────
+    function validateCreateForm() {
+      let isValid = true;
+
+      function markSelect(id) {
+        const el = get(id);
+        if (!el) return;
+        el.classList.remove('valid', 'error', 'has-value');
+        const errEl = document.querySelector('[data-error-for="' + id + '"]');
+        if (!el.value) {
+          el.classList.add('error');
+          if (errEl) { errEl.textContent = 'This field is required'; errEl.classList.add('show'); }
+          isValid = false;
+        } else {
+          el.classList.add('valid', 'has-value');
+          if (errEl) errEl.classList.remove('show');
+        }
+      }
+
+      function markInput(id) {
+        const el = get(id);
+        if (!el) return;
+        el.classList.remove('valid', 'error', 'has-value');
+        const errEl = document.querySelector('[data-error-for="' + id + '"]');
+        if (!el.value.trim()) {
+          el.classList.add('error');
+          if (errEl) { errEl.textContent = 'This field is required'; errEl.classList.add('show'); }
+          isValid = false;
+        } else {
+          el.classList.add('valid', 'has-value');
+          if (errEl) errEl.classList.remove('show');
+        }
+      }
+
+      markSelect('crc_application_name');
+      markSelect('crc_priority');
+      markSelect('crc_type');
+      markInput('crc_title');
+      if (get('crc_application_name')?.value === 'Other') markInput('crc_application_other');
+      if (get('crc_type')?.value === 'Other')             markInput('crc_type_other');
+      return isValid;
+    }
+
+    // ── SUBMIT ─────────────────────────────────────────────────────────────
+    async function submitCreateForm() {
+      if (!validateCreateForm()) { launch_toast('Missing required fields.', 2); return; }
+
+      const btn = get('crModalSave');
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Saving…';
+
+      try {
+        const appVal  = get('crc_application_name').value;
+        const typeVal = get('crc_type').value;
+        const fd = new FormData();
+        fd.append('status',                  'Verify');
+        fd.append('department',              get('hidden_department')?.value             || '');
+        fd.append('approval_name',           get('hidden_approval_name')?.value         || '');
+        fd.append('solicitante',             get('hidden_collaborator_name')?.value     || '');
+        fd.append('cusuario',                get('hidden_cusuario')?.value              || '');
+        fd.append('verificador',             get('hidden_verificador')?.value           || '');
+        fd.append('aprobador',               get('hidden_aprobador')?.value             || '');
+        fd.append('firmante',                get('hidden_firmante')?.value              || '');
+        fd.append('ejecutor',                get('hidden_ejecutor')?.value              || '');
+        fd.append('operador',                get('hidden_operador')?.value              || '');
+        fd.append('collaborator_department', get('crc_collaborator_department')?.value  || '');
+        fd.append('collaborator_position',   get('crc_collaborator_position')?.value   || '');
+        fd.append('application_name',        appVal  === 'Other' ? (get('crc_application_other')?.value || '') : appVal);
+        fd.append('priority',                get('crc_priority')?.value                || '');
+        fd.append('type',                    typeVal === 'Other' ? (get('crc_type_other')?.value  || '') : typeVal);
+        fd.append('title',                   get('crc_title')?.value                   || '');
+        fd.append('report',                  get('crc_report')?.value                  || '');
+        fd.append('fields',                  get('crc_fields')?.value                  || '');
+        fd.append('functions',               get('crc_functions')?.value               || '');
+        fd.append('comments',                get('crc_comments')?.value                || '');
+        (window['getFiles_crc_files'] ? window['getFiles_crc_files']() : []).forEach(f => fd.append('files', f));
+
+        const res = await fetch('/forms_it_software_change_request', { method: 'POST', body: fd });
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.error || 'Request failed with status ' + res.status);
+        }
+        const data = await res.json();
+        launch_toast('Change Request created successfully!', 1);
+        closeModal();
+        window.location.href = '/approvals-detalle?RowID=' + data.id;
+      } catch (err) {
+        console.error(err);
+        launch_toast('Error saving. Please try again.', 2);
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-save me-1"></i> Save';
+      }
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
+      get('crModalClose')?.addEventListener('click',  closeModal);
+      get('crModalCancel')?.addEventListener('click', closeModal);
+      get('crModalSave')?.addEventListener('click',   submitCreateForm);
+    });
+  })();

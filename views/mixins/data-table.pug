@@ -1,0 +1,297 @@
+//- ── Reusable data-table container ─────────────────────────────────────
+//- Usage:
+//-   +data-table('MainTable', 'totalCount')
+//-     thead
+//-       tr
+//-         th Column 1
+//-     tbody#myTbody.bg-white
+//-
+//- Optional opts:
+//-   +data-table('MainTable', 'totalCount', { cardView: false })
+//-   +data-table('MainTable', 'totalCount', { internalViewToggle: false })
+//-
+//- Filter-bar integration:
+//-   +fb-view-toggle({ tableId: 'MainTable' })
+//- The data-table mixin auto-syncs external toggle buttons by tableId.
+//-
+//- Standalone card container (used by custom pages when needed):
+//-   +data-card-view('ListCardView', 'ListCardGrid', 'Loading items...')
+
+mixin data-table(tableId, countId, opts)
+  - tableId = tableId || 'MainTable'
+  - countId = countId || 'totalCount'
+  - opts = opts || {}
+  - cardView = opts.cardView !== false
+  - internalViewToggle = opts.internalViewToggle !== false
+  - cardViewId = opts.cardViewId || (tableId + '_cardView')
+  - cardGridId = opts.cardGridId || (tableId + '_cardGrid')
+  - cardLoadingText = opts.cardLoadingText || 'Loading...'
+  span.data-table-count(id=countId)
+  div.card.mb-4.data-table-wrapper(style="border:none;" data-card-enabled=cardView ? '1' : '0' data-card-table-id=tableId)
+    if cardView && internalViewToggle
+      div.data-view-toolbar(role="group" aria-label="Select data view")
+        button.data-view-btn.is-active(type="button" data-view="table" aria-pressed="true")
+          i.fas.fa-table(aria-hidden="true")
+        button.data-view-btn(type="button" data-view="card" aria-pressed="false")
+          i.fas.fa-th-large(aria-hidden="true")
+    div.table-responsive.shadow-table
+      table.table.table-responsive.table-hover(id=tableId)
+        block
+    if cardView
+      +data-card-view(cardViewId, cardGridId, cardLoadingText)
+
+  if cardView
+    script.
+      (function(){
+        if (window.__dataTableCardViewInit) return;
+        window.__dataTableCardViewInit = true;
+        var wrappersByTableId = {};
+
+        function normalizeText(value) {
+          return String(value == null ? '' : value).replace(/\s+/g, ' ').trim();
+        }
+
+        function getTableId(wrapper) {
+          if (!wrapper) return '';
+          var id = wrapper.getAttribute('data-card-table-id') || '';
+          if (id) return id;
+          var table = wrapper.querySelector('table[id]');
+          return table ? table.id : '';
+        }
+
+        function getExternalToggleRoots(tableId) {
+          if (!tableId) return [];
+          return Array.from(document.querySelectorAll('.fb-view-toggle[data-card-table-id]')).filter(function(toggle) {
+            return toggle.getAttribute('data-card-table-id') === tableId;
+          });
+        }
+
+        function findTitleIndex(headers, cells) {
+          var titleRegex = /name|title|subject|label|email|collaborator|application|endpoint|company|department|country|type|user/i;
+          for (var i = 0; i < headers.length; i++) {
+            if (titleRegex.test(headers[i]) && normalizeText(cells[i] && cells[i].textContent)) {
+              return i;
+            }
+          }
+          for (var j = 0; j < cells.length; j++) {
+            if (normalizeText(cells[j].textContent)) return j;
+          }
+          return -1;
+        }
+
+        function setViewButtons(wrapper, mode) {
+          wrapper.querySelectorAll('.data-view-btn').forEach(function(btn) {
+            var active = btn.getAttribute('data-view') === mode;
+            btn.classList.toggle('is-active', active);
+            btn.setAttribute('aria-pressed', active ? 'true' : 'false');
+          });
+
+          var tableId = getTableId(wrapper);
+          getExternalToggleRoots(tableId).forEach(function(toggle) {
+            toggle.querySelectorAll('.fb-view-btn').forEach(function(btn) {
+              var active = btn.getAttribute('data-view') === mode;
+              btn.classList.toggle('is-active', active);
+              btn.setAttribute('aria-pressed', active ? 'true' : 'false');
+            });
+          });
+        }
+
+        function setViewMode(wrapper, mode) {
+          var tableView = wrapper.querySelector('.table-responsive.shadow-table');
+          var cardView = wrapper.querySelector('.data-card-view');
+          if (!tableView || !cardView) return;
+          var finalMode = mode === 'card' ? 'card' : 'table';
+          tableView.hidden = finalMode !== 'table';
+          cardView.hidden = finalMode !== 'card';
+          wrapper.setAttribute('data-view-mode', finalMode);
+          setViewButtons(wrapper, finalMode);
+        }
+
+        function setCardEmpty(grid, message) {
+          grid.innerHTML = '';
+          var empty = document.createElement('div');
+          empty.className = 'data-card-empty';
+          empty.textContent = message || 'No data found';
+          grid.appendChild(empty);
+        }
+
+        function wireCardAction(card, row) {
+          function openRow() {
+            if (typeof row.onclick === 'function' || row.getAttribute('onclick')) {
+              row.click();
+              return;
+            }
+            var link = row.querySelector('a[href]');
+            if (link) link.click();
+          }
+
+          card.setAttribute('role', 'button');
+          card.setAttribute('tabindex', '0');
+          card.addEventListener('click', openRow);
+          card.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              openRow();
+            }
+          });
+        }
+
+        function renderCardsFromTable(wrapper) {
+          var table = wrapper.querySelector('table');
+          var tbody = table && table.tBodies && table.tBodies[0];
+          var grid = wrapper.querySelector('.data-card-grid');
+          if (!table || !tbody || !grid) return;
+
+          var headerCells = (table.tHead && table.tHead.rows && table.tHead.rows[0])
+            ? Array.from(table.tHead.rows[0].cells)
+            : [];
+          var headers = headerCells.map(function(th) { return normalizeText(th.textContent); });
+          var rows = Array.from(tbody.rows || []);
+
+          if (!rows.length) {
+            setCardEmpty(grid, 'No data found');
+            return;
+          }
+
+          if (rows.length === 1 && rows[0].cells.length === 1 && rows[0].cells[0].colSpan > 1) {
+            setCardEmpty(grid, normalizeText(rows[0].cells[0].textContent) || 'No data found');
+            return;
+          }
+
+          grid.innerHTML = '';
+          var fragment = document.createDocumentFragment();
+
+          rows.forEach(function(row) {
+            var cells = Array.from(row.cells || []);
+            if (!cells.length) return;
+            if (cells.length === 1 && cells[0].colSpan > 1) return;
+
+            var card = document.createElement('article');
+            card.className = 'data-card';
+
+            if (row.getAttribute('onclick') || row.querySelector('a[href]')) {
+              wireCardAction(card, row);
+            }
+
+            var titleIndex = findTitleIndex(headers, cells);
+            if (titleIndex >= 0) {
+              var title = document.createElement('h4');
+              title.className = 'data-card-title';
+              title.innerHTML = cells[titleIndex].innerHTML || normalizeText(cells[titleIndex].textContent) || 'Item';
+              card.appendChild(title);
+            }
+
+            var body = document.createElement('div');
+            body.className = 'data-card-body';
+
+            cells.forEach(function(cell, index) {
+              if (index === titleIndex) return;
+              var label = headers[index] || ('Field ' + (index + 1));
+              var text = normalizeText(cell.textContent);
+              var html = String(cell.innerHTML || '').trim();
+              if (!text && !html) return;
+
+              var rowEl = document.createElement('div');
+              rowEl.className = 'data-card-row';
+
+              var labelEl = document.createElement('span');
+              labelEl.className = 'data-card-label';
+              labelEl.textContent = label;
+
+              var valueEl = document.createElement('div');
+              valueEl.className = 'data-card-value';
+              valueEl.innerHTML = html || '-';
+
+              rowEl.appendChild(labelEl);
+              rowEl.appendChild(valueEl);
+              body.appendChild(rowEl);
+            });
+
+            if (!body.childElementCount && titleIndex < 0) {
+              var fallback = document.createElement('p');
+              fallback.className = 'data-card-text';
+              fallback.textContent = normalizeText(row.textContent) || 'Item';
+              card.appendChild(fallback);
+            } else {
+              card.appendChild(body);
+            }
+
+            fragment.appendChild(card);
+          });
+
+          if (!fragment.childNodes.length) {
+            setCardEmpty(grid, 'No data found');
+            return;
+          }
+
+          grid.appendChild(fragment);
+        }
+
+        function initWrapper(wrapper) {
+          if (!wrapper || wrapper.getAttribute('data-card-enabled') !== '1') return;
+          if (wrapper.getAttribute('data-card-init') === '1') return;
+          wrapper.setAttribute('data-card-init', '1');
+
+          var tableId = getTableId(wrapper);
+          if (tableId) wrappersByTableId[tableId] = wrapper;
+
+          var tbody = wrapper.querySelector('table tbody');
+          var externalToggles = getExternalToggleRoots(tableId);
+          if (externalToggles.length) {
+            var embeddedToolbar = wrapper.querySelector('.data-view-toolbar');
+            if (embeddedToolbar) embeddedToolbar.hidden = true;
+          }
+
+          wrapper.querySelectorAll('.data-view-btn').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+              wrapper.setAttribute('data-user-selected-view', '1');
+              setViewMode(wrapper, btn.getAttribute('data-view') || 'table');
+            });
+          });
+
+          externalToggles.forEach(function(toggle) {
+            if (toggle.getAttribute('data-card-toggle-init') === tableId) return;
+            toggle.setAttribute('data-card-toggle-init', tableId);
+            toggle.addEventListener('click', function(e) {
+              var btn = e.target.closest('.fb-view-btn');
+              if (!btn) return;
+              var targetTableId = toggle.getAttribute('data-card-table-id') || tableId;
+              var targetWrapper = wrappersByTableId[targetTableId];
+              if (!targetWrapper) return;
+              targetWrapper.setAttribute('data-user-selected-view', '1');
+              setViewMode(targetWrapper, btn.getAttribute('data-view') || 'table');
+            });
+          });
+
+          renderCardsFromTable(wrapper);
+
+          if (tbody && typeof MutationObserver !== 'undefined') {
+            var observer = new MutationObserver(function() {
+              renderCardsFromTable(wrapper);
+            });
+            observer.observe(tbody, { childList: true, subtree: true, characterData: true });
+          }
+
+          var mobileDefault = window.matchMedia('(max-width: 767.98px)').matches;
+          setViewMode(wrapper, mobileDefault ? 'card' : 'table');
+        }
+
+        function initAll() {
+          document.querySelectorAll('.data-table-wrapper[data-card-enabled="1"]').forEach(initWrapper);
+        }
+
+        if (document.readyState === 'loading') {
+          document.addEventListener('DOMContentLoaded', initAll);
+        } else {
+          initAll();
+        }
+      })();
+
+//- Reusable card list container for table/card toggles.
+mixin data-card-view(viewId, gridId, emptyText)
+  - viewId = viewId || 'MainCardView'
+  - gridId = gridId || 'MainCardGrid'
+  - emptyText = emptyText || 'Loading...'
+  div.data-card-view(id=viewId hidden)
+    div.data-card-grid(id=gridId)
+      div.data-card-empty= emptyText

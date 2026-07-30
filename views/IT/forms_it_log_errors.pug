@@ -1,0 +1,209 @@
+extends ../layout
+
+include ../ui/filter-bar
+include ../mixins/data-table
+include ../mixins/modal-container
+
+block layout-content
+  //- Detail Modal using reusable mixin
+  +modal-container('logDetailModal', 'logModalTitle', 'logModalClose', '', '', 'Log Error Details', { showCancel: false, showSave: false })
+    div.row.mb-2
+      div.col-md-2
+        strong ID:
+      div.col-md-10
+        span#modalId
+    div.row.mb-2
+      div.col-md-2
+        strong User:
+      div.col-md-10
+        span#modalUserName
+    div.row.mb-2
+      div.col-md-2
+        strong Date:
+      div.col-md-10
+        span#modalDate
+    div.row.mb-2
+      div.col-md-2
+        strong Endpoint:
+      div.col-md-10
+        span#modalEndpoint
+    div.row.mt-3
+      div.col-md-12
+        strong Payload:
+        pre#modalPayload.bg-light.p-3(style="white-space:pre-wrap;word-wrap:break-word;max-height:200px;overflow-y:auto;font-size:.82rem;margin-top:.5rem;border-radius:6px;")
+    div.row.mt-3
+      div.col-md-12
+        strong Response:
+        pre#modalResponse.bg-light.p-3(style="white-space:pre-wrap;word-wrap:break-word;max-height:200px;overflow-y:auto;font-size:.82rem;margin-top:.5rem;border-radius:6px;")
+
+  //- Main Content
+  div#layoutSidenav_content
+    main
+      div.container-fluid.px-4
+        a(href="/" style="color:#212529")
+          i.fas.fa-chevron-left
+          span(style="padding-left:0.5rem;") Home
+        h3.mt-3.mb-2 #{title}
+
+        +fb-bar
+          +fb-search({id: 'SearchBox', placeholder: 'Search by user, endpoint, payload or response...', onkeyup: 'SearchTableChange()'})
+          +fb-select({
+            id: 'SelectBoxUser',
+            icon: 'fa-user',
+            items: uniqueUsers.map(function(u){ return {value: u.userName, label: u.userName}; }),
+            placeholder: 'All Users',
+            placeholderDisabled: false,
+            onchange: 'SelectTableChange()',
+            minWidth: '140px'
+          })
+          +fb-select({
+            id: 'SelectBoxEndpoint',
+            icon: 'fa-link',
+            items: uniqueEndpoints.map(function(e){ return {value: e.endpoint, label: e.endpoint}; }),
+            placeholder: 'All Endpoints',
+            placeholderDisabled: false,
+            onchange: 'SelectTableChange()',
+            minWidth: '160px'
+          })
+          +fb-reset-btn
+          +fb-actions
+            +fb-view-toggle({id: 'itLogErrorsViewMode', tableId: 'MainTable', ariaLabel: 'Select log errors data view'})
+            +fb-page-size({id: 'SelectBoxPages', sizes: [15, 25, 50, 100], onchange: 'SelectTableChange()'})
+            +fb-pagination
+
+        +fb-info({id: 'totalCount'})
+
+        +data-table('MainTable', 'totalCount', { internalViewToggle: false })
+          thead
+            tr
+              th(style="width:60px;") ID
+              th(style="width:130px;") User
+              th(style="width:150px;") Date
+              th(style="width:200px;") Endpoint
+              th Payload
+              th Response
+          tbody
+
+  script.
+    var currentPage = 1;
+    var totalLogCount = 0;
+
+    function closeLogModal() {
+      var m = document.getElementById('logDetailModal');
+      if (m) m.classList.remove('open');
+    }
+
+    // Close button handler
+    document.addEventListener('DOMContentLoaded', function() {
+      var closeBtn = document.getElementById('logModalClose');
+      if (closeBtn) {
+        closeBtn.addEventListener('click', closeLogModal);
+      }
+    });
+
+    function showLogDetail(id) {
+      fetch('/get_log_error_detail?id=' + id)
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          document.getElementById('modalId').textContent        = data.id        || '';
+          document.getElementById('modalUserName').textContent  = data.userName  || 'N/A';
+          document.getElementById('modalDate').textContent      = data.date      || 'N/A';
+          document.getElementById('modalEndpoint').textContent  = data.endpoint  || 'N/A';
+          document.getElementById('modalPayload').textContent   = data.payload   || 'N/A';
+          document.getElementById('modalResponse').textContent  = data.response  || 'N/A';
+          var m = document.getElementById('logDetailModal');
+          if (m) m.classList.add('open');
+        })
+        .catch(function(err) { console.error('Error fetching log details:', err); });
+    }
+
+    function debounce(func, wait) {
+      var t;
+      return function() {
+        var args = arguments, ctx = this;
+        clearTimeout(t);
+        t = setTimeout(function() { func.apply(ctx, args); }, wait);
+      };
+    }
+
+    function renderTable(logs) {
+      var tbody = document.querySelector('#MainTable tbody');
+      tbody.innerHTML = '';
+      if (!logs || !logs.length) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#6c757d;padding:2rem;">No data found</td></tr>';
+        return;
+      }
+      logs.forEach(function(log) {
+        var truncP = log.payload  && log.payload.length  > 60 ? log.payload.substring(0, 60)  + '...' : (log.payload  || 'N/A');
+        var truncR = log.response && log.response.length > 60 ? log.response.substring(0, 60) + '...' : (log.response || 'N/A');
+        var tr = document.createElement('tr');
+        tr.setAttribute(
+          'onclick',
+          `showLogDetail(${log.id}); return false;`
+        ) 
+        tr.innerHTML =
+          '<td>' + log.id + '</td>' +
+          '<td>' + (log.userName || 'N/A') + '</td>' +
+          '<td><i class="fas fa-calendar-check" style="padding-right:4px;color:#00586f;"></i>' + (log.date || '') + '</td>' +
+          '<td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + (log.endpoint || '') + '">' + (log.endpoint || 'N/A') + '</td>' +
+          '<td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + (log.payload || '') + '">' + truncP + '</td>' +
+          '<td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + (log.response || '') + '">' + truncR + '</td>';
+        tbody.appendChild(tr);
+      });
+    }
+
+    function renderPagination(total) {
+      var ps    = parseInt(document.getElementById('SelectBoxPages').value) || 15;
+      var pages = Math.ceil(total / ps) || 1;
+      var tc    = document.getElementById('totalCount');
+      if (tc) tc.textContent = 'Page ' + currentPage + ' of ' + pages + ' (' + total + ' records)';
+    }
+
+    function changePage(p) {
+      var ps    = parseInt(document.getElementById('SelectBoxPages').value) || 15;
+      var pages = Math.ceil(totalLogCount / ps) || 1;
+      if (p < 1 || p > pages) return;
+      currentPage = p;
+      fetchLogErrors();
+    }
+
+    var debouncedFetch = debounce(fetchLogErrors, 400);
+
+    function SearchTableChange() { currentPage = 1; debouncedFetch(); }
+    function SelectTableChange() { currentPage = 1; fetchLogErrors(); }
+
+    function resetFilters() {
+      ['SearchBox', 'SelectBoxUser', 'SelectBoxEndpoint', 'SelectBoxPages'].forEach(function(id) {
+        var el = document.getElementById(id);
+        if (!el) return;
+        el.value = id === 'SelectBoxPages' ? '15' : '';
+      });
+      currentPage = 1;
+      fetchLogErrors();
+    }
+
+    async function fetchLogErrors() {
+      var search   = (document.getElementById('SearchBox')?.value || '').trim();
+      var user     = document.getElementById('SelectBoxUser')?.value     || '';
+      var endpoint = document.getElementById('SelectBoxEndpoint')?.value || '';
+      var limit    = document.getElementById('SelectBoxPages')?.value    || 15;
+      var url      = '/get_log_errors_data?page=' + currentPage + '&limit=' + limit;
+      if (search)   url += '&search='   + encodeURIComponent(search);
+      if (user)     url += '&userName=' + encodeURIComponent(user);
+      if (endpoint) url += '&endpoint=' + encodeURIComponent(endpoint);
+      try {
+        var res  = await fetch(url);
+        var data = await res.json();
+        totalLogCount = data.totalCount || 0;
+        renderTable(data.logData || []);
+        renderPagination(totalLogCount);
+      } catch (err) {
+        console.error('Error fetching logs:', err);
+        document.querySelector('#MainTable tbody').innerHTML =
+          '<tr><td colspan="6" style="text-align:center;color:#dc3545;">Error loading data</td></tr>';
+      }
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+      fetchLogErrors();
+    });

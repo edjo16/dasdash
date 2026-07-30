@@ -1,0 +1,125 @@
+mixin approval-reference-card(log, integrants, label, opts)
+  //- Reusable collapsible card showing a related approval's full participant flow.
+  //- Parameters:
+  //-   log        – approval log object (id, estado, detalle_proceso, solicitante, verificador…)
+  //-   integrants – integrants object used for avatar pic/ paths
+  //-   label      – display label string, e.g. 'Initial Approval' or 'Support Approval'
+  //-   opts       – { canSee, seeIconId, toggleBodyId, toggleIconId }
+  - const _tbId     = (opts && opts.toggleBodyId) || 'approvalRefBody'
+  - const _tiId     = (opts && opts.toggleIconId) || 'approvalRefToggle'
+  - const _siId     = (opts && opts.seeIconId)    || 'approvalRefSee'
+  - const _canSee   = !!(opts && opts.canSee)
+  - const _togClick = `this.classList.toggle('fa-chevron-down');this.classList.toggle('fa-chevron-up');document.getElementById('${_tbId}').classList.toggle('hidden')`
+  .d-flex.align-items-center
+    h6.m-0 #{label} # #{log.id}
+    if _canSee
+      i.detail.fas.fa-eye(id=_siId onclick=`approval_detalle_view(${log.id})` style="cursor:pointer; margin-left: 10px;")
+    i.detail.fas.fa-chevron-down(id=_tiId onclick=_togClick style="cursor:pointer; margin-left: 10px;")
+  div.row(id=_tbId class="hidden" style="margin-top: 1rem;")
+    p.titleDetail Description:
+    div.rich-detail-content!=log.detalle_proceso
+    if(log.solicitante!="N/A")
+      div.col-md-3
+        h6.title_persons Requestor
+        img(src=`pic/${integrants.solicitante}.png` class="icon" onerror="this.onerror=null;this.src='pic/default.png';")
+        span=log.solicitante
+        div.col-md-12
+          span.titleDetail Date: 
+          span=log.solicitante_fecha
+
+    if(log.verificador!="N/A")
+      div.col-md-1(style="text-align: center")
+        i.detail.fas.fa-arrow-right
+      div.col-md-3
+        h6.title_persons Verifier
+          if(log.estado == "Verify")
+            i.fas.fa-hourglass(style="color:#ffffff; margin-left: 5px;")
+        img(src=`pic/${integrants.verificador}.png` class="icon" onerror="this.onerror=null;this.src='pic/default.png';")
+        span=log.verificador
+        div.col-md-12
+          span.titleDetail Dates: 
+          span(style="margin-rigth: 10px")=log.v_fecha
+          p.titleDetail Verifier Comments:
+          if(!log.verificador_comentarios)
+            i None
+          else
+            p=log.verificador_comentarios
+    if(log.aprobador!="N/A")
+      div.col-md-1(style="text-align: center")
+        i.detail.fas.fa-arrow-right
+      div.col-md-3
+        h6.title_persons Approver
+          if(log.estado == "Approve")
+            i.fas.fa-hourglass(style="color:#ffffff; margin-left: 5px;")
+        img(src=`pic/${integrants.aprobador}.png`  class="icon" onerror="this.onerror=null;this.src='pic/default.png';")
+        span=log.aprobador
+        div.col-md-12
+          span.titleDetail Date: 
+          span=log.a_fecha
+          p.titleDetail Approver Comments:
+          if(!log.aprobador_comentarios || log.aprobador_comentarios == ' ')
+            i None
+          else
+            p=log.aprobador_comentarios
+    if(log.firmante!="N/A")
+      div.col-md-1(style="text-align: center")
+        i.detail.fas.fa-arrow-right
+      div.col-md-3
+        h6.title_persons Signer
+          if(log.estado == "Signature")
+            i.fas.fa-hourglass(style="color:#ffffff; margin-left: 5px;")
+        img(src=`pic/${integrants.firmante}.png` class="icon" onerror="this.onerror=null;this.src='pic/default.png';")
+        span=log.firmante
+        div.col-md-12
+          span.titleDetail Date: 
+          span=log.f_fecha
+          p.titleDetail Signer Comments:
+          if(!log.firmante_comentarios || log.aprobador_comentarios == ' ')
+            i None
+          else
+            p=log.firmante_comentarios
+    if(log.operador!="N/A")
+      div.col-md-1(style="text-align: center")
+        i.detail.fas.fa-arrow-right
+      div.col-md-3
+        h6.title_persons Operator:
+          if(log.estado == "Apply")
+            i.fas.fa-hourglass(style="color:#ffffff; margin-left: 5px;")
+        img(src=`pic/${integrants.operador}.png` class="icon" onerror="this.onerror=null;this.src='pic/default.png';")
+        span=log.operador
+        div.col-md-12
+          span.titleDetail Date:
+          span=log.o_fecha
+          p.titleDetail Operator Comments:
+          if(!log.operador_comentarios || log.aprobador_comentarios == ' ')
+            i None
+          else
+            p=log.operador_comentarios
+          hr
+    if(log.ejecutor!="N/A")
+      div.col-md-1(style="text-align: center")
+        i.detail.fas.fa-arrow-right
+      div.col-md-3
+        h6.title_persons Executioner
+          if(log.estado == "Execute")
+            i.fas.fa-hourglass(style="color:#ffffff; margin-left: 5px;")
+        img(src=`pic/${integrants.ejecutor}.png` alt="PDF Icon" class="icon" onerror="this.onerror=null;this.src='pic/default.png';")
+        span=log.ejecutor
+        div.col-md-12
+          span.titleDetail Date: 
+          span=log.e_fecha
+          p.titleDetail Executioner Comments:
+          if(!log.ejecutor_comentarios || log.ejecutor_comentarios == ' ')
+            i None
+          else
+            p=log.ejecutor_comentarios
+    if(log.asignado != 'N/A')
+      div.col-md-1(style="text-align: center")
+        i.detail.fas.fa-arrow-right
+      div.col-md-3
+        h6.title_persons Asignated to
+        img(src=`pic/${integrants.asignado}.png` alt="PDF Icon" class="icon" onerror="this.onerror=null;this.src='pic/default.png';")
+        span=log.asignado
+        div.col-md-12
+          span.titleDetail Date:
+          span=log.asignado_fecha

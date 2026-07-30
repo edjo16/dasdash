@@ -1,0 +1,246 @@
+//- ── Contact Cell Picker Mixin ───────────────────────────────────────────────
+//- Renders an inline contact-picker cell (chip button + search dropdown).
+//-
+//- Parameters:
+//-   field      {String}  data-field attribute value                (default: 'contact_id')
+//-   value      {String}  current selected contact_id               (default: '')
+//-   contactObj {Object}  resolved contact { name, company_name }   (default: null)
+//-   disabled   {Boolean} disables the picker button                (default: false)
+//-
+//- The host page must expose contacts before this component runs:
+//-   window.contactCellPickerData = contacts.map(c => ({ contact_id, name, company_name }))
+
+mixin contact-cell-picker(field='contact_id', value='', contactObj=null, disabled=false)
+  - var _hasVal = value !== null && value !== undefined && value !== ''
+  - var _displayName = contactObj && contactObj.name ? (contactObj.name + (contactObj.company_name ? ' (' + contactObj.company_name + ')' : '')) : ''
+  div(class=`contact-cell-picker${_hasVal ? ' has-value' : ''}`)
+    input(type="hidden" data-field=field value=_hasVal ? value : '')
+    button.ccp-btn(type="button" disabled=disabled)
+      if _hasVal && contactObj && contactObj.name
+        span.ccp-chip= _displayName
+        unless disabled
+          span.ccp-clear(title="Clear") ×
+      else
+        span.ccp-placeholder
+          svg(xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle;margin-right:3px;")
+            path(d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2")
+            circle(cx="12" cy="7" r="4")
+          | Select
+    div.ccp-dropdown(hidden)
+      input.ccp-search(type="text" placeholder="Search contact...")
+      ul.ccp-list
+      div.ccp-footer
+        a.ccp-new-btn(href=`/badaco-contacts/create` target="_blank")
+          svg(xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3")
+            line(x1="12" y1="5" x2="12" y2="19")
+            line(x1="5" y1="12" x2="19" y2="12")
+          |  New Contact
+        button.ccp-refresh-btn(type="button" title="Refresh contact list") ⟳
+
+  script.
+    (function () {
+      // ── Inject CSS once ──────────────────────────────────────────────────
+      if (!document.getElementById('_ccp_styles')) {
+        var _s = document.createElement('style');
+        _s.id = '_ccp_styles';
+        _s.textContent =
+          '.contact-cell-picker{position:relative;width:100%;min-width:80px;display:flex;align-items:center;justify-content:flex-start;gap:0;}' +
+          '.ccp-btn{background:transparent;border:none;padding:3px 5px;cursor:pointer;display:flex;align-items:center;gap:3px;border-radius:4px;transition:background .15s;max-width:100%;overflow:hidden;}' +
+          '.ccp-btn:hover:not(:disabled){background:#f0fafd;}' +
+          '.ccp-btn:disabled{opacity:.65;cursor:default;}' +
+          '.ccp-chip{font-size:.78rem;color:#00586f;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:160px;font-weight:500;}' +
+          '.ccp-placeholder{color:#aaa;font-size:.77rem;display:flex;align-items:center;white-space:nowrap;}' +
+          '.ccp-clear{font-size:.7rem;color:#bbb;cursor:pointer;padding:0 2px;margin-left:2px;flex-shrink:0;line-height:1;transition:color .15s;}' +
+          '.ccp-clear:hover{color:#dc3545;}' +
+          '.ccp-dropdown{position:fixed;z-index:9999;background:#fff;border:1px solid #d0dce0;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.13);min-width:240px;max-width:320px;overflow:hidden;display:flex;flex-direction:column;}' +
+          '.ccp-search{width:calc(100% - 16px);margin:7px 8px 4px;padding:5px 9px;border:1px solid #ddd;border-radius:5px;font-size:.8rem;outline:none;box-sizing:border-box;}' +
+          '.ccp-list{list-style:none;margin:0;padding:4px 0;max-height:200px;overflow-y:auto;overflow-x:hidden;}' +
+          '.ccp-list li{display:flex;flex-direction:column;padding:6px 12px;cursor:pointer;font-size:.82rem;transition:background .1s;border-bottom:1px solid #f5f5f5;}' +
+          '.ccp-list li:last-child{border-bottom:none;}' +
+          '.ccp-list li:hover,.ccp-list li.ccp-selected{background:#f0fafd;}' +
+          '.ccp-item-name{font-weight:600;color:#1a2e35;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}' +
+          '.ccp-item-company{font-size:.75rem;color:#7a9097;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}' +
+          '.ccp-no-results{padding:10px 12px;font-size:.8rem;color:#999;text-align:center;}' +
+          '.ccp-footer{display:flex;align-items:center;justify-content:space-between;padding:5px 8px;border-top:1px solid #eee;background:#fafbfc;gap:6px;}' +
+          '.ccp-new-btn{display:inline-flex;align-items:center;gap:4px;font-size:.75rem;color:#00586f;text-decoration:none;padding:3px 8px;border-radius:4px;font-weight:600;transition:background .15s;white-space:nowrap;}' +
+          '.ccp-new-btn:hover{background:#e0f5f1;color:#003d4f;}' +
+          '.ccp-refresh-btn{background:none;border:1px solid #d0dce0;color:#7a9097;border-radius:4px;cursor:pointer;font-size:.82rem;padding:2px 7px;transition:color .15s,background .15s;line-height:1.4;}' +
+          '.ccp-refresh-btn:hover{background:#e8f4f8;color:#00586f;}';
+        document.head.appendChild(_s);
+      }
+
+      // ── Register behavior once ───────────────────────────────────────────
+      if (window._ccpReady) return;
+      window._ccpReady = true;
+
+      var _ccpOpenDd   = null;
+      var _ccpOpenPicker = null;
+
+      function ccpClose() {
+        if (_ccpOpenDd) { _ccpOpenDd.hidden = true; }
+        _ccpOpenDd     = null;
+        _ccpOpenPicker = null;
+      }
+
+      function ccpPopulate(ul, search) {
+        var contacts = window.contactCellPickerData || [];
+        var q = (search || '').toLowerCase();
+        ul.innerHTML = '';
+        var filtered = q
+          ? contacts.filter(function(c) {
+              return c.name.toLowerCase().includes(q) ||
+                     (c.company_name || '').toLowerCase().includes(q);
+            })
+          : contacts;
+        if (!filtered.length) {
+          var li = document.createElement('li');
+          li.className = 'ccp-no-results';
+          li.textContent = 'No contacts found';
+          ul.appendChild(li);
+          return;
+        }
+        filtered.forEach(function(c) {
+          var li = document.createElement('li');
+          li.dataset.id = c.contact_id;
+          li.innerHTML =
+            '<span class="ccp-item-name">' + c.name + '</span>' +
+            (c.company_name ? '<span class="ccp-item-company">' + c.company_name + '</span>' : '');
+          li.addEventListener('click', function(e) {
+            e.stopPropagation();
+            if (!_ccpOpenPicker) return;
+            var hidden  = _ccpOpenPicker.querySelector('input[data-field]');
+            var btn     = _ccpOpenPicker.querySelector('.ccp-btn');
+            var display = c.name + (c.company_name ? ' (' + c.company_name + ')' : '');
+            hidden.value = c.contact_id;
+            _ccpOpenPicker.classList.add('has-value');
+            btn.innerHTML = '<span class="ccp-chip">' + display + '</span><span class="ccp-clear" title="Clear">×</span>';
+            btn.querySelector('.ccp-clear').addEventListener('click', ccpClearHandler);
+            // trigger auto-save
+            var row = _ccpOpenPicker.closest('tr');
+            if (row && row.dataset.id && !row.classList.contains('new-row-placeholder')) {
+              var trigger = row.querySelector('.action-input');
+              if (trigger) trigger.dispatchEvent(new Event('blur', { bubbles: true }));
+            }
+            ccpClose();
+          });
+          ul.appendChild(li);
+        });
+      }
+
+      function ccpClearHandler(e) {
+        e.stopPropagation();
+        var picker = e.currentTarget.closest('.contact-cell-picker');
+        if (!picker) return;
+        picker.querySelector('input[data-field]').value = '';
+        picker.classList.remove('has-value');
+        picker.querySelector('.ccp-btn').innerHTML =
+          '<span class="ccp-placeholder">' +
+            '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle;margin-right:3px;"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>' +
+            'Select</span>';
+        var row = picker.closest('tr');
+        if (row && row.dataset.id && !row.classList.contains('new-row-placeholder')) {
+          var trigger = row.querySelector('.action-input');
+          if (trigger) trigger.dispatchEvent(new Event('blur', { bubbles: true }));
+        }
+      }
+
+      window.ccpInit = function () {
+        document.querySelectorAll('.contact-cell-picker:not([data-ccp])').forEach(function (picker) {
+          picker.setAttribute('data-ccp', '1');
+          var hidden = picker.querySelector('input[data-field]');
+          var btn    = picker.querySelector('.ccp-btn');
+          var dd     = picker.querySelector('.ccp-dropdown');
+          if (!hidden || !btn || !dd) return;
+
+          // wire existing clear button (server-rendered)
+          var existingClear = btn.querySelector('.ccp-clear');
+          if (existingClear) existingClear.addEventListener('click', ccpClearHandler);
+
+          btn.addEventListener('click', function (e) {
+            e.stopPropagation();
+            var isOpen = !dd.hidden;
+            // close any open dropdown first
+            document.querySelectorAll('.ccp-dropdown:not([hidden])').forEach(function(d) { d.hidden = true; });
+            _ccpOpenDd = null; _ccpOpenPicker = null;
+            if (!isOpen) {
+              var rect = btn.getBoundingClientRect();
+              dd.style.top      = (rect.bottom + 3) + 'px';
+              dd.style.left     = rect.left + 'px';
+              dd.style.width    = Math.max(rect.width, 240) + 'px';
+              dd.hidden = false;
+              _ccpOpenDd     = dd;
+              _ccpOpenPicker = picker;
+              var ul  = dd.querySelector('.ccp-list');
+              var inp = dd.querySelector('.ccp-search');
+              if (inp) inp.value = '';
+              if (ul)  ccpPopulate(ul, '');
+              if (inp) inp.focus();
+            }
+          });
+
+          var searchInp = dd.querySelector('.ccp-search');
+          if (searchInp) {
+            searchInp.addEventListener('input', function () {
+              var ul = dd.querySelector('.ccp-list');
+              if (ul) ccpPopulate(ul, this.value);
+            });
+          }
+
+          var refreshBtn = dd.querySelector('.ccp-refresh-btn');
+          if (refreshBtn) {
+            refreshBtn.addEventListener('click', function (e) {
+              e.stopPropagation();
+              refreshBtn.textContent = '…';
+              fetch('/badaco/api/contacts?limit=10000')
+                .then(function(r) { return r.json(); })
+                .then(function(res) {
+                  if (res.success && res.data) {
+                    window.contactCellPickerData = res.data.map(function(c) {
+                      return { contact_id: c.contact_id, name: c.name, company_name: c.company_name };
+                    });
+                    var ul = dd.querySelector('.ccp-list');
+                    var si = dd.querySelector('.ccp-search');
+                    if (ul) ccpPopulate(ul, si ? si.value : '');
+                  }
+                  refreshBtn.textContent = '⟳';
+                })
+                .catch(function() { refreshBtn.textContent = '⟳'; });
+            });
+          }
+        });
+      };
+
+      window.ccpBuildCell = function (contactId) {
+        var contacts = window.contactCellPickerData || [];
+        var c = contacts.find(function(x) { return String(x.contact_id) === String(contactId); });
+        var display = c ? c.name + (c.company_name ? ' (' + c.company_name + ')' : '') : '';
+        var hasVal  = contactId && contactId !== '';
+        var btnInner = hasVal && c
+          ? '<span class="ccp-chip">' + display + '</span><span class="ccp-clear" title="Clear">×</span>'
+          : '<span class="ccp-placeholder"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle;margin-right:3px;"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>Select</span>';
+        return '<td><div class="contact-cell-picker' + (hasVal ? ' has-value' : '') + '">' +
+          '<input type="hidden" data-field="contact_id" value="' + (contactId || '') + '">' +
+          '<button type="button" class="ccp-btn">' + btnInner + '</button>' +
+          '<div class="ccp-dropdown" hidden>' +
+            '<input type="text" class="ccp-search" placeholder="Search contact...">' +
+            '<ul class="ccp-list"></ul>' +
+            '<div class="ccp-footer">' +
+              '<a class="ccp-new-btn" href="/badaco-contacts/create" target="_blank">' +
+                '<svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> New Contact' +
+              '</a>' +
+              '<button type="button" class="ccp-refresh-btn" title="Refresh">⟳</button>' +
+            '</div>' +
+          '</div>' +
+        '</div></td>';
+      };
+
+      document.addEventListener('click', ccpClose);
+
+      window.addEventListener('scroll', function (e) {
+        if (!_ccpOpenDd) return;
+        if (_ccpOpenDd.contains(e.target)) return;
+        ccpClose();
+      }, true);
+
+      document.addEventListener('DOMContentLoaded', window.ccpInit);
+    }());

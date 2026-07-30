@@ -1,0 +1,219 @@
+﻿extends layout
+block layout-content
+  div#layoutSidenav_content
+    main
+      div.container-fluid.px-4
+        a(href="#" onclick="goBack()" style="color:#212529")
+            i.fas.fa-chevron-left
+            span(href="#" onclick="goBack()" style="padding-left: 0.5rem;") Back
+        h1.mt-4 #{title}
+        ol.breadcrumb.mb-4
+            if(detalle.fmodificado)
+                li.breadcrumb-item.active Date Entry #{detalle.fingreso} by #{detalle.usuario_ingreso} - Last update #{detalle.fmodificado} by #{detalle.usuario_modificacion}
+            else
+                li.breadcrumb-item.active Date Entry #{detalle.fingreso} by #{detalle.usuario_ingreso} 
+        form#form_mercadeo_update_contacto
+            .row.Not
+                input#UserID(type="text" name="UserID" value=userProfile.UsuarioID)
+                input#RowID(type="text" name="RowID" value=detalle.RowID)
+            h3 Company
+            //- 
+            div.row.g-3.align-items-center
+                div.col-1
+                    label Company
+                div.col-3
+                    input#compania.form-control(type="text" name="compania" maxlength="400" required value=detalle.compania)
+            div.row.g-3.align-items-center
+                div.col-1
+                    label Type
+                div.col-3
+                    select#tipo.form-control(name="tipo")
+                        each linea, i in tipos
+                            if(detalle.tipo==linea[0])
+                                option(value=linea[0] selected)= linea[1]
+                            else
+                                option(value=linea[0])= linea[1]
+            div.row.g-3.align-items-center
+                div.col-1
+                    label Region
+                div.col-3
+                    p=detalle.region
+                    each linea, i in region
+                        if(detalle.region==linea)
+                            p(value=linea selected)= linea
+                    select#region.form-control(name="region")
+                        each linea, i in region
+                            if(detalle.region==linea)
+                                option(value=linea selected)= linea
+                            else
+                                option(value=linea)= linea
+            div.row.g-3.align-items-center
+                div.col-1
+                    label Country
+                div.col-3
+                    select#pais.form-control(name="pais")
+                        each linea, i in pais
+                            if(detalle.pais==linea[0])
+                                option(value=linea[0] selected)= linea[1]
+                            else
+                                option(value=linea[0])= linea[1]
+            div.row.g-3.align-items-center
+                div.col-1
+                    label City
+                div.col-3
+                    input#ciudad.form-control(type="text" name="ciudad" maxlength="400" required value=detalle.ciudad)
+            div.row.g-3.align-items-center
+                div.col-1
+                    label Address
+                div.col-3
+                    input#direccion.form-control(type="text" name="direccion" maxlength="400" value=detalle.direccion)
+            div.row.g-3.align-items-center
+                div.col-1
+                    label Phone
+                div.col-3
+                    input#telefono.form-control(type="text" name="telefono" maxlength="400" required value=detalle.telefono)
+            div.row.g-3.align-items-center
+                div.col-1
+                    label Web Site
+                div.col-3
+                    input#web.form-control(type="text" name="web" maxlength="400" required value=detalle.web)
+            div.row.g-3.align-items-center
+                div.col-1
+                    label Linkedin
+                div.col-3
+                    input#linkedin.form-control(type="text" name="linkedin" maxlength="400")
+            br
+            h3 Person
+            div.row.g-3.align-items-center
+                div.col-1
+                    label Contact Name
+                div.col-3
+                    input#nombre.form-control(type="text" name="nombre" maxlength="100" required value=detalle.nombre)
+            div.row.g-3.align-items-center
+                div.col-1
+                    label Email
+                div.col-3
+                    input#email.form-control(type="text" name="email" maxlength="50" required value=detalle.email)
+            div.row.g-3.align-items-center
+                div.col-1
+                    label Position
+                div.col-3
+                    input#cargo.form-control(type="text" name="cargo" maxlength="400" value=detalle.cargo)
+            div.row.g-3.align-items-center
+                div.col-1
+                    label Cell Phone
+                div.col-3
+                    input#celular.form-control(type="text" name="celular" maxlength="400" required value=detalle.celular)
+            div.row.g-3.align-items-center
+                div.col-1
+                    label Active Re Contact
+                div.col-3
+                    select#active_contacto.form-control(name="active_contacto")
+                        each linea, i in grupousuarios_active
+                            if(detalle.active_contacto==linea[0])
+                                option(value=linea[0] selected)= linea[1]
+                            else
+                                option(value=linea[0])= linea[1]
+                div.col-auto
+                    span.form-text Contacto en Active Re de donde.
+            div.row.g-3.align-items-center
+                div.col-1
+                    label Activity Reference
+                div.col-3
+                    input#referencia.form-control(type="text" name="referencia" maxlength="400")
+                div.col-auto
+                    span.form-text Referencia de donde se encontro el contacto por traducir.
+            div.row.g-3.align-items-center
+                div.col-1
+                    label Linkedin
+                div.col-3
+                    input#linkedin_persona.form-control(type="text" name="linkedin_persona" maxlength="400")
+            //- 
+
+
+
+
+
+
+
+
+
+
+
+                div.row
+                    div.col-md-3
+                        label Company
+                        input#compania.form-control(type="text" name="compania" maxlength="400" required value=detalle.compania)
+                    div.col-md-3
+                        label Type
+                        select#tipo.form-control(name="tipo")
+                            each linea, i in tipos
+                                if(detalle.tipo==linea[0])
+                                    option(value=linea[0] selected)= linea[1]
+                                else
+                                    option(value=linea[0])= linea[1]
+                    div.col-md-3
+                        label Region
+                        select#region.form-control(name="region")
+                            each linea, i in region
+                                if(detalle.region==linea)
+                                    option(value=linea)= linea
+                                else
+                                    option(value=linea)= linea
+                    div.col-md-3
+                        label Country
+                        select#pais.form-control(name="pais")
+                            each linea, i in pais
+                                if(detalle.pais==linea[0])
+                                    option(value=linea[0] selected)= linea[1]
+                                else
+                                    option(value=linea[0])= linea[1]
+                    div.col-md-3
+                        label City
+                        input#ciudad.form-control(type="text" name="ciudad" maxlength="400" required value=detalle.ciudad)
+                    div.col-md-3
+                        label Address
+                        input#direccion.form-control(type="text" name="direccion" maxlength="400" value=detalle.direccion)
+                    div.col-md-3
+                        label Phone
+                        input#telefono.form-control(type="text" name="telefono" maxlength="400" required value=detalle.telefono)
+                    div.col-md-3
+                        label Web Site
+                        input#web.form-control(type="text" name="web" maxlength="400" required value=detalle.web)
+                    div.col-md-3
+                        label Linkedin
+                        input#linkedin.form-control(type="text" name="linkedin" maxlength="400")
+                br
+                h3 Person
+                div.row
+                    div.col-md-3
+                        label Contact Name
+                        input#nombre.form-control(type="text" name="nombre" maxlength="100" required value=detalle.nombre)
+                    div.col-md-3
+                        label Email
+                        input#email.form-control(type="text" name="email" maxlength="50" required value=detalle.email)
+                    div.col-md-3
+                        label Position
+                        input#cargo.form-control(type="text" name="cargo" maxlength="400" value=detalle.cargo)
+                    div.col-md-3
+                        label Cell Phone
+                        input#celular.form-control(type="text" name="celular" maxlength="400" required value=detalle.celular)
+                    div.col-md-3
+                        label Active Re Contact
+                        select#active_contacto.form-control(name="active_contacto")
+                            each linea, i in grupousuarios_active
+                                if(detalle.active_contacto==linea[0])
+                                    option(value=linea[0] selected)= linea[1]
+                                else
+                                    option(value=linea[0])= linea[1]
+                    div.col-md-3
+                        label Activity Reference
+                        input#referencia.form-control(type="text" name="referencia" maxlength="400")
+                    div.col-md-3
+                        label Linkedin
+                        input#linkedin_persona.form-control(type="text" name="linkedin_persona" maxlength="400")
+            div.row
+                div.col-md-2
+                    button#mercadeo_update_contact.form-control( style="background-color: #00586f;color: #e9ecef;") Update
+            div
+                p#mensaje 

@@ -1,0 +1,32 @@
+mixin floating-range(label, name, required=false, min=0, max=100, defaultValue=50, step=1, unit='%', containerClass='')
+  div.floating-range-container(class=containerClass)
+    label.floating-range-label(for=name)= label + (required ? ' *' : '')
+    div.floating-range-wrapper
+      input.floating-range-input(
+        type="range"
+        id=name
+        name=name
+        min=min
+        max=max
+        value=defaultValue
+        step=step
+        data-required=required
+        data-unit=unit
+      )
+      output.floating-range-output(for=name id=`output-${name}`)= defaultValue + ' ' + unit
+    span.error-message(data-error-for=name)
+  script.
+    (function() {
+      document.addEventListener('DOMContentLoaded', function() {
+        const input = document.getElementById('#{name}');
+        const output = document.getElementById('output-#{name}');
+        if (!input || !output) return;
+        const unit = input.dataset.unit || '%';
+        function updateOutput() {
+          output.textContent = input.value + ' ' + unit;
+        }
+        input.addEventListener('input', updateOutput);
+        updateOutput();
+        window['validateInput_#{name}'] = function() { return true; };
+      });
+    })();

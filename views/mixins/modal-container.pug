@@ -1,0 +1,139 @@
+//- ── Reusable modal container ───────────────────────────────────────────
+//- Usage:
+//-   +modal-container('myModalId', 'myTitleId', 'myCloseId', 'myCancelId', 'mySaveId', 'Title text')
+//-     //- your body content here (block)
+
+mixin modal-container(modalId, titleId, closeId, cancelId, saveId, titleText='', options={})
+  - const showCancelBtn = options.showCancel !== false;
+  - const showSaveBtn = options.showSave !== false;
+
+  style.
+    :root {
+      --modal-bg: #fff;
+      --modal-text: #212529;
+      --modal-border: #dee2e6;
+      --modal-shadow: rgba(0,0,0,.2);
+      --modal-close-color: #666;
+      --modal-scrollbar: #c0cdd4;
+    }
+    :root[data-theme="dark"] {
+      --modal-bg: #1d2128;
+      --modal-text: #e4e7ec;
+      --modal-border: #2b313a;
+      --modal-shadow: rgba(0,0,0,.5);
+      --modal-close-color: #96a1af;
+      --modal-scrollbar: #3b4452;
+    }
+    .app-modal {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 1055;
+      background: rgba(0,0,0,.5);
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      box-sizing: border-box;
+    }
+    .app-modal.open {
+      display: flex;
+    }
+    .app-modal .app-modal-dialog {
+      width: 80%;
+      max-width: 1100px;
+      max-height: calc(100vh - 40px);
+      overflow: hidden;
+      margin: 0;
+      background: var(--modal-bg);
+      border-radius: 5px;
+      box-shadow: 0 8px 40px var(--modal-shadow);
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+      color: var(--modal-text);
+    }
+    .app-modal .app-modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0.75rem 1rem;
+      border-bottom: 2px solid var(--bs-primary);
+      flex-shrink: 0;
+    }
+    .app-modal .app-modal-title {
+      margin: 0;
+      color: var(--modal-text);
+    }
+    .app-modal .app-modal-close {
+      background: none;
+      border: none;
+      font-size: 1.5rem;
+      cursor: pointer;
+      color: var(--modal-close-color);
+      line-height: 1;
+    }
+    .app-modal .app-modal-body {
+      padding: 1.5rem;
+      overflow-y: auto;
+      flex: 1 1 auto;
+      color: var(--modal-text);
+    }
+    .app-modal .app-modal-body::-webkit-scrollbar {
+      width: 5px;
+    }
+    .app-modal .app-modal-body::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    .app-modal .app-modal-body::-webkit-scrollbar-thumb {
+      background: var(--modal-scrollbar);
+      border-radius: 10px;
+    }
+    .app-modal .app-modal-body::-webkit-scrollbar-thumb:hover {
+      background: var(--bs-primary);
+    }
+    .app-modal .app-modal-footer {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      padding: 0.75rem 1rem;
+      border-top: 1px solid var(--modal-border);
+      flex-shrink: 0;
+    }
+    @media (max-width: 768px) {
+      .app-modal .app-modal-dialog {
+        width: 96%;
+        max-height: calc(95vh - 24px);
+        border-radius: 8px;
+      }
+      .app-modal .app-modal-header {
+        padding: .75rem 1rem;
+      }
+      .app-modal .app-modal-body {
+        padding: 1rem;
+      }
+      .app-modal .app-modal-footer {
+        padding: .75rem 1rem;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+      .app-modal .app-modal-footer button {
+        width: 100%;
+      }
+    }
+  
+  div(id=modalId class='app-modal')
+    div.app-modal-dialog
+      div.app-modal-header
+        h6.app-modal-title(id=titleId)= titleText
+        button.app-modal-close(id=closeId type="button" aria-label="Close") ×
+      div.app-modal-body
+        block
+      div.app-modal-footer
+        if showCancelBtn
+          button.btn.btn-outline-secondary(id=cancelId type="button") Cancel
+        if showSaveBtn
+          button.btn.btn-sm(id=saveId type="button" style="background-color:#00586f;color:#e9ecef;display:none;")
+            i.fas.fa-save.me-1
+            | Save

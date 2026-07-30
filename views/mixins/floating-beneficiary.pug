@@ -1,0 +1,582 @@
+//- ─────────────────────────────────────────────────────────────────────────────
+//- floating-beneficiary  —  Searchable, paginated beneficiary picker
+//-
+//- Parameters:
+//-   label          {string}  Field label shown as floating label
+//-   name           {string}  id / name for the hidden input  (e.g. 'beneficiario')
+//-   required       {bool}    Adds asterisk + validation  (default false)
+//-   containerClass {string}  Extra class on the outer container div
+//- ─────────────────────────────────────────────────────────────────────────────
+mixin floating-beneficiary(label, name, required=false, containerClass='')
+  div.floating-input-container(class=containerClass)
+    div.floating-ben-wrapper
+      div.ben-display(
+        id=name+'_display'
+        tabindex="0"
+        data-required=required
+        data-name=name
+      )
+        span.ben-selected-label(id=name+'_label' style="display:none;flex:1")
+        button.ben-clear-btn(id=name+'_clear' type="button" title="Clear") ×
+        i.fas.fa-chevron-down.ben-arrow
+
+      label.floating-label(for=name)= label + (required ? ' *' : '')
+
+      include ./validation-icons.pug
+      +successIcon()
+      +errorIcon()
+
+      div.ben-dropdown(id=name+'_dropdown')
+        div.ben-dd-header
+          input.ben-search-input(id=name+'_search' type="text" placeholder="Search by name, account or keyword" autocomplete="off")
+          button.ben-refresh-btn(id=name+'_refresh' type="button" title="Refresh") ⟳
+          button.ben-new-btn(id=name+'_new' type="button") + New
+        ul.ben-options(id=name+'_options')
+
+      input(id=name+'_hidden' type="hidden" name=name)
+      input(id=name type="hidden")
+
+    span.error-message(data-error-for=name)
+
+  script.
+    (function(){
+        var _benInputId    = '#{name}';
+        var _benDisplayId  = _benInputId + '_display';
+        var _benDropId     = _benInputId + '_dropdown';
+        var _benSearchId   = _benInputId + '_search';
+        var _benOptionsId  = _benInputId + '_options';
+        var _benLabelId    = _benInputId + '_label';
+        var _benClearId    = _benInputId + '_clear';
+        var _benRefreshId  = _benInputId + '_refresh';
+        var _benNewId      = _benInputId + '_new';
+        var _benHiddenId   = _benInputId + '_hidden';
+
+        var beneficiariesData = [];
+        var valueKeyByIndex   = new Map();
+        var lockedBeneficiary = null;
+        var dropState = { page: 1, limit: 25, total: 0, loading: false, hasMore: false, q: '' };
+
+        // ── Ensure a specific record is in beneficiariesData (for preselect) ──
+        async function ensureRecordLoaded(id){
+            var v = id.toString();
+            if(valueKeyByIndex.has(v)) return;
+            try {
+                var r = await fetch('/beneficiary-detail-json?id=' + encodeURIComponent(v));
+                if(!r.ok) return;
+                var json = await r.json();
+                var b = json.beneficiary;
+                if(!b || !b.beneficiario_id) return;
+                var idx = beneficiariesData.length;
+                beneficiariesData.push({ ...b, edit: json.canEdit });
+                valueKeyByIndex.set(v, idx);
+            } catch(e) { console.warn('[Beneficiary] ensureRecordLoaded failed', e); }
+        }
+
+        // ── Core progressive loader ──────────────────────────────────────────
+        async function loadBeneficiaries(q, page, append){
+            if(dropState.loading) return;
+            dropState.loading = true;
+            dropState.q = q;
+            var usernameEl = document.getElementById('username');
+            var user = usernameEl ? usernameEl.value : '';
+            var optionsContainer = document.getElementById(_benOptionsId);
+            if(!optionsContainer){ dropState.loading = false; return; }
+
+            if(!append){
+                beneficiariesData = [];
+                valueKeyByIndex.clear();
+                optionsContainer.innerHTML = '<li class="ben-loading py-2 px-3 text-muted"><span class="spinner-border spinner-border-sm me-1"></span> Loading…</li>';
+            } else {
+                var loader = document.createElement('li');
+                loader.id = 'ben_more_loader';
+                loader.className = 'ben-loading py-2 px-3 text-muted';
+                loader.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Loading more…';
+                optionsContainer.appendChild(loader);
+            }
+
+            try {
+                var res = await fetch('/list_beneficiaries', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ user, q: q ?? '', page, limit: dropState.limit })
+                });
+                if(!res.ok) throw new Error('Status ' + res.status);
+                var json = await res.json();
+                var rows = (json && json.data) ? json.data : [];
+                var activeRows = rows.filter(function(row){
+                    return row.estado === true || row.estado === 1 || row.estado === '1';
+                });
+                var startIdx = beneficiariesData.length;
+                beneficiariesData.push(...activeRows);
+                for(var i = startIdx; i < beneficiariesData.length; i++){
+                    var item = beneficiariesData[i];
+                    valueKeyByIndex.set((item.beneficiario_id ?? i).toString(), i);
+                }
+                dropState.page    = page;
+                dropState.total   = (json && json.total) ? json.total : 0;
+                dropState.hasMore = beneficiariesData.length < dropState.total;
+
+                if(append){
+                    document.getElementById('ben_more_loader')?.remove();
+                    appendBeneficiaryOptions(activeRows);
+                } else {
+                    renderAllBeneficiaryOptions();
+                }
+            } catch(err){
+                console.error(err);
+                document.getElementById('ben_more_loader')?.remove();
+                if(!append) optionsContainer.innerHTML = '<li class="text-danger py-2 px-3">Error loading beneficiaries</li>';
+            } finally {
+                dropState.loading = false;
+            }
+        }
+
+        // ── Build a single list item ─────────────────────────────────────────
+        function makeBenItem(item){
+            var value        = (item.beneficiario_id ?? '').toString();
+            var acctName     = item.cuenta_banco_beneficiario || 'Unnamed beneficiary';
+            var bank         = item.banco_beneficiario || '';
+            var display_name = item.display_name || '';
+            var canEdit      = item.edit === true;
+            var li = document.createElement('li');
+            li.className = 'ben-option';
+            li.dataset.value = value;
+            li.innerHTML =
+                '<div class="ben-option-info">' +
+                    '<span class="ben-option-name">' + (canEdit ? '🏦' : '🔒') + ' ' + acctName + '</span>' +
+                    '<span class="ben-option-bank">' + bank + '</span>' +
+                    '<span class="ben-option-key">' + display_name + '</span>' +
+                '</div>' +
+                '<div class="ben-option-actions">' +
+                    (canEdit
+                        ? '<button type="button" class="ben-action-btn ben-edit-btn" title="Edit" data-id="' + value + '"><i class="fas fa-pencil-alt"></i></button>'
+                        : '<button type="button" class="ben-action-btn ben-view-btn" title="View" data-id="' + value + '"><i class="fas fa-eye"></i></button>') +
+                '</div>';
+            li.querySelector('.ben-option-info').addEventListener('click', function(){
+                if(lockedBeneficiary) return;
+                selectBeneficiary(value);
+                closeBenDropdown();
+            });
+            var actionBtn = li.querySelector('.ben-edit-btn, .ben-view-btn');
+            if(actionBtn) actionBtn.addEventListener('click', function(e){
+                e.stopPropagation();
+                if(typeof window.openBeneficiaryModal === 'function') window.openBeneficiaryModal(value);
+                closeBenDropdown();
+            });
+            return li;
+        }
+
+        function renderAllBeneficiaryOptions(){
+            var container = document.getElementById(_benOptionsId);
+            if(!container) return;
+            container.innerHTML = '';
+            if(!beneficiariesData.length){
+                container.innerHTML = '<li class="ben-no-results py-2 px-3 text-muted">No beneficiaries found</li>';
+                return;
+            }
+            beneficiariesData.forEach(function(item){ container.appendChild(makeBenItem(item)); });
+        }
+
+        function appendBeneficiaryOptions(rows){
+            var container = document.getElementById(_benOptionsId);
+            if(!container) return;
+            rows.forEach(function(item){ container.appendChild(makeBenItem(item)); });
+        }
+
+        // ── Scroll-to-bottom → load next page ───────────────────────────────
+        function setupInfiniteScroll(){
+            var container = document.getElementById(_benOptionsId);
+            if(!container || container._infiniteScrollBound) return;
+            container._infiniteScrollBound = true;
+            container.addEventListener('scroll', function(){
+                if(!dropState.hasMore || dropState.loading) return;
+                if(container.scrollTop + container.clientHeight >= container.scrollHeight - 40){
+                    loadBeneficiaries(dropState.q, dropState.page + 1, true);
+                }
+            });
+        }
+
+        // ── Public entry-point ───────────────────────────────────────────────
+        async function handleBankBeneficiary(q, preselect){
+            if(!preselect && lockedBeneficiary){ preselect = lockedBeneficiary; }
+            await loadBeneficiaries(q ?? '', 1, false);
+            if(preselect){
+                var preVal = preselect.toString();
+                if(!valueKeyByIndex.has(preVal)){
+                    await ensureRecordLoaded(preVal);
+                    if(valueKeyByIndex.has(preVal)){
+                        appendBeneficiaryOptions([beneficiariesData[valueKeyByIndex.get(preVal)]]);
+                    }
+                }
+                if(valueKeyByIndex.has(preVal)){
+                    selectBeneficiary(preVal);
+                    lockedBeneficiary = preVal;
+                    var display = document.getElementById(_benDisplayId);
+                    if(display) display.classList.add('locked');
+                } else {
+                    console.warn('[Beneficiary] Preselect value not found:', preVal);
+                }
+            }
+            updateEditButtonUI();
+        }
+
+        function openBenDropdown(){
+            if(lockedBeneficiary) return;
+            var dropdown = document.getElementById(_benDropId);
+            var display  = document.getElementById(_benDisplayId);
+            if(dropdown) dropdown.classList.add('show');
+            if(display)  display.classList.add('open');
+            var search = document.getElementById(_benSearchId);
+            if(search) setTimeout(function(){ search.focus(); }, 50);
+        }
+
+        function closeBenDropdown(){
+            var dropdown = document.getElementById(_benDropId);
+            var display  = document.getElementById(_benDisplayId);
+            if(dropdown) dropdown.classList.remove('show');
+            if(display)  display.classList.remove('open');
+        }
+
+        function selectBeneficiary(value){
+            var hiddenInput  = document.getElementById(_benHiddenId);
+            var hidden       = document.getElementById(_benInputId);
+            var selectedLabel = document.getElementById(_benLabelId);
+            var clearBtn     = document.getElementById(_benClearId);
+            var display      = document.getElementById(_benDisplayId);
+            var errorEl      = document.querySelector('[data-error-for="#{name}"]');
+            if(lockedBeneficiary && value !== lockedBeneficiary) return;
+            if(hiddenInput) hiddenInput.value = value;
+            if(hidden)      hidden.value      = value;
+            var idx         = valueKeyByIndex.has(value) ? valueKeyByIndex.get(value) : -1;
+            var record      = idx >= 0 ? beneficiariesData[idx] : null;
+            var displayName = record ? (record.cuenta_banco_beneficiario || value) : value;
+            if(selectedLabel){ selectedLabel.textContent = displayName; selectedLabel.style.display = ''; selectedLabel.style.flex = '1'; }
+            if(clearBtn) clearBtn.style.display = lockedBeneficiary ? 'none' : '';
+            // Floating style: float label up and mark valid
+            if(display){ display.classList.add('has-value'); display.classList.remove('error'); display.classList.add('valid'); }
+            if(errorEl) errorEl.classList.remove('show');
+            updateEditButtonUI();
+            var ev = new Event('change', { bubbles: true });
+            if(hidden) hidden.dispatchEvent(ev);
+        }
+
+        function clearBeneficiary(){
+            lockedBeneficiary = null;
+            var hiddenInput   = document.getElementById(_benHiddenId);
+            var hidden        = document.getElementById(_benInputId);
+            var selectedLabel = document.getElementById(_benLabelId);
+            var clearBtn      = document.getElementById(_benClearId);
+            var display       = document.getElementById(_benDisplayId);
+            if(hiddenInput) hiddenInput.value = '';
+            if(hidden)      hidden.value      = '';
+            if(selectedLabel){ selectedLabel.textContent = ''; selectedLabel.style.display = 'none'; }
+            if(clearBtn)  clearBtn.style.display = 'none';
+            if(display)   display.classList.remove('locked', 'has-value', 'valid', 'error');
+            updateEditButtonUI();
+        }
+
+        function debounce(fn, delay){
+            var t; return function(){ var args = arguments; clearTimeout(t); t = setTimeout(function(){ fn.apply(this, args); }, delay); };
+        }
+
+        function getSelectedRecord(){
+            var sel = document.getElementById(_benInputId);
+            var value = sel ? sel.value : '';
+            var idx = valueKeyByIndex.has(value) ? valueKeyByIndex.get(value) : -1;
+            return idx >= 0 ? beneficiariesData[idx] : null;
+        }
+
+        function updateEditButtonUI(){
+            var btnEdit = document.getElementById('btnEditBeneficiary');
+            if(!btnEdit) return;
+            var rec = getSelectedRecord();
+            var canEdit = !!(rec && rec.edit === true);
+            btnEdit.textContent = canEdit ? 'Edit selected' : 'View selected';
+            btnEdit.dataset.mode = canEdit ? 'edit' : 'view';
+        }
+
+        // Expose global API
+        window.handleBankBeneficiary = handleBankBeneficiary;
+        window['setBeneficiaryValue_' + _benInputId] = async function(value) {
+        if (value == null || value === '') {
+            clearBeneficiary();
+            return;
+        }
+
+        var stringValue = value.toString();
+
+        var hiddenInput = document.getElementById(_benHiddenId);
+        var hidden = document.getElementById(_benInputId);
+
+        if (hiddenInput) hiddenInput.value = stringValue;
+        if (hidden) hidden.value = stringValue;
+
+        await handleBankBeneficiary('', stringValue);
+        };
+
+        window.setBeneficiaryValue = window['setBeneficiaryValue_' + _benInputId];
+        // After beneficiary_modal saves, reload and auto-select
+        window._beneficiaryListRefresh = async function() {
+            var saved_id   = document.getElementById('modalBenId')?.value || '';
+            var isNew      = !!window._beneficiaryLastActionIsNew;
+
+            // Keep form state immediately usable while async refresh runs.
+            if(saved_id){
+                var hiddenInput = document.getElementById(_benHiddenId);
+                var hidden = document.getElementById(_benInputId);
+                if(hiddenInput) hiddenInput.value = String(saved_id);
+                if(hidden) hidden.value = String(saved_id);
+            }
+
+            await loadBeneficiaries('', 1, false);
+            if(isNew && saved_id){
+                if(!valueKeyByIndex.has(saved_id)){
+                    await ensureRecordLoaded(saved_id);
+                    if(valueKeyByIndex.has(saved_id)){
+                        appendBeneficiaryOptions([beneficiariesData[valueKeyByIndex.get(saved_id)]]);
+                    }
+                }
+                selectBeneficiary(saved_id);
+                updateEditButtonUI();
+            }
+        };
+
+        // ── DOMContentLoaded wiring ──────────────────────────────────────────
+        document.addEventListener('DOMContentLoaded', function(){
+        var display = document.getElementById(_benDisplayId);
+        var dropdown = document.getElementById(_benDropId);
+        var search = document.getElementById(_benSearchId);
+        var clearBtn = document.getElementById(_benClearId);
+        var hiddenInput = document.getElementById(_benHiddenId);
+        var hidden = document.getElementById(_benInputId);
+
+        setupInfiniteScroll();
+
+        // Si el endpoint ya dejó un valor en alguno de los hidden inputs,
+        // úsalo como preselect para poblar el control visual.
+        var initialValue = '';
+        if (hiddenInput && hiddenInput.value) initialValue = hiddenInput.value;
+        else if (hidden && hidden.value) initialValue = hidden.value;
+
+        handleBankBeneficiary('', initialValue || undefined);
+
+
+            // Load first page silently on init
+            handleBankBeneficiary('', undefined);
+
+            // Toggle dropdown on display click
+            if(display){
+                display.addEventListener('click', function(e){
+                    if(e.target === clearBtn || clearBtn?.contains(e.target)) return;
+                    if(lockedBeneficiary){
+                        if(typeof window.openBeneficiaryModal === 'function') window.openBeneficiaryModal(lockedBeneficiary);
+                        return;
+                    }
+                    if(dropdown && dropdown.classList.contains('show')){
+                        closeBenDropdown();
+                    } else {
+                        openBenDropdown();
+                    }
+                });
+            }
+
+            // Server-side search (debounced)
+            var debouncedSearch = debounce(function(q){ loadBeneficiaries(q, 1, false); }, 350);
+            if(search){
+                search.addEventListener('input', function(){ debouncedSearch(this.value.trim()); });
+                search.addEventListener('click', function(e){ e.stopPropagation(); });
+            }
+
+            // Clear button
+            if(clearBtn){
+                clearBtn.addEventListener('click', function(e){
+                    e.stopPropagation();
+                    clearBeneficiary();
+                });
+            }
+
+            // Close on outside click
+            document.addEventListener('click', function(e){
+                if(display && !display.contains(e.target) && dropdown && !dropdown.contains(e.target)){
+                    closeBenDropdown();
+                }
+            });
+
+            var btnNew     = document.getElementById(_benNewId);
+            var btnRefresh = document.getElementById(_benRefreshId);
+            if(btnNew){ btnNew.addEventListener('click', function(e){
+                e.stopPropagation();
+                closeBenDropdown();
+                if(typeof window.openNewBeneficiaryModal === 'function') window.openNewBeneficiaryModal();
+            }); }
+            if(btnRefresh){ btnRefresh.addEventListener('click', function(e){
+                e.stopPropagation();
+                loadBeneficiaries(search?.value?.trim() || '', 1, false);
+            }); }
+
+            // Auto-generate beneficiary PDF when related fields change
+            document.getElementById('banco')?.addEventListener('change', tryGenerateBeneficiaryPdf);
+            document.getElementById(_benInputId)?.addEventListener('change', tryGenerateBeneficiaryPdf);
+            document.getElementById('moneda')?.addEventListener('change', tryGenerateBeneficiaryPdf);
+            document.getElementById('monto')?.addEventListener('input', debounce(tryGenerateBeneficiaryPdf, 600));
+        });
+
+        // ── Auto-generate beneficiary PDF preview ────────────────────────────
+        var _benPdfFileName   = null;
+        var _benPdfGenerating = false;
+
+        function setBenPdfStatus(state) {
+            var el = document.getElementById('ben_pdf_status');
+            if (!el) {
+                el = document.createElement('div');
+                el.id = 'ben_pdf_status';
+                el.className = 'ben-pdf-status';
+                var wrapper = document.getElementById(_benDisplayId);
+                if (wrapper) wrapper.closest('.floating-ben-wrapper').appendChild(el);
+            }
+            if (state === 'generating') {
+                el.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Updating beneficiary PDF…';
+                el.className = 'ben-pdf-status ben-pdf-status--loading';
+                el.style.display = '';
+            } else if (state === 'ready') {
+                el.innerHTML = '<i class="fas fa-check-circle me-1"></i> Beneficiary PDF updated';
+                el.className = 'ben-pdf-status ben-pdf-status--ready';
+                el.style.display = '';
+                setTimeout(function(){ el.style.display = 'none'; }, 3000);
+            } else {
+                el.style.display = 'none';
+            }
+        }
+
+        function getActorFlag(id) {
+            var val = document.getElementById(id)?.value || '';
+            return val !== '' && val !== 'N/A';
+        }
+
+        function setBenBtnLoading(loading) {
+            var btn = document.getElementById('btn_download_ben_pdf');
+            if (!btn) {
+                if (!loading) return;
+                btn = document.createElement('button');
+                btn.type = 'button';
+                btn.id = 'btn_download_ben_pdf';
+                btn.className = 'btn btn-sm btn-outline-secondary mt-4';
+                var wrapper = document.getElementById(_benDisplayId);
+                if (wrapper) wrapper.closest('.floating-ben-wrapper').appendChild(btn);
+            }
+            if (loading) {
+                btn.disabled = true;
+                btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Loading changes…';
+                btn.style.display = '';
+            } else {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-file-pdf me-1"></i> Download Preview PDF';
+            }
+        }
+
+        async function tryGenerateBeneficiaryPdf() {
+            var benEl      = document.getElementById(_benInputId);
+            var bancoSelect = document.getElementById('banco');
+            var benId = benEl ? benEl.value : '';
+            var banco = bancoSelect && bancoSelect.selectedIndex >= 0
+                ? bancoSelect.options[bancoSelect.selectedIndex].text
+                : '';
+
+            if (!benId || !banco || banco === 'N/A' || _benPdfGenerating) return;
+            var paymnetDiv = document.getElementById('paymnet_div');
+            if (paymnetDiv && paymnetDiv.className.includes('Not')) return;
+
+            _benPdfGenerating = true;
+            setBenBtnLoading(true);
+            setBenPdfStatus('generating');
+            try {
+                var moneda   = document.getElementById('moneda')?.value || '';
+                var monto    = document.getElementById('monto')?.value || '';
+                var descEl   = document.getElementById('description');
+                var desc     = descEl ? (function(el){ var c = el.cloneNode(true); c.querySelectorAll('table').forEach(function(t){ t.remove(); }); Array.from(c.children).forEach(function(ch){ if(ch.tagName==='DIV') ch.remove(); }); return c.innerHTML.trim(); })(descEl) : '';
+                var compania = document.getElementById('compania')?.value || '';
+
+                var res = await fetch('/preview-beneficiary-pdf', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        beneficiario_id: benId, banco, moneda, monto, description: desc, compania,
+                        verificador: getActorFlag('verificador'),
+                        aprobacion:  getActorFlag('aprobador'),
+                        firmante:    getActorFlag('firmante'),
+                        operador:    getActorFlag('operador'),
+                        ejecutor:    getActorFlag('ejecutor'),
+                    })
+                });
+                if (!res.ok) { setBenBtnLoading(false); setBenPdfStatus(null); return; }
+                var json = await res.json();
+                if (!json.pdf) { setBenBtnLoading(false); setBenPdfStatus(null); return; }
+
+                // Convert base64 → Blob
+                var byteChars = atob(json.pdf);
+                var byteArr = new Uint8Array(byteChars.length);
+                for (var i = 0; i < byteChars.length; i++) byteArr[i] = byteChars.charCodeAt(i);
+                var blob = new Blob([byteArr], { type: 'application/pdf' });
+
+                _benPdfFileName = json.filename;
+                setBenBtnLoading(false);
+
+                var btn = document.getElementById('btn_download_ben_pdf');
+                if (btn) {
+                    if (btn._objectUrl) URL.revokeObjectURL(btn._objectUrl);
+                    var objectUrl = URL.createObjectURL(blob);
+                    btn._objectUrl = objectUrl;
+                    btn.onclick = function() {
+                        var link = document.createElement('a');
+                        link.href = objectUrl;
+                        link.download = json.filename;
+                        document.body.appendChild(link);
+                        link.click();
+                        document.body.removeChild(link);
+                    };
+                }
+
+                setBenPdfStatus('ready');
+                // Remove required from Signingfiles since PDF will be generated server-side
+                var signingInput = document.getElementById('Signingfiles');
+                if (signingInput) {
+                    signingInput.dataset.required = 'false';
+                    var signingLabel = document.querySelector('label[for="Signingfiles"]');
+                    if (signingLabel) signingLabel.textContent = signingLabel.textContent.replace(' *', '');
+                }
+            } catch(e) {
+                console.warn('[BenPDF] Generation failed', e);
+                setBenBtnLoading(false);
+                setBenPdfStatus(null);
+            } finally {
+                _benPdfGenerating = false;
+            }
+        }
+
+        window.tryGenerateBeneficiaryPdf = tryGenerateBeneficiaryPdf;
+
+        // ── Floating validation API ──────────────────────────────────────────
+        window['setSelectError_' + _benHiddenId] = function(msg) {
+            var display = document.getElementById(_benDisplayId);
+            var errEl   = document.querySelector('[data-error-for="#{name}"]');
+            if(display){ display.classList.remove('valid'); display.classList.add('error'); }
+            if(errEl){ errEl.textContent = msg || '#{label} is required'; errEl.classList.add('show'); }
+            return false;
+        };
+        window['clearSelectError_' + _benHiddenId] = function() {
+            var display = document.getElementById(_benDisplayId);
+            var errEl   = document.querySelector('[data-error-for="#{name}"]');
+            if(display) display.classList.remove('error');
+            if(errEl) errEl.classList.remove('show');
+        };
+        window['validateSelect_' + _benHiddenId] = function() {
+            var hidden = document.getElementById(_benHiddenId);
+            if(!hidden || !hidden.value){ window['setSelectError_' + _benHiddenId](); return false; }
+            window['clearSelectError_' + _benHiddenId]();
+            return true;
+        };
+        // Aliases using just the input name (for convenience)
+        window['setSelectError_' + _benInputId]   = window['setSelectError_'   + _benHiddenId];
+        window['clearSelectError_' + _benInputId] = window['clearSelectError_' + _benHiddenId];
+        window['validateSelect_' + _benInputId]   = window['validateSelect_'   + _benHiddenId];
+    })();

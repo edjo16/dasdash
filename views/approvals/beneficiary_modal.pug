@@ -1,0 +1,667 @@
+include ../mixins/floating-input
+include ../mixins/floating-textarea
+include ../mixins/modal-container
+include ../mixins/moneda-multiselect
+
+//- ── Beneficiary Modal ──────────────────────────────────────────────────
++modal-container('beneficiaryModal', 'modalBenTitle', 'modalBenClose', 'modalBenCancel', 'modalBenSave', 'Beneficiary')
+  input#modalBenId(type="hidden")
+  input#modalBenCanEdit(type="hidden" value="false")
+
+  //- ── Detail View (read-only) ────────────────────────────────────────
+  include ../mixins/beneficiary-detail-view
+
+  //- ── Edit View (form) ───────────────────────────────────────────────
+  div#benEditView(style="display:none;")
+    div#modal_audit_strip(style="display:none;")
+      div(style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px;")
+        span#modal_audit_created(style="font-size:.72rem;color:#6b7280;")
+        span#modal_audit_modified(style="font-size:.72rem;color:#6b7280;")
+    div#modal_assign_row.row.mb-1(style="display:none")
+      div.col-md-6.mb-2
+        +floating-select('Company', 'modal_compania_modal_select', [], true, ' Company')
+      div.col-md-6.mb-2
+        +floating-select('Department', 'modal_departamento_select', [], true, 'Department')
+    div.row
+      div.col-md-6.mb-2
+        +floating-input('Display Name', 'modal_display_name', 'text', true, 'Keywords to describe beneficiary info', '', '', {maxlength: 55})
+      div.col-md-6.mb-2
+        +floating-input('Beneficiary name', 'modal_cuenta_banco_beneficiario', 'text', true, '', '', '', {maxlength: 200})
+      div.col-md-6.mb-2
+        +floating-input('Beneficiary Bank', 'modal_banco_beneficiario', 'text', true, '', '', '', {maxlength: 200})
+      div.col-md-6.mb-2
+        +floating-input('Account number', 'modal_cuenta_banco', 'text', true, '', '', '', {maxlength: 55})
+      div.col-md-6.mb-2
+        - var tipoCuentaOptions = (typeof tipoCuenta !== 'undefined' ? tipoCuenta : []).map(function(t){ return {value: t.tipo_cuenta_id, label: t.tipo_cuenta} })
+        +floating-select('Account Type', 'modal_tipo_cuenta', tipoCuentaOptions, false, 'Select type')
+      div.col-6.mb-2
+        - var countryOptions = countries.map(c => ({value: c.cpais, label: c.xnombre_pais_ingles}))
+        +floating-select('Beneficiary Country', 'modal_pais_beneficiario', countryOptions, true, 'Country') 
+      div.col-md-6.mb-2
+        +floating-input('SORT', 'modal_SORT', 'text', false, '', '', '', {maxlength: 55})
+      div.col-md-6.mb-2
+        +floating-input('SWIFT', 'modal_SWIFT', 'text', false, '', '', '', {maxlength: 55})
+      div.col-md-6.mb-2
+        +floating-input('IBAN', 'modal_IBAN', 'text', false, '', '', '', {maxlength: 55})
+      div.col-md-6.mb-2
+        +floating-input('ABA', 'modal_ABA', 'text', false, '', '', '', {maxlength: 55})
+      div.col-md-6.mb-2
+        +floating-input('Bank State Branch', 'modal_state_branch', 'text', false, '', '', '', {maxlength: 55})
+      div.col-md-6.mb-2
+        +floating-input('Beneficiary Clabe', 'modal_cable_beneficiario', 'text', false, '', '', '', {maxlength: 55}) 
+      div.col-md-6.mb-2
+        - var estadoOptions = [{ value: '1', label: 'Active' }, { value: '0', label: 'Inactive' }]
+        +floating-select('Status', 'modal_estado', estadoOptions, false, 'Select status')
+      div.col-6.mb-2
+        - var monedaOptions = (typeof monedas !== 'undefined' ? monedas : []).map(function(m){ return {value: m.cmoneda, abbr: m.xabrev_moneda, label: m.xnombre_moneda_ingles} })
+        +moneda-multiselect('Accepted Currencies', 'modal_monedas', monedaOptions)
+    div.row
+      div.col-md-6.mb-2
+        +floating-textarea('Beneficiary address', 'modal_direcion_beneficiario', false, '', '', '', {maxlength: 200}, 2)
+      div.col-md-6.mb-2
+        +floating-textarea('Bank address', 'modal_direccion', false, '', '', '', {maxlength: 200}, 2)
+    div#modal_intermediary_country_warn.alert.alert-warning.py-1.px-2.mt-2(style="display:none;font-size:0.8rem;")
+      i.fas.fa-exclamation-triangle(style="margin-right:4px;")
+      | Intermediary Bank, Country, and Account Number are required when countries differ.
+    div.accordion.mt-3#modalIntermediaryAccordion
+      div.accordion-item
+        h2.accordion-header
+          button.accordion-button.collapsed(style="padding-left:0" type="button"
+            data-bs-toggle="collapse" data-bs-target="#modalIntermediaryCollapse"
+            aria-expanded="false" aria-controls="modalIntermediaryCollapse") Intermediary Bank
+        div.accordion-collapse.collapse#modalIntermediaryCollapse
+          div.row.mt-2
+            div.col-md-6.mb-2
+              +floating-input('Intermediary Bank', 'modal_banco_intermediario', 'text', false, '', '', '', {maxlength: 55})
+            div.col-6.mb-2
+              +floating-input('Intermediary Account Number', 'modal_cuenta_banco_intermediario', 'text', false, '', '', '', {maxlength: 55}) 
+            div.col-md-6.mb-2
+              - var tipoCuentaIntermediaryOptions = (typeof tipoCuenta !== 'undefined' ? tipoCuenta : []).map(function(t){ return {value: t.tipo_cuenta_id, label: t.tipo_cuenta} })
+              +floating-select('Account Type', 'modal_tipo_cuenta_intermediario', tipoCuentaIntermediaryOptions, false, 'Select type')
+            div.col-6.mb-2
+              - var countryOptions = countries.map(c => ({value: c.cpais , label: c.xnombre_pais_ingles}))
+              +floating-select('Intermediary Country', 'modal_pais_intermediario', countryOptions, false, 'Country')
+            div.col-md-6.mb-2
+              +floating-input('SORT', 'modal_SORT_banco_intermediario', 'text', false, '', '', '', {maxlength: 55})
+            div.col-md-6.mb-2
+              +floating-input('SWIFT', 'modal_SWIFT_banco_intermediario', 'text', false, '', '', '', {maxlength: 55})
+            div.col-md-6.mb-2
+              +floating-input('IBAN', 'modal_IBAN_banco_intermediario', 'text', false, '', '', '', {maxlength: 55})
+            div.col-md-6.mb-2
+              +floating-input('ABA', 'modal_ABA_banco_intermediario', 'text', false, '', '', '', {maxlength: 55})
+            div.col-md-6.mb-2
+              +floating-input('State Branch', 'modal_state_branch_banco_intermediario', 'text', false, '', '', '', {maxlength: 55})
+            div.col-6.mb-2
+              +floating-input('Intemediary Clabe', 'modal_cable_intermediario', 'text', false, '', '', '', {maxlength: 55}) 
+            div.col-md-12.mb-2
+              +floating-textarea('Intermediary address', 'modal_direccion_banco_intermediario', false, '', '', '', {maxlength: 200}, 2)
+script.
+  (function(){
+    const get = id => document.getElementById(id);
+    const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+
+    const MODAL_FIELDS = [
+      'cuenta_banco_beneficiario','banco_beneficiario','cuenta_banco','tipo_cuenta', 'tipo_cuenta_intermediario',
+      'SORT','SWIFT','IBAN','ABA','state_branch','direcion_beneficiario','display_name','direccion', 'pais_beneficiario',
+      'banco_intermediario','SORT_banco_intermediario','SWIFT_banco_intermediario',
+      'IBAN_banco_intermediario','ABA_banco_intermediario',
+      'state_branch_banco_intermediario','direccion_banco_intermediario','pais_intermediario',
+      'cable_intermediario', 'cable_beneficiario', 'cuenta_banco_intermediario', 'estado'
+    ];
+
+    const INTERMEDIARY_FIELDS = [
+      'banco_intermediario','cuenta_banco_intermediario','tipo_cuenta_intermediario','pais_intermediario',
+      'SORT_banco_intermediario','SWIFT_banco_intermediario','IBAN_banco_intermediario',
+      'ABA_banco_intermediario','state_branch_banco_intermediario','cable_intermediario',
+      'direccion_banco_intermediario'
+    ];
+
+    let _lastBenData = null;
+    let _lastCanEdit = false;
+    let _lastMonedas = [];
+
+    // ── View mode toggling ──────────────────────────────────────────
+    function benViewMode(mode) {
+      const detailView = get('benDetailView');
+      const editView   = get('benEditView');
+      const saveBtn    = get('modalBenSave');
+      const editBtn    = get('modalBenEdit');
+      const cancelBtn  = get('modalBenCancel');
+
+      if (mode === 'edit') {
+        if (detailView) detailView.style.display = 'none';
+        if (editView)   editView.style.display = '';
+        if (saveBtn)    saveBtn.style.display = '';
+        if (editBtn)    editBtn.style.display = 'none';
+        if (cancelBtn)  cancelBtn.textContent = 'Cancel';
+        get('modalBenTitle').textContent = 'Edit Beneficiary';
+      } else {
+        if (detailView) detailView.style.display = '';
+        if (editView)   editView.style.display = 'none';
+        if (saveBtn)    saveBtn.style.display = 'none';
+        if (editBtn)    editBtn.style.display = _lastCanEdit ? '' : 'none';
+        if (cancelBtn)  cancelBtn.textContent = 'Close';
+        get('modalBenTitle').textContent = 'Beneficiary Details';
+      }
+    }
+
+    function ensureEditButton() {
+      if (get('modalBenEdit')) return;
+      const footer = get('modalBenSave')?.parentElement;
+      if (!footer) return;
+      const btn = document.createElement('button');
+      btn.id = 'modalBenEdit';
+      btn.type = 'button';
+      btn.className = 'btn btn-sm';
+      btn.style.cssText = 'background-color:#00586f;color:#e9ecef;display:none;';
+      btn.innerHTML = '<i class="fas fa-edit" style="margin-right:4px;"></i>Edit';
+      btn.addEventListener('click', function() {
+        setModalReadonly(false);
+        benViewMode('edit');
+      });
+      footer.insertBefore(btn, get('modalBenSave'));
+    }
+
+    // ── Populate detail view ────────────────────────────────────────
+    function populateDetailView(b, monedas) {
+      const fieldMap = {
+        'display_name': b.display_name,
+        'cuenta_banco_beneficiario': b.cuenta_banco_beneficiario,
+        'banco_beneficiario': b.banco_beneficiario,
+        'cuenta_banco': b.cuenta_banco,
+        'SORT': b.SORT, 'SWIFT': b.SWIFT, 'IBAN': b.IBAN, 'ABA': b.ABA,
+        'state_branch': b.state_branch, 'cable_beneficiario': b.cable_beneficiario,
+        'direcion_beneficiario': b.direcion_beneficiario, 'direccion': b.direccion,
+        'banco_intermediario': b.banco_intermediario,
+        'cuenta_banco_intermediario': b.cuenta_banco_intermediario,
+        'SORT_banco_intermediario': b.SORT_banco_intermediario,
+        'SWIFT_banco_intermediario': b.SWIFT_banco_intermediario,
+        'IBAN_banco_intermediario': b.IBAN_banco_intermediario,
+        'ABA_banco_intermediario': b.ABA_banco_intermediario,
+        'state_branch_banco_intermediario': b.state_branch_banco_intermediario,
+        'cable_intermediario': b.cable_intermediario,
+        'direccion_banco_intermediario': b.direccion_banco_intermediario,
+        'compania': b.compania,
+        'departamento': b.departamento
+      };
+      Object.keys(fieldMap).forEach(function(key) {
+        const el = get('benDetail_' + key);
+        if (el) {
+          const hasValue = fieldMap[key] && String(fieldMap[key]).trim();
+          el.textContent = hasValue ? fieldMap[key] : '-';
+          const container = el.closest('.ben-field-row');
+          if (container) container.style.display = hasValue ? '' : 'none';
+        }
+      });
+
+      // Status badge
+      const statusEl = get('benDetail_estado');
+      if (statusEl) {
+        const isActive = String(b.estado) === 'true' || b.estado == 1;
+        statusEl.innerHTML = '<span class="ben-detail-status ' + (isActive ? 'active' : 'inactive') + '">' + (isActive ? 'Active' : 'Inactive') + '</span>';
+        const container = statusEl.closest('.ben-field-row');
+        if (container) container.style.display = b.estado
+      }
+
+      // Account type - resolve label
+      const tcEl = get('benDetail_tipo_cuenta');
+      if (tcEl) {
+        const tcSelect = get('modal_tipo_cuenta');
+        let tcLabel = '-';
+        if (tcSelect && b.tipo_cuenta) {
+          const opt = Array.from(tcSelect.options).find(function(o) { return String(o.value) === String(b.tipo_cuenta); });
+          if (opt) tcLabel = opt.textContent;
+        }
+        tcEl.textContent = tcLabel;
+        const container = tcEl.closest('.ben-field-row');
+        if (container) container.style.display = (tcLabel !== '-') ? '' : 'none';
+      }
+
+      // Intermediary account type
+      const tcIntEl = get('benDetail_tipo_cuenta_intermediario');
+      if (tcIntEl) {
+        const tcIntSelect = get('modal_tipo_cuenta_intermediario');
+        let tcIntLabel = '-';
+        if (tcIntSelect && b.tipo_cuenta_intermediario) {
+          const opt = Array.from(tcIntSelect.options).find(function(o) { return String(o.value) === String(b.tipo_cuenta_intermediario); });
+          if (opt) tcIntLabel = opt.textContent;
+        }
+        tcIntEl.textContent = tcIntLabel;
+        const container = tcIntEl.closest('.ben-field-row');
+        if (container) container.style.display = (tcIntLabel !== '-') ? '' : 'none';
+      }
+
+      // Country - resolve label
+      const countryEl = get('benDetail_pais_beneficiario');
+      if (countryEl) {
+        const cSelect = get('modal_pais_beneficiario');
+        let cLabel = '-';
+        if (cSelect && b.pais_beneficiario) {
+          const opt = Array.from(cSelect.options).find(function(o) { return String(o.value) === String(b.pais_beneficiario); });
+          if (opt) cLabel = opt.textContent;
+        }
+        countryEl.textContent = cLabel;
+        const container = countryEl.closest('.ben-field-row');
+        if (container) container.style.display = (cLabel !== '-') ? '' : 'none';
+      }
+
+      // Intermediary country
+      const intCountryEl = get('benDetail_pais_intermediario');
+      if (intCountryEl) {
+        const icSelect = get('modal_pais_intermediario');
+        let icLabel = '-';
+        if (icSelect && b.pais_intermediario) {
+          const opt = Array.from(icSelect.options).find(function(o) { return String(o.value) === String(b.pais_intermediario); });
+          if (opt) icLabel = opt.textContent;
+        }
+        intCountryEl.textContent = icLabel;
+        const container = intCountryEl.closest('.ben-field-row');
+        if (container) container.style.display = (icLabel !== '-') ? '' : 'none';
+      }
+
+      // Currencies
+      const monedaEl = get('benDetail_monedas');
+      if (monedaEl) {
+        const hasMonedas = monedas && monedas.length;
+        if (hasMonedas) {
+          // Resolve labels from the multiselect DOM (monedas can be raw cmoneda values or objects)
+          const msRoot = document.querySelector('[data-name="modal_monedas"]');
+          monedaEl.innerHTML = monedas.map(function(m) {
+            let label = '';
+            if (m !== null && typeof m === 'object') {
+              label = m.xabrev_moneda || m.xnombre_moneda_ingles || String(m.cmoneda || '');
+            } else {
+              // m is a raw cmoneda value — look up abbreviation in multiselect DOM
+              label = String(m);
+              if (msRoot) {
+                const cb = msRoot.querySelector('.moneda-ms-cb[value="' + String(m) + '"]');
+                if (cb) {
+                  const abbrEl = cb.closest('.moneda-ms-item') && cb.closest('.moneda-ms-item').querySelector('.moneda-ms-abbr');
+                  if (abbrEl) label = abbrEl.textContent.trim();
+                }
+              }
+            }
+            return label ? '<span class="ben-currency-badge">' + esc(label) + '</span>' : '';
+          }).join(' ');
+        } else {
+          monedaEl.textContent = '-';
+        }
+        const container = monedaEl.closest('.ben-field-row');
+        if (container) container.style.display = hasMonedas ? '' : 'none';
+      }
+
+      // Show/hide intermediary column
+      const intSection = get('benDetail_intermediary_column');
+      if (intSection) {
+        const hasIntermediary = INTERMEDIARY_FIELDS.some(function(f) { return b[f] && String(b[f]).trim(); });
+        intSection.style.display = hasIntermediary ? '' : 'none';
+      }
+
+      // Audit strip for detail view
+      const strip = get('benDetail_audit_strip');
+      if (strip) {
+        const mkAuditEntry = function(label, u, d) {
+          if (!u && !d) return '';
+          const img = u
+            ? '<img src="/pic/' + encodeURIComponent(u) + '.png" onerror="this.onerror=null;this.src=\'/pic/default.png\';" style="width:24px;height:24px;border-radius:50%;object-fit:cover;vertical-align:middle;margin-right:5px;" title="' + esc(u) + '">'
+            : '';
+          const dateStr = d ? '<span style="vertical-align:middle;">' + esc(d) + '</span>' : '';
+          return label + img + dateStr;
+        };
+        const createdEl  = get('benDetail_audit_created');
+        const modifiedEl = get('benDetail_audit_modified');
+        const createdHtml = mkAuditEntry('Created by:\u2002',  b.uingreso, b.fingreso);
+        const modifiedHtml = mkAuditEntry('Modified by:\u2002', b.umodificado, to12HourFormat(b.fmodificado));
+        if (createdEl)  createdEl.innerHTML  = modifiedHtml ? '' : createdHtml;
+        if (modifiedEl) modifiedEl.innerHTML = modifiedHtml;
+        strip.style.display = (createdHtml || modifiedHtml) ? '' : 'none';
+      }
+    }
+
+    function setModalVal(field, v) {
+      const el = get('modal_' + field);
+      if (!el) return;
+      el.value = v ?? '';
+      if (el.value) el.classList.add('has-value'); else el.classList.remove('has-value');
+    }
+
+    function resetModal() {
+      MODAL_FIELDS.forEach(function(f) {
+        const el = get('modal_' + f);
+        if (!el) return;
+        el.value = '';
+        el.classList.remove('valid', 'error', 'has-value');
+        el.removeAttribute('data-touched');
+        el.removeAttribute('readonly');
+        const errEl = document.querySelector('[data-error-for="modal_' + f + '"]');
+        if (errEl) { errEl.textContent = ''; errEl.classList.remove('show'); }
+      });
+      ['modal_departamento_select','modal_compania_modal_select'].forEach(function(id) {
+        const el = get(id);
+        if (el) { el.value = ''; el.classList.remove('valid','error','has-value'); }
+      });
+      const assignRow = get('modal_assign_row');
+      if (assignRow) assignRow.style.display = 'none';
+      const strip = get('modal_audit_strip');
+      if (strip) strip.style.display = 'none';
+      const auditCreated = get('modal_audit_created');
+      if (auditCreated) auditCreated.textContent = '';
+      const auditModified = get('modal_audit_modified');
+      if (auditModified) auditModified.textContent = '';
+      monedaMSReset('modal_monedas');
+      _lastBenData = null;
+      _lastCanEdit = false;
+      _lastMonedas = [];
+    }
+
+    function setModalReadonly(readonly) {
+      MODAL_FIELDS.forEach(function(f) {
+        const el = get('modal_' + f);
+        if (!el) return;
+        if (el.tagName === 'SELECT') {
+          if (readonly) el.setAttribute('disabled', true); else el.removeAttribute('disabled');
+        } else {
+          if (readonly) el.setAttribute('readonly', true); else el.removeAttribute('readonly');
+        }
+      });
+      get('modalBenSave').style.display = readonly ? 'none' : '';
+    }
+
+    function closeModal() {
+      get('beneficiaryModal').classList.remove('open');
+      document.body.style.overflow = '';
+    }
+
+    function filterDepsForCompany(ccompania) {
+      const escOpt = function(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); };
+      const deps = (window._benDepartments || []).filter(function(d) {
+        return ccompania === '' || String(d.ccompania) === String(ccompania);
+      });
+      const depSel = get('modal_departamento_select');
+      if (!depSel) return;
+      depSel.innerHTML = '<option value="" disabled selected>Department</option>' +
+        deps.map(function(d){ return '<option value="' + escOpt(d.id) + '">' + escOpt(d.nombre) + '</option>'; }).join('');
+      depSel.value = '';
+      depSel.classList.remove('has-value','valid','error');
+      if (deps.length === 1) { depSel.value = deps[0].id; depSel.classList.add('has-value'); }
+    }
+
+    function populateAssignSelects() {
+      const escOpt = function(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); };
+      const deps = window._benDepartments || [];
+      const companies = window._benCompanies || [];
+      if (!deps.length && !companies.length) return;
+      const compSel = get('modal_compania_modal_select');
+      if (compSel) {
+        compSel.innerHTML = '<option value="" disabled selected>Company</option>' +
+          companies.map(function(c){ return '<option value="' + escOpt(c.ccompania) + '">' + escOpt(c.xnombre) + '</option>'; }).join('');
+        var defaultComp = window._benDefaultCompania != null ? String(window._benDefaultCompania) : '';
+        var hasDefault = defaultComp && Array.from(compSel.options).some(function(o){ return o.value === defaultComp; });
+        if (hasDefault) {
+          compSel.value = defaultComp;
+          compSel.classList.add('has-value');
+        } else if (companies.length === 1) {
+          compSel.value = String(companies[0].ccompania);
+          compSel.classList.add('has-value');
+        }
+      }
+      const selectedComp = compSel?.value || '';
+      filterDepsForCompany(selectedComp);
+      var defaultDep = window._benDefaultDep != null ? String(window._benDefaultDep) : '';
+      if (defaultDep) {
+        const depSel = get('modal_departamento_select');
+        if (depSel && Array.from(depSel.options).some(function(o){ return o.value === defaultDep; })) {
+          depSel.value = defaultDep;
+          depSel.classList.add('has-value');
+        }
+      }
+      const row = get('modal_assign_row');
+      if (row) row.style.display = '';
+    }
+
+    async function saveModal() {
+      const beneficiario_id = get('modalBenId')?.value || null;
+      const REQUIRED = [
+        { id: 'modal_cuenta_banco_beneficiario', label: 'Beneficiary name' },
+        { id: 'modal_banco_beneficiario',        label: 'Beneficiary bank'  },
+        { id: 'modal_cuenta_banco',              label: 'Account number'    },
+        { id: 'modal_pais_beneficiario',         label: 'Beneficiary Country' },
+        { id: 'modal_display_name',              label: 'Display name' },
+      ];
+      const assignRow = get('modal_assign_row');
+      if (!beneficiario_id && assignRow && assignRow.style.display !== 'none') {
+        REQUIRED.push({ id: 'modal_departamento_select',    label: 'Department' });
+        REQUIRED.push({ id: 'modal_compania_modal_select',  label: 'Company'    });
+      }
+      let ok = true;
+      REQUIRED.forEach(function(f) {
+        const el = get(f.id);
+        if (!el) return;
+        el.classList.remove('valid','error','has-value');
+        if (!el.value.trim()) { el.classList.add('error'); ok = false; }
+        else el.classList.add('valid','has-value');
+      });
+      const benCountry = get('modal_pais_beneficiario')?.value || '';
+      const intCountry = get('modal_pais_intermediario')?.value || '';
+      const intermediaryRequired = benCountry !== '507' && benCountry !=='' ? true : false;
+      if (intermediaryRequired) {
+        [
+          { id: 'modal_banco_intermediario' },
+          { id: 'modal_pais_intermediario' },
+          { id: 'modal_cuenta_banco_intermediario' }
+        ].forEach(function(f) {
+          const el = get(f.id);
+          if (!el) return;
+          el.classList.remove('valid','error','has-value');
+          if (!el.value.trim()) { el.classList.add('error'); ok = false; }
+          else el.classList.add('valid','has-value');
+        });
+        if (intCountry === '1') {
+          const abaEl = get('modal_ABA_banco_intermediario');
+          if (abaEl) {
+            abaEl.classList.remove('valid','error','has-value');
+            if (!abaEl.value.trim()) { abaEl.classList.add('error'); ok = false; }
+            else abaEl.classList.add('valid','has-value');
+          }
+        } else if (intCountry === '52') {
+          const clabeEl = get('modal_cable_intermediario');
+          if (clabeEl) {
+            clabeEl.classList.remove('valid','error','has-value');
+            if (!clabeEl.value.trim()) { clabeEl.classList.add('error'); ok = false; }
+            else clabeEl.classList.add('valid','has-value');
+          }
+        }
+      }
+      if (!ok) {
+        if (intermediaryRequired) {
+          const collapse = get('modalIntermediaryCollapse');
+          if (collapse && !collapse.classList.contains('show')) {
+            collapse.classList.add('show');
+            const btn = document.querySelector('[data-bs-target="#modalIntermediaryCollapse"]');
+            if (btn) btn.classList.remove('collapsed');
+          }
+        }
+        get('modal_cuenta_banco_beneficiario')?.scrollIntoView({behavior:'smooth',block:'center'}); return;
+      }
+
+      const user = get('username')?.value || '';
+      const payload = { beneficiario_id: beneficiario_id || null };
+      MODAL_FIELDS.forEach(function(f) { payload[f] = get('modal_' + f)?.value || ''; });
+      payload.departamento_modal = get('modal_departamento_select')?.value || '';
+      payload.compania_modal     = get('modal_compania_modal_select')?.value || '';
+      payload.monedas            = monedaMSGet('modal_monedas');
+      if (!beneficiario_id) {
+        payload.user     = user;
+        payload.compania = get('compania_val')?.value || '';
+      } else {
+        payload.uingreso = user;
+      }
+      try {
+        const res = await fetch('/add_beneficiary', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        if (res.status === 409) {
+          launch_toast('Bank account number already exists.', 2);
+          return;
+        }
+        if (!res.ok) throw new Error('Status ' + res.status);
+        const saved = await res.json().catch(() => null);
+        if (!beneficiario_id && saved?.beneficiario_id) {
+          get('modalBenId').value = saved.beneficiario_id;
+        }
+
+        const effectiveBeneficiaryId = String((beneficiario_id && beneficiario_id !== '') ? beneficiario_id : (saved?.beneficiario_id || ''));
+        if (effectiveBeneficiaryId) {
+          // Set selected beneficiary immediately in the request form to avoid race conditions.
+          const hiddenInput = get('beneficiario_hidden');
+          const hiddenValue = get('beneficiario');
+          if (hiddenInput) hiddenInput.value = effectiveBeneficiaryId;
+          if (hiddenValue) {
+            hiddenValue.value = effectiveBeneficiaryId;
+            hiddenValue.dispatchEvent(new Event('change', { bubbles: true }));
+          }
+
+          if (typeof window.setBeneficiaryValue === 'function') {
+            window.setBeneficiaryValue(effectiveBeneficiaryId).catch(function(err) {
+              console.warn('[Beneficiary] Post-save sync failed', err);
+            });
+          }
+        }
+
+        launch_toast(beneficiario_id ? 'Beneficiary successfully updated.' : 'Beneficiary successfully created.', 1);
+        closeModal();
+        window._beneficiaryLastActionIsNew = !beneficiario_id;
+        if (typeof window._beneficiaryListRefresh === 'function') window._beneficiaryListRefresh();
+      } catch(err) {
+        console.error(err);
+        launch_toast('Error saving beneficiary.', 2);
+      }
+    }
+
+    window.openNewBeneficiaryModal = function() {
+      const modal = get('beneficiaryModal');
+      resetModal();
+      ensureEditButton();
+      get('modalBenTitle').textContent = 'New Beneficiary';
+      get('modalBenId').value = '';
+      _lastCanEdit = true;
+      setModalReadonly(false);
+      setModalVal('estado', '1');
+      populateAssignSelects();
+      benViewMode('edit');
+      modal.classList.add('open');
+      document.body.style.overflow = 'hidden';
+    };
+
+    function to12HourFormat(fechaHora) {
+        if (!fechaHora) return '';
+        fechaHora = String(fechaHora).replace(/^=/, '').trim();
+        const [fecha, hora] = fechaHora.split(' ');
+        if (!hora) { return fechaHora; }
+        let [h, m] = hora.split(':');
+        h = parseInt(h, 10);
+        const ampm = h >= 12 ? 'PM' : 'AM';
+        h = h % 12 || 12;
+        return `${fecha} ${h}:${m} ${ampm}`;
+    }
+
+    window.openBeneficiaryModal = async function(id) {
+      const modal = get('beneficiaryModal');
+      resetModal();
+      ensureEditButton();
+      get('modalBenTitle').textContent = 'Loading…';
+      get('modalBenSave').style.display = 'none';
+      if (get('benDetailView')) get('benDetailView').style.display = 'none';
+      if (get('benEditView'))   get('benEditView').style.display = 'none';
+      if (get('modalBenEdit'))  get('modalBenEdit').style.display = 'none';
+      modal.classList.add('open');
+      document.body.style.overflow = 'hidden';
+      try {
+        const user = get('username')?.value || '';
+        const res = await fetch('/beneficiary-detail-json?id='+ encodeURIComponent(id));
+        if (!res.ok) throw new Error('Status ' + res.status);
+        const json = await res.json();
+        const b = json.beneficiary || {};
+        _lastBenData = b;
+        _lastCanEdit = json.canEdit === true;
+        _lastMonedas = json.monedas || [];
+
+        const tcSelect = get('modal_tipo_cuenta');
+        if (tcSelect && json.tipoCuenta) {
+          const selected = b.tipo_cuenta ?? '';
+          tcSelect.innerHTML = '<option value="" disabled>Select type</option>' +
+            json.tipoCuenta.map(function(t) {
+              return '<option value="' + t.tipo_cuenta_id + '"' + (String(t.tipo_cuenta_id) === String(selected) ? ' selected' : '') + '>' + t.tipo_cuenta + '</option>';
+            }).join('');
+          if (selected) tcSelect.classList.add('has-value');
+        }
+
+        get('modalBenId').value = b.beneficiario_id || '';
+        MODAL_FIELDS.forEach(function(f) { setModalVal(f, b[f]); });
+        monedaMSSet('modal_monedas', _lastMonedas);
+        if (!get('modal_estado').value) setModalVal('estado', '1');
+        setModalReadonly(!_lastCanEdit);
+
+        const strip = get('modal_audit_strip');
+        if (strip) {
+          const mkAuditEntry = function(label, u, d) {
+            if (!u && !d) return '';
+            const img = u
+              ? '<img src="/pic/' + encodeURIComponent(u) + '.png" onerror="this.onerror=null;this.src=\'/pic/default.png\';" style="width:24px;height:24px;border-radius:50%;object-fit:cover;vertical-align:middle;margin-right:5px;" title="' + esc(u) + '">'
+              : '';
+            const dateStr = d ? '<span style="vertical-align:middle;">' + esc(d) + '</span>' : '';
+            return label + img + dateStr;
+          };
+          const createdEl  = get('modal_audit_created');
+          const modifiedEl = get('modal_audit_modified');
+          const createdHtml = mkAuditEntry('\uD83D\uDDD3 Created by:\u2002',  b.uingreso, b.fingreso);
+          const modifiedHtml = mkAuditEntry('\u270F\uFE0F Modified by:\u2002', b.umodificado, to12HourFormat(b.fmodificado));
+          if (createdEl)  createdEl.innerHTML  = modifiedHtml ? '' : createdHtml;
+          if (modifiedEl) modifiedEl.innerHTML = modifiedHtml;
+          strip.style.display = (createdHtml || modifiedHtml) ? '' : 'none';
+        }
+
+        populateDetailView(b, _lastMonedas);
+        benViewMode('detail');
+      } catch(err) {
+        console.error(err);
+        get('modalBenTitle').textContent = 'Error loading beneficiary';
+      }
+    };
+
+    document.addEventListener('DOMContentLoaded', function() {
+      ensureEditButton();
+      get('modalBenClose')?.addEventListener('click', closeModal);
+      get('modalBenCancel')?.addEventListener('click', function() {
+        var editView = get('benEditView');
+        if (editView && editView.style.display !== 'none' && _lastBenData) {
+          benViewMode('detail');
+          return;
+        }
+        closeModal();
+      });
+      get('modalBenSave')?.addEventListener('click', saveModal);
+      get('modal_compania_modal_select')?.addEventListener('change', function() {
+        filterDepsForCompany(this.value);
+      });
+      function checkIntermediaryCountry() {
+        const benC = get('modal_pais_beneficiario')?.value || '';
+        const intC = get('modal_pais_intermediario')?.value || '';
+        const differs = benC && intC && benC !== intC;
+        const warn = get('modal_intermediary_country_warn');
+        if (warn) warn.style.display = differs ? '' : 'none';
+        if (differs) {
+          const collapse = get('modalIntermediaryCollapse');
+          if (collapse && !collapse.classList.contains('show')) {
+            collapse.classList.add('show');
+            const btn = document.querySelector('[data-bs-target="#modalIntermediaryCollapse"]');
+            if (btn) btn.classList.remove('collapsed');
+          }
+        }
+      }
+      get('modal_pais_beneficiario')?.addEventListener('change', checkIntermediaryCountry);
+      get('modal_pais_intermediario')?.addEventListener('change', checkIntermediaryCountry);
+    });
+  })();

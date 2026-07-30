@@ -1,0 +1,559 @@
+//- ── moneda-multiselect mixin ────────────────────────────────────────────
+//-
+//- A self-contained multi-select component for currencies (sir_mmone).
+//- Renders the list at server-render time from Pug options — no runtime
+//- window._benMonedas dependency required.
+//-
+//- Parameters:
+//-   label          {string}  Field label displayed above the trigger
+//-   name           {string}  Unique key used as element ID prefix + API key
+//-   options        {Array}   [{value, abbr, label}]
+//-                            value = cmoneda | abbr = xabrev_moneda | label = xnombre_moneda_ingles
+//-   placeholder    {string}  Text shown when nothing is selected
+//-   containerClass {string}  Extra CSS class(es) for the outer container div
+//-
+//- Global JS API (one shared implementation, works for every instance by name):
+//-   monedaMSGet(name)             → string[]  currently selected cmoneda values
+//-   monedaMSSet(name, values)     → void      set selection programmatically
+//-   monedaMSReset(name)           → void      clear all selections and close panel
+//-   monedaMSReadonly(name, bool)  → void      toggle disabled / enabled state
+//-
+//- Usage example:
+//-   - var monedaOptions = (monedas||[]).map(m => ({value:m.cmoneda, abbr:m.xabrev_moneda, label:m.xnombre_moneda_ingles}))
+//-   +moneda-multiselect('Accepted Currencies', 'modal_monedas', monedaOptions)
+// ─────────────────────────────────────────────────────────────────────────
+mixin moneda-multiselect(label, name, options=[], placeholder='Select currencies', containerClass='', attrs={})
+  - var _cid   = name + '_container'
+  - var _tid   = name + '_trigger'
+  - var _pid   = name + '_panel'
+  - var _iid   = name + '_items'
+  - var _chid  = name + '_chips'
+  - var _phid  = name + '_ph'     
+  - var _sid   = name + '_search'
+  - var _rid   = name + '_reset'
+  - var _hid   = name + '_hidden'
+  - var _isDisabled = attrs && attrs.disabled
+
+  .floating-multiselect-container.moneda-ms-container(
+    id=_cid
+    class=containerClass
+    data-name=name
+    data-placeholder=placeholder
+    data-disabled=_isDisabled ? 'true' : 'false'
+  )
+    .floating-multiselect-wrapper.moneda-ms-wrapper
+      //- Display/Trigger: usamos la clase .floating-multiselect-display para que
+      //- el floating-label se comporte como el ejemplo CSS.
+      .floating-multiselect-display.moneda-ms-display(
+        id=_tid
+        tabindex=_isDisabled ? '-1' : '0'
+        class=_isDisabled ? 'disabled' : ''
+        role='button'
+        aria-expanded='false'
+        aria-controls=_pid
+      )
+        span.moneda-ms-placeholder(id=_phid)= placeholder
+        .moneda-ms-chips(id=_chid)
+        i.fas.fa-chevron-down.moneda-ms-arrow
+
+      label.floating-label(for=_tid)= label
+
+      include ./validation-icons.pug
+      +successIcon()
+      +errorIcon()
+
+      //- Panel/Dropdown
+      .moneda-ms-dropdown(id=_pid)
+        //- Header con search + reset (como guía del ejemplo)
+        .moneda-ms-dd-header
+          input.moneda-ms-search-input(
+            type='text'
+            id=_sid
+            placeholder='Search…'
+            autocomplete='off'
+          )
+          button.ct-refresh-btn(
+            type='button'
+            id=_rid
+            title='Reset search'
+          )  ⟳
+
+        .moneda-ms-items(id=_iid)
+          each opt in options
+            - var _v = String(opt.value ?? '')
+            - var _abbr = String(opt.abbr ?? '')
+            - var _lbl = String(opt.label ?? '')
+            label.moneda-ms-item(
+              data-value=_v
+              data-abbr=_abbr
+              data-label=_lbl
+              data-search=(_v + ' ' + _abbr + ' ' + _lbl).toLowerCase()
+            )
+              input.moneda-ms-cb(
+                type='checkbox'
+                value=_v
+                data-value=_v
+                data-abbr=_abbr
+                data-label=_lbl
+                disabled=_isDisabled ? true : false
+              )
+              span.moneda-ms-abbr= _abbr
+              span.moneda-ms-name= _lbl
+
+      //- Hidden inputs para submit: múltiples <input name="modal_monedas" value="...">
+      .moneda-ms-hidden(id=_hid)
+      span.error-message(data-error-for=name)
+
+  script.
+    (function () {
+
+      // ─────────────────────────────────────────────────────────────
+      // Core (cargado una vez)
+      // ─────────────────────────────────────────────────────────────
+      if (!window.__monedaMSCoreLoaded) {
+        window.__monedaMSCoreLoaded = true;
+
+        function g(id){ return document.getElementById(id); }
+        function qa(sel, root){ return Array.prototype.slice.call((root || document).querySelectorAll(sel)); }
+
+        function getContainer(name){ return g(name + '_container'); }
+        function getTrigger(name){ return g(name + '_trigger'); }
+        function getPanel(name){ return g(name + '_panel'); }
+        function getItems(name){ return g(name + '_items'); }
+        function getSearch(name){ return g(name + '_search'); }
+        function getReset(name){ return g(name + '_reset'); }
+        function getChips(name){ return g(name + '_chips'); }
+        function getPlaceholder(name){ return g(name + '_ph'); }
+        function getHidden(name){ return g(name + '_hidden'); }
+
+        function isDisabled(name){
+          var c = getContainer(name);
+          return !!(c && c.getAttribute('data-disabled') === 'true');
+        }
+
+        function getCheckboxes(name){
+          var c = getContainer(name);
+          return c ? qa('.moneda-ms-cb', c) : [];
+        }
+
+        function selected(name){
+          return getCheckboxes(name)
+            .filter(function(cb){ return cb.checked; })
+            .map(function(cb){
+              return {
+                value: String(cb.value),
+                abbr: cb.getAttribute('data-abbr') || '',
+                label: cb.getAttribute('data-label') || ''
+              };
+            });
+        }
+
+        function syncHidden(name){
+          var hidden = getHidden(name);
+          if(!hidden) return;
+
+          hidden.innerHTML = '';
+          getCheckboxes(name).forEach(function(cb){
+            if(!cb.checked) return;
+            var input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = name;
+            input.value = cb.value;
+            hidden.appendChild(input);
+          });
+        }
+
+        function updateDisplay(name){
+          var trigger = getTrigger(name);
+          var chips = getChips(name);
+          var ph = getPlaceholder(name);
+          if(!trigger || !chips || !ph) return;
+
+          var items = selected(name);
+          chips.innerHTML = '';
+
+          if(items.length === 0){
+            ph.style.display = '';
+            trigger.classList.remove('has-value','valid','error');
+          } else {
+            ph.style.display = 'none';
+            trigger.classList.add('has-value','valid');
+            trigger.classList.remove('error');
+
+            items.forEach(function(it){
+              var chip = document.createElement('span');
+              chip.className = 'moneda-chip';
+              chip.textContent = (it.abbr ? it.abbr + ' - ' : '') + it.label;
+              chips.appendChild(chip);
+            });
+          }
+
+          syncHidden(name);
+        }
+
+        function filter(name, q){
+          var container = getContainer(name);
+          if(!container) return;
+
+          var needle = String(q || '').toLowerCase().trim();
+          qa('.moneda-ms-item', container).forEach(function(row){
+            var hay = row.getAttribute('data-search') || '';
+            row.style.display = hay.indexOf(needle) > -1 ? '' : 'none';
+          });
+        }
+
+        function resetSearch(name){
+          var s = getSearch(name);
+          if(!s) return;
+          s.value = '';
+          filter(name, '');
+          s.focus();
+        }
+
+        function close(name){
+          var trigger = getTrigger(name);
+          var panel = getPanel(name);
+          if(trigger){
+            trigger.classList.remove('open');
+            trigger.setAttribute('aria-expanded','false');
+          }
+          if(panel) panel.classList.remove('show');
+        }
+
+        function closeAll(except){
+          qa('.moneda-ms-container').forEach(function(c){
+            var n = c.getAttribute('data-name');
+            if(except && n === except) return;
+            close(n);
+          });
+        }
+
+        function open(name){
+          if(isDisabled(name)) return;
+          closeAll(name);
+
+          var trigger = getTrigger(name);
+          var panel = getPanel(name);
+          if(!trigger || !panel) return;
+
+          trigger.classList.add('open');
+          trigger.setAttribute('aria-expanded','true');
+          panel.classList.add('show');
+
+          var s = getSearch(name);
+          if(s){
+            s.value = '';
+            filter(name, '');
+            setTimeout(function(){ s.focus(); }, 0);
+          }
+        }
+
+        function toggle(name){
+          var panel = getPanel(name);
+          if(!panel) return;
+          panel.classList.contains('show') ? close(name) : open(name);
+        }
+
+        function setValues(name, values){
+          var vals = Array.isArray(values) ? values.map(function(v){ return String(v); }) : [];
+          getCheckboxes(name).forEach(function(cb){
+            cb.checked = vals.indexOf(String(cb.value)) > -1;
+          });
+          updateDisplay(name);
+        }
+
+        function resetSelection(name){
+          getCheckboxes(name).forEach(function(cb){ cb.checked = false; });
+          updateDisplay(name);
+        }
+
+        function setReadonly(name, flag){
+          var disabled = !!flag;
+          var c = getContainer(name);
+          var trigger = getTrigger(name);
+          if(!c || !trigger) return;
+
+          c.setAttribute('data-disabled', disabled ? 'true' : 'false');
+          trigger.classList.toggle('disabled', disabled);
+          trigger.tabIndex = disabled ? -1 : 0;
+
+          getCheckboxes(name).forEach(function(cb){ cb.disabled = disabled; });
+          if(disabled) close(name);
+        }
+
+        // Bind por instancia
+        window.__bindMonedaMS = function(name){
+          var c = getContainer(name);
+          if(!c || c.__bound) return;
+          c.__bound = true;
+
+          var trigger = getTrigger(name);
+          var panel = getPanel(name);
+          var search = getSearch(name);
+          var resetBtn = getReset(name);
+
+          if(trigger){
+            trigger.addEventListener('click', function(){
+              if(isDisabled(name)) return;
+              toggle(name);
+            });
+
+            trigger.addEventListener('keydown', function(e){
+              if(isDisabled(name)) return;
+
+              if(e.key === 'Enter' || e.key === ' '){
+                e.preventDefault();
+                toggle(name);
+              }
+              if(e.key === 'Escape'){
+                e.preventDefault();
+                close(name);
+              }
+            });
+          }
+
+          if(panel){
+            panel.addEventListener('click', function(e){ e.stopPropagation(); });
+          }
+
+          getCheckboxes(name).forEach(function(cb){
+            cb.addEventListener('change', function(){ updateDisplay(name); });
+          });
+
+          if(search){
+            search.addEventListener('input', function(){ filter(name, this.value); });
+            search.addEventListener('keydown', function(e){
+              if(e.key === 'Escape'){
+                e.preventDefault();
+                close(name);
+                trigger && trigger.focus();
+              }
+            });
+          }
+
+          if(resetBtn){
+            resetBtn.addEventListener('click', function(e){
+              e.preventDefault();
+              e.stopPropagation();
+              resetSearch(name);
+            });
+          }
+
+          updateDisplay(name);
+        };
+
+        // click afuera cierra
+        document.addEventListener('click', function(e){
+          var inside = e.target.closest('.moneda-ms-container');
+          if(!inside) closeAll();
+        });
+
+        // API global (compat con tu versión vieja)
+        window.monedaMSGet = function(name){
+          return selected(name).map(function(x){ return x.value; });
+        };
+        window.monedaMSSet = function(name, values){
+          setValues(name, values);
+        };
+        window.monedaMSReset = function(name){
+          resetSelection(name);
+          resetSearch(name);
+          close(name);
+        };
+        window.monedaMSReadonly = function(name, flag){
+          setReadonly(name, flag);
+        };
+      }
+
+      // ─────────────────────────────────────────────────────────────
+      // Auto-bind: DOM ready + soporte para modales (Bootstrap si existe)
+      // ─────────────────────────────────────────────────────────────
+      function bindAll(){
+        document.querySelectorAll('.moneda-ms-container').forEach(function(c){
+          var name = c.getAttribute('data-name');
+          if(window.__bindMonedaMS) window.__bindMonedaMS(name);
+        });
+      }
+
+      if(document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', bindAll);
+      } else {
+        bindAll();
+      }
+
+      // Si el modal padre existe (ej. beneficiaryModal), al abrirlo re-bindeamos por si hay re-render.
+      // [modal.txt](https://acipanama-my.sharepoint.com/personal/epinto_acreinsurance_com/Documents/Microsoft%20Copilot%20Chat%20Files/modal.txt?EntityRepresentationId=8b78e8bb-ec64-4570-9370-dfb35271955c) crea un modal con id 'beneficiaryModal'. [1](https://acipanama-my.sharepoint.com/personal/epinto_acreinsurance_com/Documents/Microsoft%20Copilot%20Chat%20Files/modal.txt)
+      var modalEl = document.getElementById('beneficiaryModal');
+      if(modalEl) {
+        modalEl.addEventListener('shown.bs.modal', function(){ bindAll(); });
+      }
+
+    })();
+
+style.
+
+  .moneda-ms-wrapper { position: relative; }
+
+  .moneda-ms-display.floating-multiselect-display{
+    min-height: 44px;
+    width: 100%;
+    border: 1px solid #d1d5db;
+    border-radius: .5rem;
+    background: #fff;
+    padding: .95rem 2.4rem .55rem .875rem;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: .35rem;
+    cursor: pointer;
+    transition: border-color .18s ease, box-shadow .18s ease, background-color .18s ease;
+    outline: none;
+  }
+
+  .moneda-ms-display.floating-multiselect-display:focus,
+  .moneda-ms-display.floating-multiselect-display.open{
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59,130,246,.10);
+  }
+
+  .moneda-ms-display.disabled{
+    background: #f9fafb;
+    color: #9ca3af;
+    cursor: not-allowed;
+  }
+
+  .moneda-ms-placeholder{
+    color: #9ca3af;
+    font-size: .875rem;
+  }
+
+  .moneda-ms-chips{
+    display: flex;
+    flex-wrap: wrap;
+    gap: .35rem;
+  }
+
+  .moneda-chip{
+    display: inline-flex;
+    align-items: center;
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    color: #1d4ed8;
+    font-size: .75rem;
+    font-weight: 600;
+    border-radius: 999px;
+    padding: .18rem .55rem;
+    white-space: nowrap;
+  }
+
+  .moneda-ms-arrow{
+    position: absolute;
+    right: .9rem;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #6b7280;
+    pointer-events: none;
+    font-size: .85rem;
+  }
+
+  .moneda-ms-dropdown{
+    position: absolute;
+    top: calc(100% + .35rem);
+    left: 0;
+    right: 0;
+    z-index: 1065;
+    display: none;
+    background: #fff;
+    border: 1px solid #d1d5db;
+    border-radius: .5rem;
+    box-shadow: 0 12px 28px rgba(15,23,42,.12);
+    overflow: hidden;
+  }
+
+  .moneda-ms-dropdown.show{ display:block; }
+
+  .moneda-ms-dd-header{
+    display:flex;
+    align-items:center;
+    gap:.5rem;
+    padding:.65rem;
+    border-bottom: 1px solid #e5e7eb;
+    background:#f8fafc;
+  }
+
+  .moneda-ms-search-input{
+    width:100%;
+    height:36px;
+    border:1px solid #d1d5db;
+    border-radius:.45rem;
+    padding:0 .75rem;
+    font-size:.875rem;
+    outline:none;
+  }
+
+  .moneda-ms-search-input:focus{
+    border-color:#3b82f6;
+    box-shadow:0 0 0 3px rgba(59,130,246,.10);
+  }
+
+  .moneda-ms-reset-btn{
+    height:36px;
+    padding:0 .85rem;
+    border:1px solid #d1d5db;
+    border-radius:.45rem;
+    background:#fff;
+    font-size:.84rem;
+    cursor:pointer;
+  }
+
+  .moneda-ms-reset-btn:hover{
+    background:#f3f4f6;
+  }
+
+  .moneda-ms-items{
+    max-height:260px;
+    overflow-y:auto;
+    padding:.25rem 0;
+  }
+
+  .moneda-ms-item{
+    display:grid;
+    grid-template-columns: 18px 70px 1fr;
+    gap:.65rem;
+    align-items:center;
+    padding:.62rem .9rem;
+    border-bottom:1px solid #f1f5f9;
+    cursor:pointer;
+    user-select:none;
+  }
+
+  .moneda-ms-item:last-child{ border-bottom:none; }
+  .moneda-ms-item:hover{ background:#f8fafc; }
+
+  .moneda-ms-cb{
+    width:15px;
+    height:15px;
+    margin:0;
+    accent-color:#3b82f6;
+  }
+
+  .moneda-ms-abbr{
+    font-weight:700;
+    font-size:.8rem;
+    color:#111827;
+  }
+
+  .moneda-ms-name{
+    font-size:.875rem;
+    color:#374151;
+  }
+
+  .moneda-ms-hidden{ display:none; }
+
+  .error-message[data-error-for]{
+    display:none;
+    margin-top:.25rem;
+    font-size:.75rem;
+    color:#ef4444;
+  }
+  .error-message[data-error-for].show{ display:block; }

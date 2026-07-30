@@ -1,0 +1,785 @@
+extends ../layout
+include ../mixins/floating-input
+include ../mixins/floating-textarea
+include ../mixins/floating-file
+include ../mixins/floating-select
+include ../mixins/floating-date
+include ../ui/button-submit
+include ../mixins/breadcrumb
+
+block layout-content
+  link(rel="stylesheet" href="/css/personal-time-off.css")
+  div#layoutSidenav_content
+    main
+      div.container-fluid.px-4
+        +app-breadcrumb({
+          homeHref: '/',
+          items: [{ label: title, active: true }]
+        })
+
+        //- Language Toggle
+        div.pto-lang-toggle
+          span(style="font-size:0.85rem;color:#666;" data-i18n="lang_hint") You may change the language of the questionnaire
+          button#btn-lang-en.pto-lang-btn.active(type="button" onclick="switchLang('en')") EN
+          button#btn-lang-es.pto-lang-btn(type="button" onclick="switchLang('es')") ES
+
+        //- Stepper
+        div.pto-stepper
+          div.pto-step-indicator.active(data-step="1")
+            div.pto-step-circle 1
+            span.pto-step-label(data-i18n="step_info") Information
+          div.pto-step-indicator(data-step="2")
+            div.pto-step-circle 2
+            span.pto-step-label(data-i18n="step_type") Request Type
+          div.pto-step-indicator(data-step="3")
+            div.pto-step-circle 3
+            span.pto-step-label(data-i18n="step_details") Details
+          div.pto-step-indicator(data-step="4")
+            div.pto-step-circle 4
+            span.pto-step-label(data-i18n="step_review") Review
+
+        //- ============================
+        //- STEP 1: Introduction
+        //- ============================
+        div.pto-step-content.active(data-step="1")
+          div.pto-intro-card
+            h3(data-i18n="intro_title") Absence approval process flow
+            p(data-i18n="intro_p1") Fill this form from your "personal user" to request personal time / vacation or to record absences.
+            p(data-i18n="intro_p2") Ordinarily personal time/vacation periods are requested well in advance and previously agreed with your supervisor in weekly or bi-weekly periods. In addition to the approval of your direct supervisor you must have a vacation accrual that will be validated by Human Resources.
+            p(data-i18n="intro_p3") All employees must ensure that they have a backup colleague and leave their responsibilities organized and delegated during planned periods of absence, and schedule an out-of-office message in their email account, in order to ensure business continuity.
+            p(data-i18n="intro_p4") Use the annotation space to provide relevant information to give context to the situation. For example, if dates were changed from what was previously agreed upon for any reason, etc.
+            p(data-i18n="intro_p5") Medical absences or other justifiable causes must be evidenced by attaching a PDF document with the medical certificate or other evidence of the calamity indicated.
+            p(data-i18n="intro_p6") If you receive a rejection to your application, take into account the annotations that accompany the rejection and apply again making the suggested corrections.
+          div.pto-nav-buttons
+            div
+            button.pto-btn.pto-btn-next(type="button" onclick="ptoNext()")
+              span(data-i18n="btn_next") Next
+              i.fas.fa-arrow-right
+
+        //- ============================
+        //- STEP 2: Request Type
+        //- ============================
+        div.pto-step-content(data-step="2")
+          div.pto-form-section
+            h4(data-i18n="select_type_title") Select Request Type
+            div.pto-info-alert
+              i.fas.fa-info-circle
+              span(data-i18n="select_type_hint") Select just one. Full day absences, only the "Partial permit" option allows to record absence hours.
+            div.pto-type-grid
+              div.pto-type-card(data-type="vacation" onclick="selectType(this)")
+                span.pto-type-icon 🏖️
+                div.pto-type-title(data-i18n="type_vacation") Request Vacation / Out of office period
+                div.pto-type-desc(data-i18n="type_vacation_desc") Request planned vacation or time off periods.
+              div.pto-type-card(data-type="medical_cert" onclick="selectType(this)")
+                span.pto-type-icon 🏥
+                div.pto-type-title(data-i18n="type_medical_cert") Register absence with medical certificate
+                div.pto-type-desc(data-i18n="type_medical_cert_desc") Register absence supported by a medical certificate.
+              div.pto-type-card(data-type="no_medical_cert" onclick="selectType(this)")
+                span.pto-type-icon 📋
+                div.pto-type-title(data-i18n="type_no_medical_cert") Register absence without medical certificate
+                div.pto-type-desc(data-i18n="type_no_medical_cert_desc") Register absence without medical evidence.
+              div.pto-type-card(data-type="partial_permit" onclick="selectType(this)")
+                span.pto-type-icon ⏰
+                div.pto-type-title(data-i18n="type_partial_permit") Partial permit
+                div.pto-type-desc(data-i18n="type_partial_permit_desc") Record partial day absence with specific hours.
+              div.pto-type-card(data-type="non_remunerated" onclick="selectType(this)")
+                span.pto-type-icon 📅
+                div.pto-type-title(data-i18n="type_non_remunerated") Non-remunerated time
+                div.pto-type-desc(data-i18n="type_non_remunerated_desc") Request unpaid time off period.
+              div.pto-type-card(data-type="license" onclick="selectType(this)")
+                span.pto-type-icon 📄
+                div.pto-type-title(data-i18n="type_license") License
+                div.pto-type-desc(data-i18n="type_license_desc") Request a licensed leave period.
+            input#request_type(type="hidden" name="request_type" data-required="true")
+          div.pto-nav-buttons
+            button.pto-btn.pto-btn-prev(type="button" onclick="ptoPrev()")
+              i.fas.fa-arrow-left
+              span(data-i18n="btn_prev") Previous
+            button.pto-btn.pto-btn-next(type="button" onclick="ptoNext()" disabled)
+              span(data-i18n="btn_next") Next
+              i.fas.fa-arrow-right
+
+        //- ============================
+        //- STEP 3: Form Details
+        //- ============================
+        div.pto-step-content(data-step="3")
+          form#form_hr_personal_time_off(method="post" enctype="multipart/form-data" autocomplete="off")
+            div.pto-form-section
+              h4(data-i18n="details_title") Request Details
+
+              //- Partial Permit - Time fields (hidden by default)
+              div#partial-permit-fields(style="display:none;")
+                div.pto-info-alert
+                  i.fas.fa-clock
+                  span(data-i18n="partial_permit_hint") Select the start and end hours for your partial absence (8:00 AM - 5:00 PM, 30 min intervals).
+                div.pto-time-row
+                  div
+                    - var hourOptions = [{value:'08:00 AM',label:'08:00 AM'},{value:'08:30 AM',label:'08:30 AM'},{value:'09:00 AM',label:'09:00 AM'},{value:'09:30 AM',label:'09:30 AM'},{value:'10:00 AM',label:'10:00 AM'},{value:'10:30 AM',label:'10:30 AM'},{value:'11:00 AM',label:'11:00 AM'},{value:'11:30 AM',label:'11:30 AM'},{value:'12:00 PM',label:'12:00 PM'},{value:'12:30 PM',label:'12:30 PM'},{value:'01:00 PM',label:'01:00 PM'},{value:'01:30 PM',label:'01:30 PM'},{value:'02:00 PM',label:'02:00 PM'},{value:'02:30 PM',label:'02:30 PM'},{value:'03:00 PM',label:'03:00 PM'},{value:'03:30 PM',label:'03:30 PM'},{value:'04:00 PM',label:'04:00 PM'},{value:'04:30 PM',label:'04:30 PM'},{value:'05:00 PM',label:'05:00 PM'}]
+                    +floating-select("Start Hour", "start_permit_hour", hourOptions, false, "Select start hour")
+                  div
+                    +floating-select("End Hour", "end_permit_hour", hourOptions, false, "Select end hour")
+
+              //- Date fields
+              div.row
+                div.col-md-6
+                  +floating-date("Start Date", "start_date", true, "DD/MM/YYYY")
+                div.col-md-6
+                  +floating-date("End Date", "end_date", true, "DD/MM/YYYY")
+
+              //- Notes
+              div.row
+                div.col-md-12
+                  +floating-textarea("Notes / Annotations", "notes", false, "Provide relevant information for the context of the situation... (MAX 500 characters)", "", "", {maxlength: "500"}, 4)
+
+              //- Support Document
+              div.row
+                div.col-md-12
+                  +floating-file("PDF Support Document", "Supportfiles", false, false, false, "application/pdf,image/*")
+              div.pto-file-note
+                span(data-i18n="file_note") Mandatory for certified medical absences and optional for all other options.  Name the file with your own name and situation, for example: "Illness - Juan Perez" / "Disability Certificate - Ana Gonzalez". Allowed: PDF, Image
+
+          div.pto-nav-buttons
+            button.pto-btn.pto-btn-prev(type="button" onclick="ptoPrev()")
+              i.fas.fa-arrow-left
+              span(data-i18n="btn_prev") Previous
+            button.pto-btn.pto-btn-next(type="button" onclick="ptoNext()")
+              span(data-i18n="btn_next") Next
+              i.fas.fa-arrow-right
+
+        //- ============================
+        //- STEP 4: Review & Submit
+        //- ============================
+        div.pto-step-content(data-step="4")
+          div.pto-form-section
+            h4(data-i18n="review_title") Review your request
+            table.pto-review-table
+              tr
+                th(data-i18n="review_requestor") Requestor
+                td#review-requestor #{userProfile.UserName}
+              tr
+                th(data-i18n="review_type") Request Type
+                td#review-type -
+              tr#review-hours-row(style="display:none")
+                th(data-i18n="review_hours") Hours
+                td#review-hours -
+              tr
+                th(data-i18n="review_start") Start Date
+                td#review-start -
+              tr
+                th(data-i18n="review_end") End Date
+                td#review-end -
+              tr
+                th(data-i18n="review_notes") Notes
+                td#review-notes -
+              tr
+                th(data-i18n="review_files") Support Document
+                td#review-files -
+
+          //- Actors Panel
+          div.pto-form-section(style="margin-top:16px;")
+            h4
+              span(data-i18n="review_actors") Approval Flow
+            div#pto-actors-panel(style="display:none;")
+
+          div.pto-confirm-row
+            input#confirmSubmit(type="checkbox")
+            label(for="confirmSubmit" data-i18n="confirm_label") Are you sure you want to submit this request?
+
+          div.pto-nav-buttons
+            button.pto-btn.pto-btn-prev(type="button" onclick="ptoPrev()")
+              i.fas.fa-arrow-left
+              span(data-i18n="btn_prev") Previous
+            div.pto-btn-container  
+              +submit-button('btnSubmitPto', 'Submit', '', 'fas fa-paper-plane')
+
+  script.
+    // ============================================================
+    // Internationalization (i18n)
+    // ============================================================
+    var currentLang = 'en';
+    var i18n = {
+      en: {
+        page_title: 'Personal Time Off',
+        lang_hint: 'You may change the language of the questionnaire',
+        step_info: 'Information',
+        step_type: 'Request Type',
+        step_details: 'Details',
+        step_review: 'Review',
+        intro_title: 'Absence approval process flow',
+        intro_p1: 'Fill this form from your "personal user" to request personal time / vacation or to record absences.',
+        intro_p2: 'Ordinarily personal time/vacation periods are requested well in advance and previously agreed with your supervisor in weekly or bi-weekly periods. In addition to the approval of your direct supervisor you must have a vacation accrual that will be validated by Human Resources.',
+        intro_p3: 'All employees must ensure that they have a backup colleague and leave their responsibilities organized and delegated during planned periods of absence, and schedule an out-of-office message in their email account, in order to ensure business continuity.',
+        intro_p4: 'Use the annotation space to provide relevant information to give context to the situation. For example, if dates were changed from what was previously agreed upon for any reason, etc.',
+        intro_p5: 'Medical absences or other justifiable causes must be evidenced by attaching a PDF document with the medical certificate or other evidence of the calamity indicated.',
+        intro_p6: 'If you receive a rejection to your application, take into account the annotations that accompany the rejection and apply again making the suggested corrections.',
+        select_type_title: 'Select Request Type',
+        select_type_hint: 'Select just one. Full day absences, only the "Partial permit" option allows to record absence hours.',
+        type_vacation: 'Request Vacation / Out of office period',
+        type_vacation_desc: 'Request planned vacation or time off periods.',
+        type_medical_cert: 'Register absence with medical certificate',
+        type_medical_cert_desc: 'Register absence supported by a medical certificate.',
+        type_no_medical_cert: 'Register absence without medical certificate',
+        type_no_medical_cert_desc: 'Register absence without medical evidence.',
+        type_partial_permit: 'Partial permit',
+        type_partial_permit_desc: 'Record partial day absence with specific hours.',
+        type_non_remunerated: 'Non-remunerated time',
+        type_non_remunerated_desc: 'Request unpaid time off period.',
+        type_license: 'License',
+        type_license_desc: 'Request a licensed leave period.',
+        details_title: 'Request Details',
+        partial_permit_hint: 'Select the start and end hours for your partial absence (8:00 AM - 4:30 PM, 30 min intervals).',
+        lbl_start_hour: 'Start Hour',
+        lbl_end_hour: 'End Hour',
+        lbl_start_date: 'Start Date',
+        lbl_end_date: 'End Date',
+        lbl_notes: 'Notes / Annotations',
+        lbl_support_doc: 'PDF Support Document',
+        file_note: 'Mandatory for certified medical absences and optional for all other options.  Name the file with your own name and situation, for example: "Illness - Juan Perez" / "Disability Certificate - Ana Gonzalez". File limit: 1 | Max size: 10MB | Allowed: PDF, Image',
+        review_title: 'Review your request',
+        review_requestor: 'Requestor',
+        review_type: 'Request Type',
+        review_hours: 'Hours',
+        review_start: 'Start Date',
+        review_end: 'End Date',
+        review_notes: 'Notes',
+        review_files: 'Support Document',
+        confirm_label: 'Are you sure you want to submit this request?',
+        btn_next: 'Next',
+        btn_prev: 'Previous',
+        btn_submit: 'Submit',
+        toast_type_required: 'Please select a request type',
+        toast_fill_fields: 'Please fill all required fields',
+        toast_date_invalid: 'End date must be on or after start date',
+        toast_hour_invalid: 'End hour must be after start hour',
+        toast_confirm: 'Please confirm before submitting',
+        toast_success: 'Request submitted successfully',
+        toast_error: 'Error submitting request',
+        toast_date_past: 'Dates cannot be in the past',
+        toast_file_required: 'A support file is required for absences with medical certificate',
+        review_none: 'None',
+        review_attached: 'file(s) attached',
+        review_actors: 'Approval Flow'
+      },
+      es: {
+        page_title: 'Tiempo Personal Libre',
+        lang_hint: 'Puede cambiar el idioma del cuestionario',
+        step_info: 'Información',
+        step_type: 'Tipo de Solicitud',
+        step_details: 'Detalles',
+        step_review: 'Revisión',
+        intro_title: 'Flujo de proceso para la aprobación y registro de ausencias',
+        intro_p1: 'Utilice este formulario desde su usuario personal para solicitar períodos de tiempo personal o vacaciones o registrar ausencias.',
+        intro_p2: 'De manera ordinaria los períodos de tiempo personal / vacaciones se solicitan con suficiente anticipación y previamente acordadas con su supervisor en períodos semanales o quincenales. Además de la aprobación de su supervisor directo usted debe contar con un acumulado de vacaciones que será validado por Recursos Humanos.',
+        intro_p3: 'Todo colaborador debe asegurar contar con un backup y dejar sus responsabilidades organizadas y delegadas durante los períodos de ausencia planificadas, y programar un mensaje de fuera de oficina en su cuenta de correo, a fin de asegurar la continuidad de negocio.',
+        intro_p4: 'Utilice el espacio de anotaciones para dar la información relevante que dé contexto a la situación. Por ejemplo, si las fechas sufrieron un cambio con respecto a lo anteriormente acordado por algún motivo, etc.',
+        intro_p5: 'Las ausencias médicas u otras causas justificables deberán evidenciarse adjuntando un documento PDF con el certificado médico o lo que evidencie la calamidad indicada.',
+        intro_p6: 'De recibir un rechazo a su solicitud, tome en cuenta las anotaciones que acompañan al rechazo y solicite nuevamente la misma haciendo las correcciones sugeridas.',
+        select_type_title: 'Seleccione Tipo de Solicitud',
+        select_type_hint: 'Seleccione solo una. Ausencias de día completo, solo la opción "Permiso parcial" permite registrar horas de ausencia.',
+        type_vacation: 'Solicitud de Vacaciones / Período fuera de oficina',
+        type_vacation_desc: 'Solicite períodos de vacaciones o tiempo libre planificado.',
+        type_medical_cert: 'Registrar ausencia con certificado médico',
+        type_medical_cert_desc: 'Registre ausencia respaldada por un certificado médico.',
+        type_no_medical_cert: 'Registrar ausencia sin certificado médico',
+        type_no_medical_cert_desc: 'Registre ausencia sin evidencia médica.',
+        type_partial_permit: 'Permiso parcial',
+        type_partial_permit_desc: 'Registre ausencia parcial del día con horas específicas.',
+        type_non_remunerated: 'Tiempo no remunerado',
+        type_non_remunerated_desc: 'Solicite período de tiempo libre sin remuneración.',
+        type_license: 'Licencia',
+        type_license_desc: 'Solicite un período de licencia.',
+        details_title: 'Detalles de la Solicitud',
+        partial_permit_hint: 'Seleccione las horas de inicio y fin de su ausencia parcial (8:00 AM - 5:00 PM, intervalos de 30 min).',
+        lbl_start_hour: 'Hora de Inicio',
+        lbl_end_hour: 'Hora de Fin',
+        lbl_start_date: 'Fecha de Inicio',
+        lbl_end_date: 'Fecha de Fin',
+        lbl_notes: 'Notas / Anotaciones',
+        lbl_support_doc: 'Documento de Soporte PDF',
+        file_note: 'Obligatorio para ausencias médicas certificadas y opcional para las demás opciones. Nombre el archivo con su nombre y situación, por ejemplo: "Enfermedad - Juan Perez" / "Certificado de Incapacidad - Ana Gonzalez". Permitido: PDF, Imagen',
+        review_title: 'Revise su solicitud',
+        review_requestor: 'Solicitante',
+        review_type: 'Tipo de Solicitud',
+        review_hours: 'Horas',
+        review_start: 'Fecha de Inicio',
+        review_end: 'Fecha de Fin',
+        review_notes: 'Notas',
+        review_files: 'Documento de Soporte',
+        confirm_label: '¿Está seguro de que desea enviar esta solicitud?',
+        btn_next: 'Siguiente',
+        btn_prev: 'Anterior',
+        btn_submit: 'Enviar',
+        toast_type_required: 'Por favor seleccione un tipo de solicitud',
+        toast_fill_fields: 'Por favor complete todos los campos obligatorios',
+        toast_date_invalid: 'La fecha de fin debe ser igual o posterior a la fecha de inicio',
+        toast_hour_invalid: 'La hora de fin debe ser posterior a la hora de inicio',
+        toast_confirm: 'Por favor confirme antes de enviar',
+        toast_success: 'Solicitud enviada exitosamente',
+        toast_error: 'Error al enviar la solicitud',
+        toast_date_past: 'Las fechas no pueden ser del pasado',
+        toast_file_required: 'Se requiere adjuntar un archivo para ausencias con certificado médico',
+        review_none: 'Ninguno',
+        review_attached: 'archivo(s) adjunto(s)',
+        review_actors: 'Flujo de Aprobación'
+      }
+    };
+
+    function switchLang(lang) {
+      currentLang = lang;
+      document.getElementById('btn-lang-en').classList.toggle('active', lang === 'en');
+      document.getElementById('btn-lang-es').classList.toggle('active', lang === 'es');
+
+      // Update all elements with data-i18n
+      document.querySelectorAll('[data-i18n]').forEach(function(el) {
+        var key = el.getAttribute('data-i18n');
+        if (i18n[lang][key]) {
+          el.textContent = i18n[lang][key];
+        }
+      });
+
+      // Update floating labels
+      updateFloatingLabels(lang);
+    }
+
+    function updateFloatingLabels(lang) {
+      var labelMap = {
+        start_permit_hour: lang === 'es' ? 'Hora de Inicio' : 'Start Hour',
+        end_permit_hour: lang === 'es' ? 'Hora de Fin' : 'End Hour',
+        start_date: lang === 'es' ? 'Fecha de Inicio *' : 'Start Date *',
+        end_date: lang === 'es' ? 'Fecha de Fin *' : 'End Date *',
+        notes: lang === 'es' ? 'Notas / Anotaciones' : 'Notes / Annotations',
+        Supportfiles: lang === 'es' ? 'Documento de Soporte PDF' : 'PDF Support Document'
+      };
+      Object.keys(labelMap).forEach(function(fieldName) {
+        var lbl = document.querySelector('.floating-label[for="' + fieldName + '"]');
+        if (lbl) lbl.textContent = labelMap[fieldName];
+        var fileLbl = document.querySelector('.floating-file-label[for="' + fieldName + '"]');
+        if (fileLbl) fileLbl.textContent = labelMap[fieldName];
+      });
+    }
+
+    // ============================================================
+    // Stepper Logic
+    // ============================================================
+    var currentStep = 1;
+    var totalSteps = 4;
+
+    function updateStepper() {
+      document.querySelectorAll('.pto-step-indicator').forEach(function(ind) {
+        var s = parseInt(ind.getAttribute('data-step'));
+        ind.classList.remove('active', 'completed');
+        if (s === currentStep) ind.classList.add('active');
+        else if (s < currentStep) ind.classList.add('completed');
+      });
+      document.querySelectorAll('.pto-step-content').forEach(function(panel) {
+        var s = parseInt(panel.getAttribute('data-step'));
+        panel.classList.toggle('active', s === currentStep);
+      });
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function ptoNext() {
+      if (!validateCurrentStep()) return;
+      if (currentStep < totalSteps) {
+        if (currentStep === 3) populateReview();
+        currentStep++;
+        updateStepper();
+      }
+    }
+
+    function ptoPrev() {
+      if (currentStep > 1) {
+        currentStep--;
+        updateStepper();
+      }
+    }
+
+    // ============================================================
+    // Type Selection
+    // ============================================================
+    var selectedType = null;
+
+    function selectType(card) {
+      document.querySelectorAll('.pto-type-card').forEach(function(c) { c.classList.remove('selected'); });
+      card.classList.add('selected');
+      selectedType = card.getAttribute('data-type');
+      document.getElementById('request_type').value = selectedType;
+
+      // Enable next button on step 2
+      var nextBtn = card.closest('.pto-step-content').nextElementSibling;
+      // Actually just find the step 2 next button
+      var step2 = document.querySelector('.pto-step-content[data-step="2"]');
+      var btn = step2.querySelector('.pto-btn-next');
+      if (btn) btn.disabled = false;
+
+      // Show/hide partial permit time fields
+      var partialFields = document.getElementById('partial-permit-fields');
+      var startHour = document.getElementById('start_permit_hour');
+      var endHour = document.getElementById('end_permit_hour');
+
+      if (selectedType === 'partial_permit') {
+        partialFields.style.display = 'block';
+        startHour.dataset.required = 'true';
+        endHour.dataset.required = 'true';
+      } else {
+        partialFields.style.display = 'none';
+        startHour.dataset.required = 'false';
+        endHour.dataset.required = 'false';
+        startHour.value = '';
+        endHour.value = '';
+      }
+
+      // Clear file visual error when switching type away from medical_cert
+      if (window['clearInputError_Supportfiles']) {
+        window['clearInputError_Supportfiles']();
+      }
+    }
+
+    // ============================================================
+    // Validation
+    // ============================================================
+    function validateCurrentStep() {
+      if (currentStep === 1) return true;
+
+      if (currentStep === 2) {
+        if (!selectedType) {
+          launch_toast(i18n[currentLang].toast_type_required, 2);
+          return false;
+        }
+        return true;
+      }
+
+      if (currentStep === 3) {
+        var allValid = true;
+
+        // Validate dates — use setInputError_ directly to guarantee visual feedback
+        var startVal = document.getElementById('start_date').value;
+        var endVal = document.getElementById('end_date').value;
+        var startLabel = currentLang === 'es' ? 'Fecha de Inicio es requerido' : 'Start Date is required';
+        var endLabel   = currentLang === 'es' ? 'Fecha de Fin es requerido'    : 'End Date is required';
+
+        if (!startVal) {
+          window['setInputError_start_date'] && window['setInputError_start_date'](startLabel);
+          allValid = false;
+        } else {
+          window['clearInputError_start_date'] && window['clearInputError_start_date']();
+        }
+
+        if (!endVal) {
+          window['setInputError_end_date'] && window['setInputError_end_date'](endLabel);
+          allValid = false;
+        } else {
+          window['clearInputError_end_date'] && window['clearInputError_end_date']();
+        }
+
+        if (startVal && endVal) {
+          var startParts = startVal.split('/');
+          var endParts = endVal.split('/');
+          var startDt = new Date(startParts[2], startParts[1] - 1, startParts[0]);
+          var endDt = new Date(endParts[2], endParts[1] - 1, endParts[0]);
+          var today = new Date();
+          today.setHours(0,0,0,0);
+
+          if (endDt < startDt) {
+            window['setInputError_end_date'] && window['setInputError_end_date'](i18n[currentLang].toast_date_invalid);
+            allValid = false;
+          }
+        }
+
+        // Validate partial permit hours
+        if (selectedType === 'partial_permit') {
+          var fnStartHour = window['validateSelect_start_permit_hour'];
+          var fnEndHour = window['validateSelect_end_permit_hour'];
+          if (fnStartHour && !fnStartHour()) allValid = false;
+          if (fnEndHour && !fnEndHour()) allValid = false;
+
+          var sh = document.getElementById('start_permit_hour').value;
+          var eh = document.getElementById('end_permit_hour').value;
+          if (sh && eh && timeToMinutes(sh) >= timeToMinutes(eh)) {
+            window['setSelectError_end_permit_hour'](i18n[currentLang].toast_hour_invalid);
+            allValid = false;
+          }
+        }
+
+        // Validate mandatory file for medical certificate
+        if (selectedType === 'medical_cert') {
+          var getFiles = window['getFiles_Supportfiles'];
+          var files = getFiles ? getFiles() : [];
+          if (files.length === 0) {
+            if (window['setInputError_Supportfiles']) {
+              window['setInputError_Supportfiles'](i18n[currentLang].toast_file_required);
+            }
+            allValid = false;
+          } else {
+            if (window['clearInputError_Supportfiles']) {
+              window['clearInputError_Supportfiles']();
+            }
+          }
+        }
+
+        if (!allValid) {
+          launch_toast(i18n[currentLang].toast_fill_fields, 2);
+        }
+        return allValid;
+      }
+
+      if (currentStep === 4) {
+        return true;
+      }
+
+      return true;
+    }
+
+    function timeToMinutes(timeStr) {
+      var match = timeStr.match(/(\d{2}):(\d{2})\s*(AM|PM)/i);
+      if (!match) return 0;
+      var h = parseInt(match[1]);
+      var m = parseInt(match[2]);
+      var period = match[3].toUpperCase();
+      if (period === 'PM' && h !== 12) h += 12;
+      if (period === 'AM' && h === 12) h = 0;
+      return h * 60 + m;
+    }
+
+    // ============================================================
+    // Review Population
+    // ============================================================
+    var typeLabels = {
+      en: {
+        vacation: 'Request Vacation / Out of office period',
+        medical_cert: 'Register absence with medical certificate',
+        no_medical_cert: 'Register absence without medical certificate',
+        partial_permit: 'Partial permit',
+        non_remunerated: 'Non-remunerated time',
+        license: 'License'
+      },
+      es: {
+        vacation: 'Solicitud de Vacaciones / Período fuera de oficina',
+        medical_cert: 'Registrar ausencia con certificado médico',
+        no_medical_cert: 'Registrar ausencia sin certificado médico',
+        partial_permit: 'Permiso parcial',
+        non_remunerated: 'Tiempo no remunerado',
+        license: 'Licencia'
+      }
+    };
+
+    function populateReview() {
+      document.getElementById('review-type').textContent = typeLabels[currentLang][selectedType] || selectedType;
+      document.getElementById('review-start').textContent = document.getElementById('start_date').value || '-';
+      document.getElementById('review-end').textContent = document.getElementById('end_date').value || '-';
+      document.getElementById('review-notes').textContent = document.getElementById('notes').value || '-';
+
+      // Hours row
+      var hoursRow = document.getElementById('review-hours-row');
+      if (selectedType === 'partial_permit') {
+        hoursRow.style.display = '';
+        var sh = document.getElementById('start_permit_hour').value;
+        var eh = document.getElementById('end_permit_hour').value;
+        document.getElementById('review-hours').textContent = sh + ' - ' + eh;
+      } else {
+        hoursRow.style.display = 'none';
+      }
+
+      // Actors panel
+      renderActorsPanel();
+
+      // Files
+      var getFiles = window['getFiles_Supportfiles'];
+      if (getFiles) {
+        var files = getFiles();
+        document.getElementById('review-files').textContent = files.length > 0
+          ? files.length + ' ' + i18n[currentLang].review_attached
+          : i18n[currentLang].review_none;
+      } else {
+        document.getElementById('review-files').textContent = i18n[currentLang].review_none;
+      }
+    }
+
+    // ============================================================
+    // Confirm checkbox enables submit
+    // ============================================================
+    var _ptoActors = null;
+    var _ptoFlow = null;
+    var _ptoEstado = null;
+
+    document.addEventListener('DOMContentLoaded', function() {
+      var confirmCb = document.getElementById('confirmSubmit');
+      var submitBtn = document.getElementById('btnSubmitPto');
+
+      submitBtn.disabled = true;
+      submitBtn.addEventListener('click', submitPTO);
+
+      confirmCb.addEventListener('change', function() {
+        submitBtn.disabled = !confirmCb.checked;
+      });
+
+      // Initialize datepickers with minDate = today
+      // onSelect triggers floating-input visual state (datepicker bypasses native events)
+      $("#start_date").datepicker({
+        dateFormat: "dd/mm/yy",
+        onSelect: function() {
+          var input = document.getElementById('start_date');
+          if (input) {
+            input.classList.add('has-value');
+            input.classList.remove('error');
+            input.classList.add('valid');
+            var errEl = document.querySelector('[data-error-for="start_date"]');
+            if (errEl) errEl.classList.remove('show');
+          }
+        }
+      });
+      $("#end_date").datepicker({
+        dateFormat: "dd/mm/yy",
+        onSelect: function() {
+          var input = document.getElementById('end_date');
+          if (input) {
+            input.classList.add('has-value');
+            input.classList.remove('error');
+            input.classList.add('valid');
+            var errEl = document.querySelector('[data-error-for="end_date"]');
+            if (errEl) errEl.classList.remove('show');
+          }
+        }
+      });
+
+      // Fetch actors for the PTO approval flow
+      loadPtoActors();
+    });
+
+    function loadPtoActors() {
+      fetch('/form_hr_personal_time_off/actors')
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          if (data.result === 1) {
+            _ptoActors = data.actors;
+            _ptoFlow = data.flow;
+            _ptoEstado = data.estado;
+            renderActorsPanel();
+          } else {
+            console.error('Could not load PTO actors:', data.error);
+          }
+        })
+        .catch(function(err) {
+          console.error('Error loading PTO actors:', err);
+        });
+    }
+
+    function renderActorsPanel() {
+      var panel = document.getElementById('pto-actors-panel');
+      if (!panel || !_ptoActors) return;
+
+      var roles = [
+        { key: 'verificador', label: 'Verifier', labelEs: 'Verificador' },
+        { key: 'aprobador',   label: 'Approver', labelEs: 'Aprobador'  },
+        { key: 'firmante',    label: 'Signer',   labelEs: 'Firmante'   },
+        { key: 'operador',    label: 'Operator', labelEs: 'Operador'   },
+        { key: 'ejecutor',    label: 'Executor', labelEs: 'Ejecutor'   }
+      ];
+
+      var html = '';
+      roles.forEach(function(role) {
+        var actor = _ptoActors[role.key];
+        if (actor && actor.name && actor.name !== 'N/A') {
+          var roleLabel = currentLang === 'es' ? role.labelEs : role.label;
+          var photoSrc = actor.userId ? 'pic/' + actor.userId + '.png' : 'pic/default.png';
+          html += '<div class="pto-actor-card">';
+          html += '  <img class="pto-actor-avatar" src="' + photoSrc + '" onerror="this.onerror=null;this.src=\'pic/default.png\'" alt="' + actor.name + '">';
+          html += '  <div class="pto-actor-info">';
+          html += '    <span class="pto-actor-role">' + roleLabel + '</span>';
+          html += '    <span class="pto-actor-name">' + actor.name + '</span>';
+          html += '  </div>';
+          html += '</div>';
+        }
+      });
+
+      if (html === '') {
+        html = '<p style="color:#999;font-size:.85rem;">No actors resolved</p>';
+      }
+
+      panel.innerHTML = html;
+      panel.style.display = 'block';
+    }
+
+    // ============================================================
+    // Submit
+    // ============================================================
+    function submitPTO() {
+      if (!document.getElementById('confirmSubmit').checked) {
+        launch_toast(i18n[currentLang].toast_confirm, 2);
+        return;
+      }
+
+      // Final validation guard before submit
+      var startVal = document.getElementById('start_date').value;
+      var endVal = document.getElementById('end_date').value;
+      if (!startVal || !endVal) {
+        launch_toast(i18n[currentLang].toast_fill_fields, 2);
+        return;
+      }
+      if (selectedType === 'medical_cert') {
+        var getFilesFinal = window['getFiles_Supportfiles'];
+        var filesFinal = getFilesFinal ? getFilesFinal() : [];
+        if (filesFinal.length === 0) {
+          launch_toast(i18n[currentLang].toast_file_required, 2);
+          return;
+        }
+      }
+
+      if (!_ptoActors || !_ptoFlow) {
+        launch_toast(currentLang === 'es' ? 'Error: no se pudieron cargar los actores del flujo' : 'Error: could not load flow actors', 2);
+        return;
+      }
+
+      var formData = new FormData();
+      formData.append('request_type', selectedType);
+      formData.append('start_date', document.getElementById('start_date').value);
+      formData.append('end_date', document.getElementById('end_date').value);
+      formData.append('notes', document.getElementById('notes').value);
+
+      if (selectedType === 'partial_permit') {
+        formData.append('start_permit_hour', document.getElementById('start_permit_hour').value);
+        formData.append('end_permit_hour', document.getElementById('end_permit_hour').value);
+      }
+
+      // Append actor data for approval creation
+      formData.append('verificador', _ptoActors.verificador?.name || 'N/A');
+      formData.append('aprobador', _ptoActors.aprobador?.name || 'N/A');
+      formData.append('firmante', _ptoActors.firmante?.name || 'N/A');
+      formData.append('operador', _ptoActors.operador?.name || 'N/A');
+      formData.append('ejecutor', _ptoActors.ejecutor?.name || 'N/A');
+      formData.append('estado', _ptoEstado || 'Verify');
+
+      // Append files
+      var getFiles = window['getFiles_Supportfiles'];
+      if (getFiles) {
+        var files = getFiles();
+        files.forEach(function(file) {
+          formData.append('Supportfiles', file);
+        });
+      }
+
+      // Disable button to prevent double submit
+      var _btn = window['submitBtn_btnSubmitPto'];
+      if (_btn) _btn.setSending(currentLang === 'es' ? 'Enviando...' : 'Submitting...');
+
+      fetch('/form_hr_personal_time_off', {
+        method: 'POST',
+        body: formData
+      })
+      .then(function(response) { return response.json(); })
+      .then(function(data) {
+        if (data.result === 1 && data.RowID) {
+          launch_toast(i18n[currentLang].toast_success, 1);
+          setTimeout(function() {
+            window.location.href = '/approvals-detalle?RowID=' + data.RowID;
+          }, 1500);
+        } else {
+          launch_toast(data.error || i18n[currentLang].toast_error, 2);
+          if (_btn) _btn.reset(i18n[currentLang].btn_submit);
+        }
+      })
+      .catch(function(err) {
+        launch_toast(i18n[currentLang].toast_error, 2);
+        if (_btn) _btn.reset(i18n[currentLang].btn_submit);
+      });
+    }

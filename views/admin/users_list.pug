@@ -1,0 +1,226 @@
+extends ../layout
+
+include ../mixins/data-table
+include ../mixins/breadcrumb
+include ../ui/filter-bar
+block layout-content
+  div#layoutSidenav_content
+    main
+      div.container-fluid.px-4
+        div.mt-4(style="display:flex; margin-top: 0; justify-content: space-between;")
+          +app-breadcrumb({
+            homeHref: '/',
+            items: [{ label: title, active: true }]
+          })
+          div(style="display:flex; margin-top: 0; justify-content: space-between; align-items: center; gap:5px;")
+            span.badge.bg-secondary(style="font-size: 14px;") Total: #{totalUsers}
+            span.badge.bg-primary(style="font-size: 14px;") Active: #{activeUsers}
+
+        +fb-bar.breadcrumb.mb-4
+          a.page-link(href=`/users/create` style="display:flex;align-items:center;gap:5px; background-color: #00586f; color:white; border-radius:5px; padding: 8px 12px;")
+            i.fas.fa-user-plus.me-1
+            | Add User
+          +fb-search({id: 'SearchBox', placeholder: 'Search by name, email, UserID, company or department', onkeyup: 'handleSearch()'})
+          +fb-select({id: 'FilterStatus', icon: 'fa-user-check', items: [{value: 'all', label: 'All users'}, {value: '1', label: 'Active only'}, {value: '0', label: 'Inactive only'}], placeholder: 'All users', placeholderDisabled: true, filterLabel: 'Status', onchange: 'handleFilterChange()'})
+          +fb-select({id: 'FilterCompany', icon: 'fa-building', items: [], placeholder: 'All companies', placeholderDisabled: false, filterLabel: 'Company', onchange: 'handleFilterChange()'})
+          +fb-actions
+            +fb-page-size({id: 'SelectBoxPages', sizes: [15, 50, 100], onchange: 'handleFilterChange()'})
+            div#pagination-container
+              ul#pagination.pagination.mb-0(style="margin:0;")
+
+        div#loadingSpinner.text-center.my-5(style="display: none;")
+          div.spinner-border.text-primary(role="status")
+            span.sr-only Loading...
+        +data-table('usersTable', 'paginationInfo', { internalViewToggle: false })
+          thead
+            tr
+              th(style="width:5%; text-align:center;") ID
+              th(style="width:5%; text-align:center;")
+              th(style="width:15%;") Name
+              th(style="width:15%;") Email
+              th(style="width:12%;") Company
+              th(style="width:12%;") Department
+              th(style="width:12%;") Position
+              th(style="width:12%;") Manager
+              th(style="width:8%; text-align:center;") Status
+          tbody#usersTableBody.bg-white
+
+      script.
+        // Global variables
+        let currentPage = 1;
+        let pageSize = 15;
+        const userID = '#{userProfile.UserID}';
+        let searchTimeout;
+
+        // Load users data from API
+        async function loadUsers(page = 1) {
+          try {
+            // Show loading spinner
+            document.getElementById('loadingSpinner').style.display = 'block';
+            document.getElementById('usersTable').style.display = 'none';
+
+            pageSize = parseInt(document.getElementById('SelectBoxPages').value) || 15;
+            const search = document.getElementById('SearchBox').value;
+            const status = document.getElementById('FilterStatus').value;
+            const company = document.getElementById('FilterCompany').value;
+
+            const params = new URLSearchParams({
+              page: page,
+              pageSize: pageSize,
+              search: search,
+              status: status,
+              company: company
+            });
+
+            const response = await fetch(`/api/users/paginated?${params}`);
+            const result = await response.json();
+
+            if (result.result === 1) {
+              renderUsers(result.data);
+              renderPagination(result.pagination);
+              updateCompanyFilter(result.companies);
+              currentPage = page;
+            } else {
+              console.error('Error loading users:', result.message);
+              showError('Error loading users');
+            }
+
+          } catch (error) {
+            console.error('Error loading users:', error);
+            showError('Error connecting to server');
+          } finally {
+            // Hide loading spinner
+            document.getElementById('loadingSpinner').style.display = 'none';
+            document.getElementById('usersTable').style.display = 'table';
+          }
+        }
+
+        // Render users in table
+        function renderUsers(users) {
+          const tbody = document.getElementById('usersTableBody');
+          tbody.innerHTML = '';
+
+          if (users.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="8" class="text-center">No users found</td></tr>';
+            return;
+          }
+
+          users.forEach(user => {
+            const row = document.createElement('tr');
+            
+            const statusBadge = (user.Estado == 1 || user.Estado == true) 
+              ? '<span class="badge bg-primary">Active</span>'
+              : '<span class="badge bg-secondary">Inactive</span>';
+
+            row.innerHTML = `
+              <td style="text-align:center;"><a href="/users/detail/${user.Id}" style="color: #212529;">${user.Id || '-'}</a></td>
+              <td style="text-align:center;"><img class="icon" src="pic/${user.UserID}.png" title="${user.Name || ''}" onerror="this.onerror=null;this.src='pic/default.png';"></td>
+              <td>${user.Name || '-'}</td>
+              <td>${user.Email || '-'}</td>
+              <td>${user.compania_nombre || '-'}</td>
+              <td>${user.departamento_nombre || user.departamento || '-'}</td>
+              <td>${user.xcargo || '-'}</td>
+              <td>${user.manager_name || user.Manager || '-'}</td>
+              <td style="text-align:center;">${statusBadge}</td>
+            `;
+            
+            tbody.appendChild(row);
+          });
+        }
+
+        // Render pagination controls
+        function renderPagination(pagination) {
+          const paginationEl = document.getElementById('pagination');
+          const paginationInfo = document.getElementById('paginationInfo');
+          
+          paginationEl.innerHTML = '';
+
+          // Update info
+          if (pagination.totalItems === 0) {
+            paginationInfo.textContent = 'No users found';
+          } else {
+            const start = (pagination.page - 1) * pagination.pageSize + 1;
+            const end = Math.min(pagination.page * pagination.pageSize, pagination.totalItems);
+            paginationInfo.innerHTML = `Showing <strong>${start}</strong> to <strong>${end}</strong> of <strong>${pagination.totalItems}</strong> users`;
+          }
+
+          if (pagination.totalPages <= 1) return;
+
+          // Previous button
+          const prevLi = document.createElement('li');
+          prevLi.className = `page-item ${!pagination.hasPrevPage ? 'disabled' : ''}`;
+          prevLi.innerHTML = `<a class="page-link" href="#" onclick="changePage(${pagination.page - 1}); return false;" aria-label="Previous"><i class="fas fa-chevron-left"></i></a>`;
+          paginationEl.appendChild(prevLi);
+
+          // Next button
+          const nextLi = document.createElement('li');
+          nextLi.className = `page-item ${!pagination.hasNextPage ? 'disabled' : ''}`;
+          nextLi.innerHTML = `<a class="page-link" href="#" onclick="changePage(${pagination.page + 1}); return false;" aria-label="Next"><i class="fas fa-chevron-right"></i></a>`;
+          paginationEl.appendChild(nextLi);
+        }
+
+        // Update company filter dropdown
+        function updateCompanyFilter(companies) {
+          const select = document.getElementById('FilterCompany');
+          const currentValue = select.value;
+
+          // Keep first option (All companies) by saving it
+          const firstOption = select.options[0].cloneNode(true);
+          select.innerHTML = '';
+          select.appendChild(firstOption);
+
+          // Add companies
+          if (companies && companies.length > 0) {
+            companies.forEach(company => {
+              const option = document.createElement('option');
+              option.value = company;
+              option.textContent = company;
+              if (company === currentValue) {
+                option.selected = true;
+              }
+              select.appendChild(option);
+            });
+          }
+        }
+
+        // Change page
+        function changePage(page) {
+          if (page < 1) return;
+          loadUsers(page);
+        }
+
+        // Search with debounce
+        function handleSearch() {
+          clearTimeout(searchTimeout);
+          searchTimeout = setTimeout(() => {
+            currentPage = 1;
+            loadUsers(1);
+          }, 500);
+        }
+
+        // Filter change
+        function handleFilterChange() {
+          currentPage = 1;
+          loadUsers(1);
+        }
+
+        // Show error message
+        function showError(message) {
+          const tbody = document.getElementById('usersTableBody');
+          tbody.innerHTML = `<tr><td colspan="8" class="text-center text-danger">${message}</td></tr>`;
+        }
+
+        // Initialize on page load
+        window.addEventListener('DOMContentLoaded', function() {
+          // Add event listeners
+          document.getElementById('SearchBox').addEventListener('keyup', handleSearch);
+          document.getElementById('FilterStatus').addEventListener('change', handleFilterChange);
+          document.getElementById('FilterCompany').addEventListener('change', handleFilterChange);
+          document.getElementById('SelectBoxPages').addEventListener('change', function() {
+            loadUsers(1);
+          });
+          
+          // Load initial data
+          loadUsers(1);
+        });
+

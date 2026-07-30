@@ -1,0 +1,1109 @@
+extends ../../layout
+
+include ../../mixins/data-table
+include ../../mixins/breadcrumb
+include ../../ui/filter-bar
+
+block layout-content
+  div#layoutSidenav_content
+    main
+      div.container-fluid.px-4
+        +app-breadcrumb({
+          homeHref: '/',
+          items: [{ label: title, active: true }]
+        })
+
+        - const departmentItems = (departments || []).map(function (item) { return { value: item.department, label: item.department }; })
+        - const statusItems = [{ value: 'Planned', label: 'Planned' }, { value: 'Ongoing', label: 'Ongoing' }, { value: 'Finished', label: 'Finished' }]
+
+        +fb-bar
+          a#forms_it_temporary_change_location.page-link(
+            href='#'
+            onclick='openTemporaryChangeLocationCreateModal();return false;'
+            style='display:flex;align-items:center;gap:5px;background-color:#00586f;color:white;border-radius:5px'
+          )
+            i.fas.fa-plus
+            span Create New
+
+          +fb-search({
+            id: 'SearchBox',
+            placeholder: 'Search by collaborator, department or date',
+            onkeyup: 'SearchTableRequest()'
+          })
+          +fb-select({
+            id: 'SelectBox',
+            icon: 'fa-building',
+            items: departmentItems,
+            placeholder: 'Department',
+            placeholderDisabled: false,
+            onchange: 'SelectTableTemporary()',
+            minWidth: '200px'
+          })
+
+          +fb-select({
+            id: 'SelectBoxStatus',
+            icon: 'fa-circle',
+            items: statusItems,
+            placeholder: 'Status',
+            placeholderDisabled: false,
+            onchange: 'SelectTableTemporary()',
+            minWidth: '130px',
+            iconStyle: 'font-size:.45rem;'
+          })
+
+
+          +fb-reset-btn({ onclick: 'resetFilters()' })
+
+          +fb-actions
+            div#temporaryLocationViewMode.fb-view-toggle.tcl-view-toggle(role='group' aria-label='Select temporary location data view')
+              button.fb-view-btn.is-active(type='button' data-view='table' aria-pressed='true')
+                i.fas.fa-table(aria-hidden='true')
+                span Table
+              button.fb-view-btn(type='button' data-view='map' aria-pressed='false')
+                i.fas.fa-map-marked-alt(aria-hidden='true')
+                span Map
+            span#tclPageSizeWrap
+              +fb-page-size({ id: 'SelectBoxPages', sizes: [15, 25, 50, 100], onchange: 'SelectTableTemporary()', defaultSize: 15 })
+            span#tclPaginationWrap
+              +fb-pagination({ onPrev: 'changePage(currentPage - 1)', onNext: 'changePage(currentPage + 1)' })
+
+        div#temporaryLocationTableView
+          +data-table('MainTable', 'totalCount', { cardView: false, internalViewToggle: false })
+            thead
+              tr#header
+                th(style='width:20%;') Collaborator
+                th Department
+                th Country Location
+                th Start Date
+                th End Date
+                th Status
+            tbody
+
+        div#temporaryLocationMapView(style='display:none;')
+          div.tcl-map-layout
+            section.tcl-map-canvas-panel
+              div.tcl-map-summary
+                div.tcl-map-counter
+                  span.tcl-map-counter-label Active now
+                  span#tclCounterOngoing.tcl-map-counter-value 0
+                div.tcl-map-counter
+                  span.tcl-map-counter-label Planned
+                  span#tclCounterPlanned.tcl-map-counter-value 0
+                div.tcl-map-counter
+                  span.tcl-map-counter-label Finished
+                  span#tclCounterFinished.tcl-map-counter-value 0
+              div#temporaryLocationMap
+              div#temporaryLocationMapState.tcl-map-state(style='display:none;')
+            aside.tcl-map-timeline
+              div.tcl-map-timeline-header
+                h5.tcl-map-title Location Timeline
+                p#tclTimelineSubtitle.tcl-map-subtitle Search a collaborator to see where they have been.
+              ul#tclTimeline.tcl-map-timeline-list
+                li.tcl-map-empty Select Map view to load active collaborators.
+
+    link(rel='stylesheet' href='https://unpkg.com/leaflet@1.9.4/dist/leaflet.css')
+    link(rel='stylesheet' href='https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css')
+    link(rel='stylesheet' href='https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css')
+    script(src='https://unpkg.com/leaflet@1.9.4/dist/leaflet.js')
+    script(src='https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js')
+
+    style.
+      #MainTable thead {
+        background-color: #00586f;
+        color: #fff;
+      }
+
+      #MainTable tbody tr td {
+        vertical-align: middle;
+      }
+
+      #MainTable tbody tr {
+        cursor: pointer;
+      }
+
+      #MainTable td img {
+        border-radius: 4px;
+      }
+
+      .fb-page-btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+
+      .tcl-view-toggle .fb-view-btn {
+        min-width: 78px;
+        justify-content: center;
+      }
+
+      .tcl-view-toggle .fb-view-btn span {
+        font-weight: 600;
+      }
+
+      .tcl-map-layout {
+        display: grid;
+        grid-template-columns: minmax(0, 2fr) minmax(300px, 1fr);
+        gap: 14px;
+        margin-bottom: 16px;
+      }
+
+      .tcl-map-canvas-panel,
+      .tcl-map-timeline {
+        background: #ffffff;
+        border: 1px solid #d9e5ea;
+        border-radius: 16px;
+        box-shadow: 0 10px 22px rgba(10, 52, 61, 0.08);
+      }
+
+      .tcl-map-canvas-panel {
+        padding: 10px;
+        position: relative;
+        background-image: radial-gradient(circle at 20% 12%, rgba(0, 88, 111, 0.08), transparent 55%);
+      }
+
+      .tcl-map-summary {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-bottom: 8px;
+      }
+
+      .tcl-map-counter {
+        background: #f3f8fa;
+        border: 1px solid #d8e5ea;
+        border-radius: 999px;
+        padding: 4px 10px;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      .tcl-map-counter-label {
+        font-size: .72rem;
+        text-transform: uppercase;
+        letter-spacing: .04em;
+        color: #4f6670;
+      }
+
+      .tcl-map-counter-value {
+        font-weight: 700;
+        color: #0a3f4d;
+      }
+
+      #temporaryLocationMap {
+        height: 520px;
+        border-radius: 12px;
+        border: 1px solid #d5e2e8;
+        overflow: hidden;
+        background: linear-gradient(160deg, #f1f8fa 0%, #e9f4f8 100%);
+      }
+
+      .tcl-map-state {
+        position: absolute;
+        left: 22px;
+        right: 22px;
+        top: 78px;
+        padding: 12px 14px;
+        border-radius: 12px;
+        border: 1px solid #cae3ec;
+        background: rgba(255, 255, 255, 0.94);
+        color: #35525d;
+        font-size: .85rem;
+        z-index: 650;
+      }
+
+      .tcl-map-state.error {
+        border-color: #f5c2c7;
+        color: #842029;
+        background: rgba(248, 215, 218, 0.92);
+      }
+
+      .tcl-marker-dot {
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+        border: 2px solid #ffffff;
+        box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.18), 0 3px 8px rgba(0, 0, 0, 0.25);
+        display: block;
+      }
+
+      .tcl-marker-highlight {
+        width: 20px;
+        height: 20px;
+      }
+
+      .tcl-popup {
+        min-width: 220px;
+      }
+
+      .tcl-popup-title {
+        margin: 0;
+        font-size: .95rem;
+        color: #143f4d;
+      }
+
+      .tcl-popup-meta {
+        margin: 2px 0 10px;
+        font-size: .8rem;
+        color: #4d6974;
+      }
+
+      .tcl-popup-row {
+        display: flex;
+        justify-content: space-between;
+        gap: 10px;
+        font-size: .78rem;
+        margin-bottom: 4px;
+        color: #314f59;
+      }
+
+      .tcl-popup-row strong {
+        color: #173f4b;
+      }
+
+      .tcl-popup-btn {
+        width: 100%;
+        margin-top: 8px;
+        border: none;
+        border-radius: 10px;
+        background: #00586f;
+        color: #fff;
+        padding: 7px 10px;
+        font-size: .78rem;
+        font-weight: 600;
+        cursor: pointer;
+      }
+
+      .tcl-popup-btn:hover {
+        background: #0a6b80;
+      }
+
+      .tcl-status-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        border-radius: 999px;
+        padding: 3px 9px;
+        font-size: .72rem;
+        color: #fff;
+      }
+
+      .tcl-status-planned {
+        background: #6c757d;
+      }
+
+      .tcl-status-ongoing {
+        background: #d69d00;
+      }
+
+      .tcl-status-finished {
+        background: #00586f;
+      }
+
+      .tcl-map-timeline {
+        padding: 12px;
+        min-height: 520px;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .tcl-map-timeline-header {
+        border-bottom: 1px solid #e6eef2;
+        margin-bottom: 10px;
+        padding-bottom: 10px;
+      }
+
+      .tcl-map-title {
+        margin: 0;
+        color: #133d48;
+        font-size: 1rem;
+      }
+
+      .tcl-map-subtitle {
+        margin: 4px 0 0;
+        color: #607d89;
+        font-size: .8rem;
+      }
+
+      .tcl-map-timeline-list {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        overflow: auto;
+      }
+
+      .tcl-map-timeline-item {
+        border: 1px solid #dce8ed;
+        border-radius: 12px;
+        padding: 10px;
+        background: #f8fcfe;
+      }
+
+      .tcl-map-timeline-item h6 {
+        margin: 0;
+        font-size: .88rem;
+        color: #174653;
+      }
+
+      .tcl-map-timeline-item p {
+        margin: 2px 0;
+        font-size: .76rem;
+        color: #496772;
+      }
+
+      .tcl-map-timeline-item button {
+        margin-top: 6px;
+        border: none;
+        border-radius: 8px;
+        padding: 6px 9px;
+        font-size: .73rem;
+        font-weight: 600;
+        background: #00586f;
+        color: #fff;
+        cursor: pointer;
+      }
+
+      .tcl-map-empty {
+        border: 1px dashed #c6dbe4;
+        border-radius: 12px;
+        padding: 16px;
+        font-size: .83rem;
+        color: #637d88;
+        background: #f8fcfd;
+      }
+
+      @media (max-width: 991.98px) {
+        .tcl-map-layout {
+          grid-template-columns: 1fr;
+        }
+
+        #temporaryLocationMap {
+          height: 430px;
+        }
+
+        .tcl-map-timeline {
+          min-height: 300px;
+        }
+
+        .tcl-map-state {
+          top: 108px;
+        }
+      }
+
+      @media (max-width: 575.98px) {
+        .tcl-view-toggle .fb-view-btn {
+          min-width: 68px;
+          padding: 0 8px;
+        }
+
+        .tcl-view-toggle .fb-view-btn span {
+          display: none;
+        }
+
+        #temporaryLocationMap {
+          height: 360px;
+        }
+
+        .tcl-map-counter {
+          width: 100%;
+          justify-content: space-between;
+        }
+      }
+
+    script.
+      let currentPage = 1;
+      let totalCount = 0;
+      let currentView = 'table';
+
+      const mapCacheStorageKey = 'tcl_country_geo_cache_v1';
+      const countryAlias = {
+        'UNITED STATES OF AMERICA': 'UNITED STATES',
+        'U.S.A.': 'UNITED STATES',
+        'USA': 'UNITED STATES',
+        'UK': 'UNITED KINGDOM',
+        'U.K.': 'UNITED KINGDOM',
+        'REPUBLIC OF PANAMA': 'PANAMA',
+        'DOMINICAN REPUBLICA': 'DOMINICAN REPUBLIC',
+        'CZECH REPUBLIC': 'CZECHIA',
+      };
+      const builtinCountryCoordinates = {
+        ARGENTINA: [-38.4161, -63.6167],
+        AUSTRALIA: [-25.2744, 133.7751],
+        BELGIUM: [50.5039, 4.4699],
+        BOLIVIA: [-16.2902, -63.5887],
+        BRAZIL: [-14.235, -51.9253],
+        CANADA: [56.1304, -106.3468],
+        CHILE: [-35.6751, -71.543],
+        CHINA: [35.8617, 104.1954],
+        COLOMBIA: [4.5709, -74.2973],
+        COSTARICA: [9.7489, -83.7534],
+        CUBA: [21.5218, -77.7812],
+        CZECHIA: [49.8175, 15.473],
+        DOMINICANREPUBLIC: [18.7357, -70.1627],
+        ECUADOR: [-1.8312, -78.1834],
+        ELSALVADOR: [13.7942, -88.8965],
+        FRANCE: [46.2276, 2.2137],
+        GERMANY: [51.1657, 10.4515],
+        GUATEMALA: [15.7835, -90.2308],
+        HONDURAS: [15.2, -86.2419],
+        INDIA: [20.5937, 78.9629],
+        IRELAND: [53.1424, -7.6921],
+        ITALY: [41.8719, 12.5674],
+        JAPAN: [36.2048, 138.2529],
+        LUXEMBOURG: [49.8153, 6.1296],
+        MEXICO: [23.6345, -102.5528],
+        NICARAGUA: [12.8654, -85.2072],
+        PANAMA: [8.538, -80.7821],
+        PARAGUAY: [-23.4425, -58.4438],
+        PERU: [-9.19, -75.0152],
+        POLAND: [51.9194, 19.1451],
+        PORTUGAL: [39.3999, -8.2245],
+        SPAIN: [40.4637, -3.7492],
+        SWITZERLAND: [46.8182, 8.2275],
+        UNITEDKINGDOM: [55.3781, -3.436],
+        UNITEDSTATES: [39.8283, -98.5795],
+        URUGUAY: [-32.5228, -55.7658],
+        VENEZUELA: [6.4238, -66.5897],
+      };
+      const countryCoordinateCache = loadCountryCoordinateCache();
+      const countryCoordinatePending = new Map();
+
+      let mapInstance = null;
+      let mapCluster = null;
+      let historyPolyline = null;
+      let tileLoadIssue = false;
+
+      const table = document.querySelector('#MainTable tbody');
+      const searchBox = document.querySelector('#SearchBox');
+      const selectBox = document.querySelector('#SelectBox');
+      const selectBoxStatus = document.querySelector('#SelectBoxStatus');
+      const tableViewWrapper = document.getElementById('temporaryLocationTableView');
+      const mapViewWrapper = document.getElementById('temporaryLocationMapView');
+      const mapState = document.getElementById('temporaryLocationMapState');
+      const timelineNode = document.getElementById('tclTimeline');
+      const timelineSubtitle = document.getElementById('tclTimelineSubtitle');
+      const viewModeNode = document.getElementById('temporaryLocationViewMode');
+      const pageSizeWrap = document.getElementById('tclPageSizeWrap');
+      const paginationWrap = document.getElementById('tclPaginationWrap');
+
+      function loadCountryCoordinateCache() {
+        try {
+          const raw = window.localStorage.getItem(mapCacheStorageKey);
+          if (!raw) return {};
+          const parsed = JSON.parse(raw);
+          return parsed && typeof parsed === 'object' ? parsed : {};
+        } catch (error) {
+          console.error(error);
+          return {};
+        }
+      }
+
+      function saveCountryCoordinateCache() {
+        try {
+          window.localStorage.setItem(mapCacheStorageKey, JSON.stringify(countryCoordinateCache));
+        } catch (error) {
+          console.error(error);
+        }
+      }
+
+      function normalizeCountryKey(value) {
+        if (!value) return '';
+        const normalized = String(value)
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '')
+          .replace(/[^a-zA-Z0-9\s]/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim()
+          .toUpperCase();
+        return countryAlias[normalized] || normalized;
+      }
+
+      function getRowsPerPage() {
+        const pageSize = document.getElementById('SelectBoxPages');
+        return Number(pageSize ? pageSize.value : 15);
+      }
+
+      function debounce(func, wait) {
+        let timeout;
+        return function (...args) {
+          clearTimeout(timeout);
+          timeout = setTimeout(() => func.apply(this, args), wait);
+        };
+      }
+
+      function normalizeToDate(date) {
+        if (!date) return null;
+        if (typeof date === 'string' && /^\d{2}\/\d{2}\/\d{4}$/.test(date)) {
+          const [day, month, year] = date.split('/');
+          const parsedDate = new Date(Number(year), Number(month) - 1, Number(day));
+          parsedDate.setHours(0, 0, 0, 0);
+          return parsedDate;
+        }
+        const parsedDate = new Date(date);
+        if (Number.isNaN(parsedDate.getTime())) {
+          return null;
+        }
+        parsedDate.setHours(0, 0, 0, 0);
+        return parsedDate;
+      }
+
+      function normalizeDate(date) {
+        const normalized = normalizeToDate(date);
+        return normalized || new Date(1970, 0, 1);
+      }
+
+      function buildStatus(startDate, endDate) {
+        const today = normalizeDate(new Date());
+        const initial = normalizeDate(startDate);
+        const end = normalizeDate(endDate);
+
+        if (today < initial) {
+          return 'Planned';
+        }
+        if (today <= end) {
+          return 'Ongoing';
+        }
+        return 'Finished';
+      }
+
+      function getStatusHtml(initialDate, endDate) {
+        const status = buildStatus(initialDate, endDate);
+        if (status === 'Planned') {
+          return '<td class="app-status-cell"><span class="app-status-pill app-status-pill-neutral"><i class="fas fa-exclamation-circle"></i> Planned</span></td>';
+        }
+
+        if (status === 'Ongoing') {
+          return '<td class="app-status-cell"><span class="app-status-pill app-status-pill-ongoing"><i class="fas fa-play-circle"></i> Ongoing</span></td>';
+        }
+
+        return '<td class="app-status-cell"><span class="app-status-pill app-status-pill-closed"><i class="fas fa-check-circle"></i> Finished</span></td>';
+      }
+
+      function getStatusBadge(status) {
+        const safeStatus = status || 'Planned';
+        const cls = safeStatus === 'Ongoing' ? 'tcl-status-ongoing' : safeStatus === 'Finished' ? 'tcl-status-finished' : 'tcl-status-planned';
+        return `<span class="tcl-status-badge ${cls}">${safeStatus}</span>`;
+      }
+
+      function markerColor(status) {
+        if (status === 'Ongoing') return '#d69d00';
+        if (status === 'Finished') return '#00586f';
+        return '#6c757d';
+      }
+
+      function escapeHtml(value) {
+        return String(value == null ? '' : value)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#39;');
+      }
+
+      function formatDateForDisplay(value) {
+        const dt = normalizeToDate(value);
+        return dt ? dt.toLocaleDateString('en-GB') : '-';
+      }
+
+      function initializeMap() {
+        if (mapInstance || typeof window.L === 'undefined') {
+          return;
+        }
+
+        mapInstance = window.L.map('temporaryLocationMap', {
+          zoomControl: true,
+          minZoom: 2,
+          worldCopyJump: true,
+        }).setView([18, -70], 2);
+
+        const tileLayer = window.L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          maxZoom: 18,
+          attribution: '&copy; OpenStreetMap contributors',
+        });
+
+        tileLayer.on('tileerror', function (event) {
+          console.error('Leaflet tile failed to load (network/firewall likely blocking tile.openstreetmap.org):', event && event.tile && event.tile.src);
+          tileLoadIssue = true;
+          setMapState('Map background tiles failed to load. This usually means the network/firewall is blocking tile.openstreetmap.org. Check the browser DevTools Network tab for blocked/failed requests to that domain.', true);
+        });
+
+        tileLayer.on('tileload', function () {
+          if (tileLoadIssue) {
+            tileLoadIssue = false;
+          }
+        });
+
+        tileLayer.addTo(mapInstance);
+
+        mapCluster = window.L.markerClusterGroup({
+          showCoverageOnHover: false,
+          spiderfyOnMaxZoom: true,
+          maxClusterRadius: 48,
+        });
+
+        mapInstance.addLayer(mapCluster);
+      }
+
+      function setMapState(message, isError) {
+        if (!mapState) return;
+        if (!message) {
+          mapState.style.display = 'none';
+          mapState.classList.remove('error');
+          mapState.textContent = '';
+          return;
+        }
+
+        mapState.style.display = 'block';
+        mapState.classList.toggle('error', Boolean(isError));
+        mapState.textContent = message;
+      }
+
+      function createMarkerIcon(status, highlighted) {
+        return window.L.divIcon({
+          className: 'tcl-marker-wrapper',
+          html: `<span class="tcl-marker-dot ${highlighted ? 'tcl-marker-highlight' : ''}" style="background:${markerColor(status)}"></span>`,
+          iconSize: highlighted ? [20, 20] : [16, 16],
+          iconAnchor: highlighted ? [10, 10] : [8, 8],
+          popupAnchor: [0, -10],
+        });
+      }
+
+      function renderTimeline(historyRows, selectedCollaborator) {
+        if (!timelineNode) return;
+        timelineNode.innerHTML = '';
+
+        if (timelineSubtitle) {
+          timelineSubtitle.textContent = selectedCollaborator
+            ? `${selectedCollaborator} historical locations`
+            : 'Search a collaborator to see where they have been.';
+        }
+
+        if (!historyRows || historyRows.length === 0) {
+          const li = document.createElement('li');
+          li.className = 'tcl-map-empty';
+          li.textContent = selectedCollaborator
+            ? 'No historical records found for this collaborator.'
+            : 'Use the search box to find a collaborator and draw the timeline.';
+          timelineNode.appendChild(li);
+          return;
+        }
+
+        historyRows.forEach((item) => {
+          const li = document.createElement('li');
+          li.className = 'tcl-map-timeline-item';
+          li.innerHTML = `
+            <h6>${escapeHtml(item.country || '-')}</h6>
+            <p>${formatDateForDisplay(item.start_date)} - ${formatDateForDisplay(item.end_date)}</p>
+            <p>${getStatusBadge(item.status || buildStatus(item.start_date, item.end_date))}</p>
+            <button type="button">Open detail</button>
+          `;
+          const button = li.querySelector('button');
+          if (button) {
+            button.addEventListener('click', function () {
+              if (typeof window.openTemporaryChangeLocationViewModal === 'function') {
+                window.openTemporaryChangeLocationViewModal(item.id);
+              }
+            });
+          }
+          timelineNode.appendChild(li);
+        });
+      }
+
+      function renderCounters(counters) {
+        const planned = document.getElementById('tclCounterPlanned');
+        const ongoing = document.getElementById('tclCounterOngoing');
+        const finished = document.getElementById('tclCounterFinished');
+
+        if (planned) planned.textContent = String(counters && counters.Planned ? counters.Planned : 0);
+        if (ongoing) ongoing.textContent = String(counters && counters.Ongoing ? counters.Ongoing : 0);
+        if (finished) finished.textContent = String(counters && counters.Finished ? counters.Finished : 0);
+      }
+
+      async function geocodeCountry(countryName, normalizedKey) {
+        const endpoint = `https://nominatim.openstreetmap.org/search?format=json&limit=1&country=${encodeURIComponent(countryName)}`;
+        try {
+          const response = await fetch(endpoint, {
+            headers: { Accept: 'application/json' },
+          });
+          if (!response.ok) return null;
+          const payload = await response.json();
+          if (!Array.isArray(payload) || payload.length === 0) return null;
+          const lat = Number(payload[0].lat);
+          const lng = Number(payload[0].lon);
+          if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+          countryCoordinateCache[normalizedKey] = [lat, lng];
+          saveCountryCoordinateCache();
+          return [lat, lng];
+        } catch (error) {
+          console.error(error);
+          return null;
+        }
+      }
+
+      async function resolveCountryCoordinates(countryName) {
+        const key = normalizeCountryKey(countryName);
+        if (!key) return null;
+
+        if (builtinCountryCoordinates[key]) {
+          return builtinCountryCoordinates[key];
+        }
+
+        if (Object.prototype.hasOwnProperty.call(countryCoordinateCache, key)) {
+          return countryCoordinateCache[key];
+        }
+
+        if (countryCoordinatePending.has(key)) {
+          return countryCoordinatePending.get(key);
+        }
+
+        const pending = geocodeCountry(countryName, key)
+          .then((coords) => {
+            countryCoordinateCache[key] = coords || null;
+            saveCountryCoordinateCache();
+            return coords;
+          })
+          .finally(() => {
+            countryCoordinatePending.delete(key);
+          });
+
+        countryCoordinatePending.set(key, pending);
+        return pending;
+      }
+
+      async function enrichRowsWithCoordinates(rows) {
+        if (!rows || rows.length === 0) return [];
+
+        const coordinateMap = new Map();
+        const uniqueCountries = Array.from(
+          new Set(
+            rows
+              .map((row) => row.country)
+              .filter((country) => country && String(country).trim() !== '')
+          )
+        );
+
+        await Promise.all(
+          uniqueCountries.map(async (country) => {
+            const coordinates = await resolveCountryCoordinates(country);
+            coordinateMap.set(country, coordinates);
+          })
+        );
+
+        return rows
+          .map((row) => {
+            const coordinates = coordinateMap.get(row.country);
+            if (!coordinates) return null;
+            return {
+              ...row,
+              latitude: coordinates[0],
+              longitude: coordinates[1],
+            };
+          })
+          .filter(Boolean);
+      }
+
+      function popupHtml(row) {
+        const status = row.status || buildStatus(row.start_date, row.end_date);
+        const safeCollaborator = escapeHtml(row.collaborator_name || '-');
+        const safeDepartment = escapeHtml(row.department || '-');
+        const safeCountry = escapeHtml(row.country || '-');
+        const safeStart = escapeHtml(formatDateForDisplay(row.start_date));
+        const safeEnd = escapeHtml(formatDateForDisplay(row.end_date));
+        const safeStatus = escapeHtml(status);
+
+        return `
+          <div class="tcl-popup">
+            <h6 class="tcl-popup-title">${safeCollaborator}</h6>
+            <p class="tcl-popup-meta">${safeDepartment}</p>
+            <div class="tcl-popup-row"><span>Country</span><strong>${safeCountry}</strong></div>
+            <div class="tcl-popup-row"><span>Start</span><strong>${safeStart}</strong></div>
+            <div class="tcl-popup-row"><span>End</span><strong>${safeEnd}</strong></div>
+            <div class="tcl-popup-row"><span>Status</span><strong>${safeStatus}</strong></div>
+            <button class="tcl-popup-btn" type="button" onclick="openTemporaryChangeLocationViewModal(${Number(row.id) || 0});return false;">Open detail</button>
+          </div>
+        `;
+      }
+
+      async function renderMap(points, history, selectedCollaborator, counters) {
+        initializeMap();
+        if (!mapInstance || !mapCluster) {
+          setMapState('Map library could not be loaded.', true);
+          return;
+        }
+
+        renderCounters(counters || {});
+        renderTimeline(history || [], selectedCollaborator || '');
+
+        mapCluster.clearLayers();
+        if (historyPolyline) {
+          mapInstance.removeLayer(historyPolyline);
+          historyPolyline = null;
+        }
+
+        const enrichedPoints = await enrichRowsWithCoordinates(points || []);
+        if (enrichedPoints.length === 0) {
+          setMapState('No locations were found for the current filters.');
+          return;
+        }
+
+        const markerBounds = [];
+        enrichedPoints.forEach((row) => {
+          const status = row.status || buildStatus(row.start_date, row.end_date);
+          const highlighted = !!(selectedCollaborator && row.collaborator_name === selectedCollaborator);
+          const marker = window.L.marker([row.latitude, row.longitude], {
+            icon: createMarkerIcon(status, highlighted),
+            title: row.collaborator_name || '',
+          });
+          marker.bindPopup(popupHtml(row), { maxWidth: 280 });
+          mapCluster.addLayer(marker);
+          markerBounds.push([row.latitude, row.longitude]);
+        });
+
+        const historyRows = history || [];
+        if (historyRows.length > 1) {
+          const historyWithCoords = await enrichRowsWithCoordinates(historyRows);
+          const historyPoints = historyWithCoords.map((item) => [item.latitude, item.longitude]);
+          if (historyPoints.length > 1) {
+            historyPolyline = window.L.polyline(historyPoints, {
+              color: '#0a6b80',
+              weight: 3,
+              opacity: 0.85,
+              dashArray: '8 5',
+            }).addTo(mapInstance);
+            markerBounds.push(...historyPoints);
+          }
+        }
+
+        mapInstance.addLayer(mapCluster);
+        if (markerBounds.length > 0) {
+          mapInstance.fitBounds(markerBounds, { padding: [38, 38], maxZoom: 5 });
+        }
+
+        if (!tileLoadIssue) {
+          setMapState('');
+        }
+      }
+
+      function setViewMode(view) {
+        currentView = view === 'map' ? 'map' : 'table';
+
+        if (tableViewWrapper) {
+          tableViewWrapper.style.display = currentView === 'table' ? '' : 'none';
+        }
+        if (mapViewWrapper) {
+          mapViewWrapper.style.display = currentView === 'map' ? '' : 'none';
+        }
+        if (pageSizeWrap) {
+          pageSizeWrap.style.display = currentView === 'table' ? '' : 'none';
+        }
+        if (paginationWrap) {
+          paginationWrap.style.display = currentView === 'table' ? '' : 'none';
+        }
+
+        if (viewModeNode) {
+          const buttons = viewModeNode.querySelectorAll('.fb-view-btn');
+          buttons.forEach((button) => {
+            const active = button.getAttribute('data-view') === currentView;
+            button.classList.toggle('is-active', active);
+            button.setAttribute('aria-pressed', active ? 'true' : 'false');
+          });
+        }
+
+        if (currentView === 'map') {
+          fetchFormsTemporaryChangesLocationMap().finally(() => {
+            if (mapInstance) {
+              setTimeout(function () {
+                mapInstance.invalidateSize();
+              }, 20);
+            }
+          });
+        } else {
+          fetchFormsTemporaryChangesLocation();
+        }
+      }
+
+      function buildFilterQuery(baseParts) {
+        const searchQuery = (searchBox ? searchBox.value : '').trim();
+        const departmentFilter = selectBox ? selectBox.value : '';
+        const statusFilter = selectBoxStatus ? selectBoxStatus.value : '';
+        const parts = baseParts ? baseParts.slice() : [];
+
+        if (searchQuery) parts.push(`search=${encodeURIComponent(searchQuery)}`);
+        if (departmentFilter) parts.push(`department=${encodeURIComponent(departmentFilter)}`);
+        if (statusFilter) parts.push(`status=${encodeURIComponent(statusFilter)}`);
+
+        return parts.join('&');
+      }
+
+      function renderTable(forms) {
+        table.innerHTML = '';
+
+        if (!forms || forms.length === 0) {
+          const row = document.createElement('tr');
+          row.innerHTML = '<td colspan="6" style="text-align:center;">No data found</td>';
+          table.appendChild(row);
+          return;
+        }
+
+        forms.forEach((form) => {
+          const row = document.createElement('tr');
+          const country = (form.country || '').trim();
+          const statusTd = getStatusHtml(form.start_date, form.end_date);
+          row.setAttribute(
+            'onclick',
+            `openTemporaryChangeLocationViewModal(${form.id});return false;`
+          ) 
+          row.innerHTML = `
+            <td>${form.collaborator_name || ''}</td>
+            <td>${form.department || ''}</td>
+            <td><img src="/countries/${country}.png" alt="${country} flag" width="32"> ${country}</td>
+            <td><i style="padding-right:3px;" class="fas fa-calendar-alt"></i>${form.start_date || ''}</td>
+            <td><i style="padding-right:3px;" class="fas fa-calendar-check"></i>${form.end_date || ''}</td>
+            ${statusTd}
+          `;
+
+          table.appendChild(row);
+        });
+      }
+
+      function renderPagination(totalRows) {
+        const rowsPerPage = getRowsPerPage();
+        const totalPages = Math.max(1, Math.ceil(totalRows / rowsPerPage));
+        const currentPageText = document.querySelector('#totalCount');
+        const prevButton = document.querySelector('.fb-page-btn[aria-label="Previous"]');
+        const nextButton = document.querySelector('.fb-page-btn[aria-label="Next"]');
+
+        if (currentPage > totalPages) {
+          currentPage = totalPages;
+        }
+
+        if (currentPageText) {
+          currentPageText.textContent = `Current page ${currentPage} of ${totalPages}`;
+        }
+
+        if (prevButton) prevButton.disabled = currentPage === 1;
+        if (nextButton) nextButton.disabled = currentPage >= totalPages;
+      }
+
+      function changePage(pageNumber) {
+        if (currentView !== 'table') {
+          return;
+        }
+
+        const totalPages = Math.max(1, Math.ceil(totalCount / getRowsPerPage()));
+        if (pageNumber < 1 || pageNumber > totalPages) {
+          return;
+        }
+
+        currentPage = pageNumber;
+        fetchTableData();
+      }
+
+      const debouncedFetch = debounce(function () {
+        refreshCurrentView();
+      }, 350);
+
+      function SearchTableRequest() {
+        currentPage = 1;
+        debouncedFetch();
+      }
+
+      function SelectTableTemporary() {
+        currentPage = 1;
+        refreshCurrentView();
+      }
+
+      function resetFilters() {
+        if (searchBox) searchBox.value = '';
+        if (selectBox) selectBox.value = '';
+        if (selectBoxStatus) selectBoxStatus.value = '';
+
+        const pageSize = document.getElementById('SelectBoxPages');
+        if (pageSize) pageSize.value = '15';
+
+        currentPage = 1;
+        refreshCurrentView();
+      }
+
+      function refreshCurrentView() {
+        if (currentView === 'map') {
+          return fetchFormsTemporaryChangesLocationMap();
+        }
+        return fetchTableData();
+      }
+
+      async function fetchTableData() {
+        const limit = getRowsPerPage();
+        const query = buildFilterQuery([`page=${currentPage}`, `limit=${limit}`]);
+        const request = `/forms_it_temporary_change_locations?${query}`;
+
+        try {
+          const response = await fetch(request);
+          if (!response.ok) {
+            throw new Error('Status ' + response.status);
+          }
+
+          const data = await response.json();
+          totalCount = Number(data.totalCount || 0);
+          renderTable(data.formData && data.formData.recordset ? data.formData.recordset : []);
+          renderPagination(totalCount);
+        } catch (error) {
+          console.error(error);
+          table.innerHTML = '<tr><td colspan="6" style="text-align:center;">Error loading data</td></tr>';
+          totalCount = 0;
+          renderPagination(0);
+        }
+      }
+
+      async function fetchFormsTemporaryChangesLocationMap() {
+        const selectedStatus = selectBoxStatus ? selectBoxStatus.value : '';
+        const mapStatus = selectedStatus || 'Ongoing';
+        const query = buildFilterQuery([`status=${encodeURIComponent(mapStatus)}`]);
+        const request = `/forms_it_temporary_change_locations_map?${query}`;
+        setMapState('Loading map data...');
+
+        try {
+          const response = await fetch(request);
+          if (!response.ok) {
+            throw new Error('Status ' + response.status);
+          }
+
+          const payload = await response.json();
+          await renderMap(
+            Array.isArray(payload.points) ? payload.points : [],
+            Array.isArray(payload.history) ? payload.history : [],
+            payload.selectedCollaborator || '',
+            payload.counters || { Planned: 0, Ongoing: 0, Finished: 0 },
+          );
+        } catch (error) {
+          console.error(error);
+          setMapState('Error loading map data', true);
+          renderCounters({ Planned: 0, Ongoing: 0, Finished: 0 });
+          renderTimeline([], '');
+        }
+      }
+
+      function wireViewToggle() {
+        if (!viewModeNode) return;
+        viewModeNode.addEventListener('click', function (event) {
+          const button = event.target.closest('.fb-view-btn');
+          if (!button) return;
+          const view = button.getAttribute('data-view') || 'table';
+          setViewMode(view);
+        });
+      }
+
+      window.fetchFormsTemporaryChangesLocation = refreshCurrentView;
+      window.SearchTableRequest = SearchTableRequest;
+      window.SelectTableTemporary = SelectTableTemporary;
+      window.resetFilters = resetFilters;
+      window.changePage = changePage;
+
+      document.addEventListener('DOMContentLoaded', function () {
+        wireViewToggle();
+        fetchTableData();
+      });
+
+  include ./forms_it_temporary_change_location_modal

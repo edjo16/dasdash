@@ -1,0 +1,141 @@
+mixin meeting-action-block(meeting, meetActions, actionContacts, actionResponsibles, users, eventId, userId, idx)
+  - var _psvg = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>'
+  div.meeting-report-block(data-meeting-id=`${meeting.id}`)
+    div.meeting-report-header
+      span.meeting-report-num Meeting ##{idx + 1}
+      span.meeting-report-name — #{meeting.meeting_name}
+      if meeting.meeting_address
+        span.meeting-report-addr  · #{meeting.meeting_address}
+    div.table-responsive
+      table.actions-table(id=`actionsTable_${meeting.id}`)
+        thead
+          tr
+            th Contact
+            th Meeting Details
+            th Meet Date
+            th.highlight-col Action Points
+            th Due Date
+            th.highlight-col Responsible
+            th Priority
+            th CRM
+            th
+        tbody
+          each action in meetActions
+            - var acList = actionContacts[String(action.id)] || []
+            - var arList = actionResponsibles[String(action.id)] || []
+            tr(
+              data-id=`${action.id}`
+              data-meeting-id=`${meeting.id}`
+              data-event-id=`${eventId}`
+              class=action.crm_id ? 'row-locked' : ''
+            )
+              td
+                div.acb-bar(data-action-id=`${action.id}` data-acb="1")
+                  span.acb-chips
+                    each ac in acList
+                      span.acb-chip(data-contact-id=`${ac.contact_id}`)
+                        | #{ac.name}#{ac.company_name ? ' (' + ac.company_name + ')' : ''}
+                        if !action.crm_id && meeting.meeting_status !== 'closed'
+                          button.acb-chip-remove(type="button" title="Remove") ×
+                  if !action.crm_id && meeting.meeting_status !== 'closed'
+                    button.acb-add-btn(type="button")
+                      svg(xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2")
+                        path(d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2")
+                        circle(cx="12" cy="7" r="4")
+                    div.acb-dropdown.action-chip-dropdown(hidden)
+                      div.acb-dd-header.action-chip-dropdown-header
+                        input.acb-search.action-chip-search(type="text" placeholder="Search contacts...")
+                        button.acb-refresh-btn.action-chip-refresh(type="button" title="Refresh") ⟳
+                        a.acb-new-btn.action-chip-new-link(href=`/badaco-contacts/create`) + New
+                      ul.acb-list.action-chip-list
+              td: input.action-input(type="text" data-field="meeting_details" value=`${action.meeting_details || ''}` placeholder="Details" readonly=action.crm_id || meeting.meeting_status === 'closed' ? true : false)
+              td: input.action-input(type="text" data-field="meet_date" value=`${action.meet_date_fmt ? action.meet_date_fmt.split('-').reverse().join('/') : ''}` placeholder="dd/mm/aaaa" readonly=action.crm_id || meeting.meeting_status === 'closed' ? true : false)
+              td: input.action-input.highlight-input(type="text" data-field="action_points" value=`${action.action_points || ''}` placeholder="Action point" readonly=action.crm_id || meeting.meeting_status === 'closed' ? true : false)
+              td: input.action-input(type="text" data-field="due_date" value=`${action.due_date_fmt ? action.due_date_fmt.split('-').reverse().join('/') : ''}` placeholder="dd/mm/aaaa" readonly=action.crm_id || meeting.meeting_status === 'closed' ? true : false)
+              td
+                div.arb-bar(data-action-id=`${action.id}` data-arb="1")
+                  span.arb-chips
+                    each resp in arList
+                      - var respUser = users.find(function(u){ return u.UserID === resp; })
+                      span.arb-chip(data-user-id=`${resp}`)
+                        img.arb-avatar(src=`/pic/${resp}.png` width="18" height="18" onerror="this.onerror=null;this.src='/pic/default.png';" title=respUser ? respUser.Name : resp)
+                        | #{respUser ? respUser.Name : resp}
+                        if !action.crm_id && meeting.meeting_status !== 'closed'
+                          button.arb-chip-remove(type="button" title="Remove") ×
+                  if !action.crm_id && meeting.meeting_status !== 'closed'
+                    button.arb-add-btn(type="button")
+                      svg(xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2")
+                        path(d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2")
+                        circle(cx="12" cy="7" r="4")
+                    div.arb-dropdown.action-chip-dropdown.action-chip-dropdown--users(hidden)
+                      div.action-chip-dropdown-header
+                        input.arb-search.action-chip-search.action-chip-search--full(type="text" placeholder="Search users...")
+                      ul.arb-list.action-chip-list
+              td
+                select.action-input(data-field="priority" disabled=action.crm_id || meeting.meeting_status === 'closed' ? true : false)
+                  option(value="" selected=(!action.priority)) —
+                  option(value="0" selected=(action.priority==0)) Normal
+                  option(value="1" selected=(action.priority==1)) Important
+                  option(value="2" selected=(action.priority==2)) Urgent
+              td
+                if action.crm_id
+                  a.crm-badge(href=`/crm_msg?crm_id=${action.crm_id}` title=`CRM #${action.crm_id}`)
+                    i.fas.fa-link
+                    |  ##{action.crm_id}
+                else
+                  span.text-muted —
+              td.row-actions-cell
+                if !action.crm_id && meeting.meeting_status !== 'closed'
+                  button.btn-row-remove(type="button" title="Remove" onclick="deleteMeetingAction(this)")
+                    i.fas.fa-times
+          if meeting.meeting_status !== 'closed'
+            tr.new-row-placeholder(data-meeting-id=`${meeting.id}` data-event-id=`${eventId}`)
+              td
+                div.acb-bar(data-action-id="" data-placeholder="1")
+                  span.acb-chips
+                  button.acb-add-btn(type="button")
+                    svg(xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2")
+                      path(d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2")
+                      circle(cx="12" cy="7" r="4")
+                  div.acb-dropdown.action-chip-dropdown(hidden)
+                    div.acb-dd-header.action-chip-dropdown-header
+                      input.acb-search.action-chip-search(type="text" placeholder="Search contacts...")
+                      button.acb-refresh-btn.action-chip-refresh(type="button" title="Refresh") ⟳
+                      a.acb-new-btn.action-chip-new-link(href=`/badaco-contacts/create`) + New
+                    ul.acb-list.action-chip-list
+              td: input.action-input(type="text" data-field="meeting_details" placeholder="Details")
+              td: input.action-input(type="text" data-field="meet_date" placeholder="dd/mm/aaaa")
+              td: input.action-input.highlight-input(type="text" data-field="action_points" placeholder="Action point")
+              td: input.action-input(type="text" data-field="due_date" placeholder="dd/mm/aaaa")
+              td
+                div.arb-bar(data-action-id="" data-placeholder="1")
+                  span.arb-chips
+                  button.arb-add-btn(type="button")
+                    svg(xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2")
+                      path(d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2")
+                      circle(cx="12" cy="7" r="4")
+                  div.arb-dropdown.action-chip-dropdown.action-chip-dropdown--users(hidden)
+                    div.action-chip-dropdown-header
+                      input.arb-search.action-chip-search.action-chip-search--full(type="text" placeholder="Search users...")
+                    ul.arb-list.action-chip-list
+              td
+                select.action-input(data-field="priority")
+                  option(value="0") Normal
+                  option(value="1") Important
+                  option(value="2") Urgent
+              td
+              td.row-actions-cell
+                button.btn-row-add(type="button" onclick="commitNewRow(this)")
+                  i.fas.fa-plus
+                  |  Add
+    script.
+      if (typeof initActionDatePickers === 'undefined') {
+        function initActionDatePickers(context) {
+          $(context).find('input[data-field="meet_date"]:not([readonly]), input[data-field="due_date"]:not([readonly])').each(function() {
+            if (!$(this).hasClass('hasDatepicker')) {
+              $(this).datepicker({ dateFormat: 'dd/mm/yy' });
+            }
+          });
+        }
+        $(document).ready(function() { initActionDatePickers(document); });
+      }

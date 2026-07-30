@@ -1,0 +1,251 @@
+extends ../layout
+include ../mixins/breadcrumb
+
+block layout-content
+  div#layoutSidenav_content
+    main
+      div.container-fluid.px-4
+        div.mt-4(style="display:flex; justify-content: space-between; align-items: center;")
+          +app-breadcrumb({
+            homeHref: '/',
+            items: [
+              { label: 'Users', href: '/users' },
+              { label: user.Name, active: true }
+            ]
+          })
+          a.btn.btn-primary(href=`/users/edit/${user.Id}`)
+            i.fas.fa-edit.me-1
+            | Edit User
+
+        div.row
+          div.col-xl-12.mt-4
+            div.card.mb-4
+              div.card-header
+                i.fas.fa-user.me-1
+                | General Information
+              div.card-body
+                div.row.mb-3
+                  div.col-md-3
+                    strong Name:
+                    p= user.Name
+                  div.col-md-3
+                    strong UserID:
+                    p= user.UserID
+                  div.col-md-3
+                    strong Position:
+                    p= user.xcargo || '-'
+                  div.col-md-3
+                    strong Status:
+                    if user.Estado == 1 || user.Estado == true
+                      span.badge.bg-success.ms-2 Active
+                    else
+                      span.badge.bg-secondary.ms-2 Inactive
+
+                  div.col-md-3
+                    strong Email:
+                    p
+                      a(href=`mailto:${user.Email}`)= user.Email
+
+                  div.col-md-3
+                    strong Manager:
+                    p= user.manager_name || user.Manager || '-'
+                  div.col-md-3
+                    strong Vacations:
+                    if user.vacaciones == 1 || user.vacaciones == true
+                        span.badge.bg-info Yes
+                    else
+                        span.badge.bg-secondary No
+                  div.col-md-3
+                    strong Account Status:
+                    if isLocked
+                      span.badge.bg-danger.ms-2 Locked
+                    else
+                      span.badge.bg-success.ms-2 Unlocked
+                  div.col-md-3
+                    if isLocked
+                      button#unlockUserBtn.btn.btn-danger(type='button', data-userid=user.UserID)
+                        i.fas.fa-lock-open.me-1
+                        | Unlock Account
+                      small.text-muted.d-block.mt-1 This will allow the user to log in again.
+
+        div.row
+          div.col-xl-6
+            div.card.mb-4
+              div.card-header
+                i.fas.fa-building.me-1
+                | Company Information
+              div.card-body
+                div.row.mb-2
+                    div.col-md-6
+                        strong Company:
+                        p= user.compania_nombre || user.compania || '-'
+                    div.col-md-6
+                        strong Primary Department:
+                        p= user.departamento_nombre || user.departamento || '-'
+
+                    div.col-md-6
+                        strong All User Companies:
+                        if userCompanies && userCompanies.length > 0
+                            ul.list-group.list-group-flush
+                            each company in userCompanies
+                                li.list-group-item= company.xnombre
+                        else
+                            p -
+
+                    div.col-md-6
+                        strong All User Departments:
+                        if userDepartments && userDepartments.length > 0
+                            ul.list-group.list-group-flush
+                            each dept in userDepartments
+                                li.list-group-item= dept.nombre
+                        else
+                            p -
+          div.col-xl-6
+            div.card.mb-4
+              div.card-header
+                i.fas.fa-key.me-1
+                | Permissions and Modules
+              div.card-body
+                div.row.mb-2
+                  div.col-md-6
+                    strong M_Admin:
+                    if user.M_Admin !== 'Not'
+                      span.badge.bg-primary.ms-2= user.M_Admin
+                    else
+                      span.badge.bg-secondary.ms-2 No
+                  div.col-md-6
+                    strong M_Conta:
+                    if user.M_Conta !== 'Not'
+                      span.badge.bg-primary.ms-2= user.M_Conta
+                    else
+                      span.badge.bg-secondary.ms-2 No
+
+                div.row.mb-2
+                  div.col-md-6
+                    strong M_CRM:
+                    if user.M_CRM !== 'Not'
+                      span.badge.bg-primary.ms-2= user.M_CRM
+                    else
+                      span.badge.bg-secondary.ms-2 No
+                  div.col-md-6
+                    strong F_IT:
+                    if user.F_IT !== 'Not'
+                      span.badge.bg-primary.ms-2= user.F_IT
+                    else
+                      span.badge.bg-secondary.ms-2 No
+
+                div.row.mb-2
+                  div.col-md-6
+                    strong F_Conta:
+                    if user.F_Conta !== 'Not'
+                      span.badge.bg-primary.ms-2= user.F_Conta
+                    else
+                      span.badge.bg-secondary.ms-2 No
+                  div.col-md-6
+                    strong F_Admin:
+                    if user.F_Admin !== 'Not'
+                      span.badge.bg-primary.ms-2= user.F_Admin
+                    else
+                      span.badge.bg-secondary.ms-2 No
+
+                div.row.mb-2
+                  div.col-md-6
+                    strong F_Finanzas:
+                    if user.F_Finanzas !== 'Not'
+                      span.badge.bg-primary.ms-2= user.F_Finanzas
+                    else
+                      span.badge.bg-secondary.ms-2 No
+                  div.col-md-6
+                    strong F_Governance:
+                    if user.F_Governance !== 'Not'
+                      span.badge.bg-primary.ms-2= user.F_Governance
+                    else
+                      span.badge.bg-secondary.ms-2 No
+
+                div.row.mb-2
+                  div.col-md-6
+                    strong F_HR:
+                    if user.F_HR !== 'Not'
+                      span.badge.bg-primary.ms-2= user.F_HR
+                    else
+                      span.badge.bg-secondary.ms-2 No
+
+                div.mb-3
+                  strong Modules:
+                  p= user.Modules || '-'
+
+                div.mb-3
+                  strong Group:
+                  p= user.Grupo || '-'
+
+            div.card.mb-4
+                div.card-header
+                    i.fas.fa-cog.me-1
+                    | Technical Information
+                div.card-body.row.mb-2 
+                    div.col-md-6
+                        strong Location:
+                        p= user.Location || '-'
+
+                    div.col-md-6
+                        strong Location1:
+                        p= user.Location1 || '-'
+
+                    div.col-md-6
+                        strong User Type:
+                        p= user.user_type || '-'
+
+                    div.col-md-6
+                        strong PC:
+                        p= user.PC || '-'
+
+        div.row
+          div.col-xl-12
+            div.card.mb-4
+              div.card-header
+                i.fas.fa-clock.me-1
+                | Dates and Audit
+              div.card-body
+                div.row.mb-3
+                  div.col-md-4
+                    strong Entry Date:
+                    p= user.fingreso ? new Date(user.fingreso).toLocaleDateString() : '-'
+                  div.col-md-4
+                    strong Modification Date:
+                    p= user.fmodificado ? new Date(user.fmodificado).toLocaleDateString() : '-'
+                  div.col-md-4
+                    strong Status Until:
+                    p= user.EstadoHasta ? new Date(user.EstadoHasta).toLocaleDateString() : '-'
+
+                div.row.mb-3
+                  div.col-md-4
+                    strong Creator User:
+                    p= user.cusuario || '-'
+
+    script.
+      document.addEventListener('DOMContentLoaded', function () {
+        var btn = document.getElementById('unlockUserBtn');
+        if (!btn) return;
+        btn.addEventListener('click', function () {
+          var userId = btn.getAttribute('data-userid');
+          if (!userId) return;
+          showModal('Unlock this account? The user will be able to log in again.', function () {
+            fetch('/api/auth/unlock-account', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ identifier: userId })
+            })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+              if (data.ok) {
+                var badge = btn.closest('.col-md-3').previousElementSibling.querySelector('.badge');
+                if (badge) { badge.className = 'badge bg-success ms-2'; badge.textContent = 'Unlocked'; }
+                btn.remove();
+              } else {
+                alert('Error: ' + (data.message || 'Could not unlock'));
+              }
+            })
+            .catch(function () { alert('Network error'); });
+          }, null, { title: 'Confirm', okText: 'Yes, unlock', type: 'warning' });
+        });
+      });

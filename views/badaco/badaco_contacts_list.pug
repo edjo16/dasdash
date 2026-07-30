@@ -1,0 +1,340 @@
+extends ../layout
+include ../ui/filter-bar
+include ../mixins/data-table
+include ../mixins/breadcrumb
+
+block layout-content
+  div#layoutSidenav_content
+    main
+      div.container-fluid.px-4
+        +app-breadcrumb({
+          homeHref: '/',
+          items: [{ label: title, active: true }]
+        })
+        
+        div#alertContainer
+
+        - var companyItems = (typeof companies !== 'undefined' ? companies : []).map(function(company) { return { value: company.bmc_id, label: company.nombre }; })
+        - var jobLevelItems = (typeof jobLevels !== 'undefined' ? jobLevels : []).map(function(level) { return { value: level.bmjl_id, label: level.name }; })
+        - var countryItems = (typeof countries !== 'undefined' ? countries : []).map(function(country) { return { value: country, label: country }; })
+
+        +fb-bar
+          a#newContactBtn.fb-btn.badaco-new-contact(href='/badaco-contacts/create')
+            i.fas.fa-plus
+            span New Contact
+          +fb-select({id: 'companyFilter', icon: 'fa-signature', items: companyItems, placeholder: 'All Companies', placeholderDisabled: false, minWidth: '175px'})
+          +fb-select({id: 'jobLevelFilter', icon: 'fa-layer-group', items: jobLevelItems, placeholder: 'All Job Levels', placeholderDisabled: false, minWidth: '175px'})
+          +fb-select({id: 'countryFilter', icon: 'fa-globe-americas', items: countryItems, placeholder: 'All Countries', placeholderDisabled: false, minWidth: '175px'})
+          +fb-actions
+            +fb-download-btn({onclick: 'downloadExcel(event)'})
+            +fb-search({id: 'searchInput', placeholder: 'Search'})
+            +fb-view-toggle({id: 'badacoContactsViewMode', tableId: 'contactsTable', ariaLabel: 'Select contacts data view'})
+            +fb-reset-btn({onclick: 'resetFilters()'})
+            +fb-page-size({id: 'pageSizeSelector', sizes: [15, 25, 50], defaultSize: 15})
+            +fb-pagination({onPrev: 'changePage(currentPage - 1)', onNext: 'changePage(currentPage + 1)'})
+                
+        +data-table('contactsTable', 'totalCount', { internalViewToggle: false })
+          thead
+            tr
+              th Company
+              th Name
+              th Job Level
+              th Job Title
+              th Country
+          tbody.bg-white
+            tr
+              td.text-center(colspan='7')
+                i.fas.fa-spinner.fa-spin.me-2
+                | Loading contacts...
+
+  style.
+    .badaco-new-contact {
+      background-color: #00586f;
+      border-color: #00586f;
+      color: #ffffff;
+    }
+
+    .badaco-new-contact:hover {
+      background-color: #004456;
+      border-color: #004456;
+      color: #ffffff;
+    }
+
+    #contactsTable {
+      min-width: 900px;
+    }
+
+    #contactsTable > thead {
+      background-color: #00586f;
+      color: #ffffff;
+    }
+
+    #contactsTable th {
+      font-size: 1em;
+    }
+
+    .fb-page-btn.disabled,
+    .fb-page-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    #contactsTable tbody tr {
+      cursor: pointer;
+    }
+
+    #contactsTable tbody tr:hover {
+      background-color: #f8f9fa;
+    }
+
+    .badge {
+      font-size: 0.75rem;
+      padding: 0.35rem 0.65rem;
+    }
+
+    .table td {
+      vertical-align: middle;
+    }
+
+  script.
+    let currentPage = 1;
+    let pageSize = 15;
+    let totalPages = 1;
+    let currentFilters = {};
+
+    function escapeHtml(value) {
+      return String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+    
+    // Load contacts data
+    async function loadContacts() {
+      try {
+        const params = new URLSearchParams({
+          limit: pageSize,
+          page: currentPage,
+          ...currentFilters
+        });
+        
+        const response = await fetch(`/badaco/api/contacts?${params}`);
+        const data = await response.json();
+        
+        if (data.success) {
+          const rows = Array.isArray(data.data) ? data.data : [];
+          totalPages = Math.max(Number(data.totalPages) || 1, 1);
+          renderTable(rows);
+          updatePaginationButtons();
+          updateTotalCount(Number(data.total) || 0, Number(data.page) || currentPage, Number(data.limit) || pageSize, rows.length);
+        } else {
+          showAlert('Error loading contacts: ' + data.error, 'danger');
+        }
+      } catch (error) {
+        console.error('Error:', error);
+        showAlert('Error loading contacts', 'danger');
+      }
+    }
+    
+    // Change page
+    function changePage(newPage) {
+      if (newPage < 1 || newPage > totalPages) return;
+      currentPage = newPage;
+      loadContacts();
+    }
+    
+    // Update pagination buttons state
+    function updatePaginationButtons() {
+      const prevBtn = document.querySelector('.fb-page-btn[aria-label="Previous"]');
+      const nextBtn = document.querySelector('.fb-page-btn[aria-label="Next"]');
+
+      if (!prevBtn || !nextBtn) {
+        return;
+      }
+      
+      prevBtn.disabled = currentPage <= 1;
+      prevBtn.classList.toggle('disabled', prevBtn.disabled);
+      
+      nextBtn.disabled = currentPage >= totalPages;
+      nextBtn.classList.toggle('disabled', nextBtn.disabled);
+    }
+    
+    // Update total count display
+    function updateTotalCount(total, page, limit, count) {
+      const start = total === 0 ? 0 : (page - 1) * limit + 1;
+      const end = total === 0 ? 0 : (page - 1) * limit + count;
+      document.getElementById('totalCount').textContent = `Showing ${start} to ${end} of ${total} contacts (Page ${page} of ${totalPages})`;
+    }
+    
+    // Render table
+    function renderTable(contacts) {
+      const tbody = document.querySelector('#contactsTable tbody');
+      
+      if (contacts.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" class="text-center">No contacts found</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = contacts.map(contact => `
+        <tr onclick="window.location.href='/badaco-contacts/edit/${encodeURIComponent(String(contact.contact_id || ''))}'">
+          <td>${contact.company_name ? escapeHtml(contact.company_name) : '-'}</td>
+          <td>${contact.name ? escapeHtml(contact.name) : '-'}</td>
+          <td>
+            ${contact.job_level_name ? `<span class="badge bg-info">${escapeHtml(contact.job_level_name)}</span>` : '-'}
+          </td>
+          <td>${contact.job_title ? escapeHtml(contact.job_title) : '-'}</td>
+          <td>${contact.contact_country_name ? escapeHtml(contact.contact_country_name) : '-'}</td>
+        </tr>
+      `).join('');
+    }
+    
+    
+    // Show alert
+    function showAlert(message, type) {
+      const alertContainer = document.getElementById('alertContainer');
+      alertContainer.innerHTML = `
+        <div class="alert alert-${type} alert-dismissible fade show" role="alert">
+          ${message}
+          <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+      `;
+      
+      setTimeout(() => {
+        alertContainer.innerHTML = '';
+      }, 5000);
+    }
+    
+    // Reset filters
+    function resetFilters() {
+      currentFilters = {};
+      currentPage = 1;
+      pageSize = 15;
+      document.getElementById('searchInput').value = '';
+      document.getElementById('companyFilter').value = '';
+      document.getElementById('jobLevelFilter').value = '';
+      document.getElementById('countryFilter').value = '';
+      document.getElementById('pageSizeSelector').value = '15';
+      loadContacts();
+    }
+    
+    // Event listeners
+    document.addEventListener('DOMContentLoaded', function() {
+      loadContacts();
+
+      const pageSizeSelector = document.getElementById('pageSizeSelector');
+      const searchInput = document.getElementById('searchInput');
+      const companyFilter = document.getElementById('companyFilter');
+      const jobLevelFilter = document.getElementById('jobLevelFilter');
+      const countryFilter = document.getElementById('countryFilter');
+      
+      // Page size selector
+      if (pageSizeSelector) {
+        pageSizeSelector.addEventListener('change', function() {
+          pageSize = parseInt(this.value, 10);
+          currentPage = 1;
+          loadContacts();
+        });
+      }
+      
+      // Search input
+      let searchTimeout;
+      if (searchInput) {
+        searchInput.addEventListener('input', function() {
+          clearTimeout(searchTimeout);
+          searchTimeout = setTimeout(() => {
+            const normalizedSearch = this.value.trim();
+            if (normalizedSearch) {
+              currentFilters.search = normalizedSearch;
+            } else {
+              delete currentFilters.search;
+            }
+            currentPage = 1;
+            loadContacts();
+          }, 500);
+        });
+      }
+      
+      // Company filter
+      if (companyFilter) {
+        companyFilter.addEventListener('change', function() {
+          if (this.value) {
+            currentFilters.bmc_id = this.value;
+          } else {
+            delete currentFilters.bmc_id;
+          }
+          currentPage = 1;
+          loadContacts();
+        });
+      }
+      
+      // Job level filter
+      if (jobLevelFilter) {
+        jobLevelFilter.addEventListener('change', function() {
+          if (this.value) {
+            currentFilters.bmjl_id = this.value;
+          } else {
+            delete currentFilters.bmjl_id;
+          }
+          currentPage = 1;
+          loadContacts();
+        });
+      }
+      
+      // Country filter
+      if (countryFilter) {
+        countryFilter.addEventListener('change', function() {
+          if (this.value) {
+            currentFilters.country = this.value;
+          } else {
+            delete currentFilters.country;
+          }
+          currentPage = 1;
+          loadContacts();
+        });
+      }
+    });
+    
+    // Download Excel function
+    function downloadExcel(e) {
+      if (e && typeof e.preventDefault === 'function') {
+        e.preventDefault();
+      }
+      
+      const datatoSend = {
+        'search': document.getElementById('searchInput').value,
+        'bmc_id': document.getElementById('companyFilter').value,
+        'bmjl_id': document.getElementById('jobLevelFilter').value,
+        'country': document.getElementById('countryFilter').value,
+        'type': 'excel'
+      };
+      
+      const date = new Date().toISOString().replace(/[:.]/g, '-');
+      $.ajax({
+        url: '/badaco/download-excel',
+        type: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({
+          'data': datatoSend,
+          'type': 'excel'
+        }),
+        xhrFields: {
+          responseType: 'blob'  
+        },
+        success: function(response) {
+          const blobUrl = URL.createObjectURL(response);
+          const link = document.createElement('a');
+          link.href = blobUrl;
+          link.download = 'badaco-contacts-' + date + '.xlsx';
+          document.body.appendChild(link);
+          link.click(); 
+          document.body.removeChild(link);
+          URL.revokeObjectURL(blobUrl);
+        },
+        error: function(xhr, status, error) {
+          console.error('Error downloading file:', error);
+          showAlert('There was an error generating the Excel file.', 'danger');
+        }
+      });
+    }

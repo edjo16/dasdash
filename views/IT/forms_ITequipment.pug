@@ -1,0 +1,68 @@
+extends ../layout
+block layout-content
+  div#layoutSidenav_content
+    main
+      div.container-fluid.px-4
+        a(href="/" style="color:#212529")
+            i.fas.fa-chevron-left
+            span(href="/" style="padding-left: 0.5rem;") Home
+        h1.mt-4 #{title}
+        ol.breadcrumb.mb-4
+          li.breadcrumb-item.active Cualquier uso inadecuado sobre esta unidad, la perdida, extravío, daño a cualquier situación que involucre un riesgo sobre el equipo entregado, es responsabilidad del colaborador reponerlo en un lapso no mayor a un mes bajo condiciones estipuladas por Active Capital Reinsurance, LTD. El colaborador debe entregar el equipo al Dpto. de Sistemas al momento de dejar sus funciones en la empresa.
+        form(method="POST" action="forms_ITequipment" enctype="multipart/form-data")
+            div.row
+                div.col-md-4
+                    label 1. Equipos a retirar de la oficina:
+                    br
+                    input#backpackcheck.form-check-input(type="checkbox" tag="backpack" value="1" style="margin: 5px 1rem;" onclick="check(this);")
+                    label Backpack (Delivered by IT)
+                    br
+                    input#dockstationcheck.form-check-input(type="checkbox" tag="dockstation" value="1" style="margin: 5px 1rem;" onclick="check(this);")
+                    label Dockstation
+                    br
+                    input#laptopcheck.form-check-input(type="checkbox" tag="laptop" value="1" style="margin: 5px 1rem;" onclick="check(this);")
+                    label Laptop
+                    br
+                    input#monitorcheck.form-check-input(type="checkbox" tag="monitor" value="1" style="margin: 5px 1rem;" onclick="check(this);")
+                    label Monitor
+                    br
+                    input#tabletcheck.form-check-input(type="checkbox" tag="tablet" value="1" style="margin: 5px 1rem;" onclick="check(this);")
+                    label Tablet
+            hr
+            div.row
+                div.col-md-4
+                    label 2. Fecha de Retiro:
+                    input#fretiro.form-control(type="date" name="fretiro" required onchange="datemin(this);")
+                div.col-md-4
+                    label 3. Fecha de Reintegro:
+                    input#freintegro.form-control(type="date" name="freintegro" required)
+            //- hr
+            //- div.row
+            //-     div.col-md-12
+            //-         label 4. En caso que su superior este de vacaciones, seleccione que persona aprueba el retiro:
+            //-     div.col-md-4
+            //-         select#Aprobador.form-control(name="Aprobador")
+            //-             if(userProfile.UsuarioID=="lossa")
+            //-                 option(value="Luis Ossa") Luis Ossa
+            //-             option(value="") 
+            //-             option(value="Christian Vergara") Christian Vergara
+            //-             option(value="Dafne Gutiérrez") Dafne Gutiérrez
+            //-             option(value="Nelly") Nelly
+            //-             option(value="Ramón Martínez") Ramón Martínez
+            .row.Not
+                input#backpack(name='backpack' value=0 style="display: none;")
+                input#dockstation(name='dockstation' value=0 style="display: none;")
+                input#laptop(name='laptop' value=0 style="display: none;")
+                input#monitor(name='monitor' value=0 style="display: none;")
+                input#tablet(name='tablet' value=0 style="display: none;")
+                input#UserID(name='UserID' value=userProfile.UserID style="display: none;")
+                input#UserName(name='UserName' value=userProfile.UserName style="display: none;")
+                input#UserManager(name='UserManager' value=userProfile.UserManager style="display: none;")
+                input#dbdevteam(name='dbdevteam' value=dbdevteam style="display: none;")
+            hr
+            div.row
+                div.col-md-2
+                    button#Financebtn.form-control( style="background-color: #00586f;color: #e9ecef;" ) Submit
+            if(okForm==1)
+                div
+                    p#mensaje Success

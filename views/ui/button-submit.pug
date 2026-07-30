@@ -1,0 +1,73 @@
+//- Submit button component with state management
+//- Usage: +submit-button('myBtnId', 'Submit', '', 'fas fa-paper-plane')
+//-
+//- Exposes window['submitBtn_ID'] with:
+//-   .setSending(label?)  → disables, spinner icon + optional label (default 'Sending...')
+//-   .setDone(label?)     → icon + label 'Done', green
+//-   .setError(label?)    → icon + label 'Submit Again', red
+//-   .reset(label?)       → restores original icon + label, re-enables
+//-
+//- CSS classes added to .submit-btn are handled in style.css
+
+mixin submit-button(id, label='Submit', className='', icon='fas fa-paper-plane')
+  button(
+    id=id
+    type="button"
+    class=`submit-btn ${className}`
+    data-label=label
+    data-icon=icon
+  )
+    if icon
+      i(class=icon)
+      |  #{label}
+    else
+      | #{label}
+
+  script.
+    (function() {
+      const _btnId = '#{id}';
+
+      function _initSubmitBtn() {
+        const btn = document.getElementById(_btnId);
+        if (!btn) return;
+
+        function _html(iconClass, lbl) {
+          return iconClass
+            ? '<i class="' + iconClass + '"></i> ' + lbl
+            : lbl;
+        }
+
+        window['submitBtn_' + _btnId] = {
+          setSending: function(label) {
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> ' + (label || 'Sending...');
+            btn.classList.remove('done', 'error');
+            btn.classList.add('sending');
+          },
+          setDone: function(label) {
+            btn.disabled = false;
+            btn.innerHTML = _html(btn.dataset.icon, label || 'Done');
+            btn.classList.remove('sending', 'error');
+            btn.classList.add('done');
+          },
+          setError: function(label) {
+            btn.disabled = false;
+            btn.innerHTML = _html(btn.dataset.icon, label || 'Submit Again');
+            btn.classList.remove('sending', 'done');
+            btn.classList.add('error');
+          },
+          reset: function(label) {
+            btn.disabled = false;
+            btn.innerHTML = _html(btn.dataset.icon, label || btn.dataset.label || 'Submit');
+            btn.classList.remove('sending', 'done', 'error');
+          }
+        };
+      }
+
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', _initSubmitBtn);
+      } else {
+        _initSubmitBtn();
+      }
+    })();
+

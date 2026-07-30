@@ -1,0 +1,100 @@
+mixin floating-date-hours(label, name, required=false, placeholder='', className='', containerClass='', attrs={}, readOnly=false)
+  - if (readOnly || (attrs && attrs.readonly)) attrs.readonly = true
+  div.floating-input-container(class=containerClass)
+    div.floating-input-wrapper
+      input.floating-input(
+        type='datetime-local'
+        id=name
+        name=name
+        class=className
+        placeholder=placeholder
+        data-required=required
+        autocomplete='off'
+      )&attributes(attrs)
+      label.floating-label(for=name)= label + (required ? ' *' : '')
+
+      include ./validation-icons.pug
+      +successIcon()
+      +errorIcon()
+
+    span.error-message(data-error-for=name)
+
+  script.
+    document.addEventListener('DOMContentLoaded', function() {
+      const input = document.getElementById('#{name}');
+      if (!input) return;
+
+      function validateInput() {
+        const value = input.value.trim();
+        const isRequired = input.dataset.required === 'true';
+        const errorMsg = document.querySelector(`[data-error-for="#{name}"]`);
+
+        input.classList.remove('valid', 'error', 'has-value');
+        errorMsg?.classList.remove('show');
+
+        if (value) {
+          input.classList.add('has-value');
+        }
+
+        if (isRequired && !value) {
+          if (input === document.activeElement || input.dataset.touched === 'true') {
+            input.classList.add('error');
+            if (errorMsg) {
+              errorMsg.textContent = '#{label} is required';
+              errorMsg.classList.add('show');
+            }
+          }
+          return false;
+        } else if (value) {
+          input.classList.add('valid');
+          return true;
+        }
+
+        return true;
+      }
+
+      input.addEventListener('input', validateInput);
+      input.addEventListener('blur', function() {
+        input.dataset.touched = 'true';
+        validateInput();
+      });
+      input.addEventListener('click', function(e) {
+        if (typeof this.showPicker === 'function') {
+          this.focus();
+          this.showPicker();
+        }
+      });
+
+      if (input.value) {
+        input.classList.add('has-value');
+        validateInput();
+      }
+
+      const inputId = '#{name}';
+      window['validateInput_' + inputId] = function() {
+        input.dataset.touched = 'true';
+        return validateInput();
+      };
+
+      window['setInputError_' + inputId] = function(message) {
+        const errorMsg = document.querySelector(`[data-error-for="#{name}"]`);
+        input.classList.remove('valid');
+        input.classList.add('error');
+        if (errorMsg) {
+          errorMsg.textContent = message || '#{label} is required';
+          errorMsg.classList.add('show');
+        }
+        return false;
+      };
+
+      window['clearInputError_' + inputId] = function() {
+        const errorMsg = document.querySelector(`[data-error-for="#{name}"]`);
+        input.classList.remove('error');
+        if (errorMsg) {
+          errorMsg.classList.remove('show');
+        }
+        if (input.value.trim()) {
+          input.classList.add('valid');
+        }
+      };
+    });

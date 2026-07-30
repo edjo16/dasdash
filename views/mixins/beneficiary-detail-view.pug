@@ -1,0 +1,364 @@
+//- ── Beneficiary Detail View (read-only) ──────────────────────────────
+//- Rendered inside the modal body. Populated dynamically via JS.
+//- Toggle between this and the edit form via benViewMode().
+
+div#benDetailView(style="display:none;")
+  //- ── Two-column layout: Primary Bank | Intermediary Bank ──────────
+  div.ben-detail-columns
+    //- ── Column 1: Primary Bank ────────────────────────────────────────
+    div.ben-detail-column
+      h6.ben-column-title Primary Bank
+      
+      div.ben-field-row(data-field="cuenta_banco_beneficiario")
+        span.ben-field-label Beneficiary Name
+        div.ben-field-right
+          span.ben-field-value#benDetail_cuenta_banco_beneficiario -
+          button.ben-copy-btn(type="button" data-copy-target="benDetail_cuenta_banco_beneficiario" title="Copy")
+            i.fas.fa-copy
+      div.ben-field-row(data-field="banco_beneficiario")
+        span.ben-field-label Beneficiary Bank
+        div.ben-field-right
+          span.ben-field-value#benDetail_banco_beneficiario -
+          button.ben-copy-btn(type="button" data-copy-target="benDetail_banco_beneficiario" title="Copy")
+            i.fas.fa-copy
+      div.ben-field-row(data-field="cuenta_banco")
+        span.ben-field-label Account Number
+        div.ben-field-right
+          span.ben-field-value#benDetail_cuenta_banco -
+          button.ben-copy-btn(type="button" data-copy-target="benDetail_cuenta_banco" title="Copy")
+            i.fas.fa-copy
+      div.ben-field-row(data-field="tipo_cuenta")
+        span.ben-field-label Account Type
+        div.ben-field-right
+          span.ben-field-value#benDetail_tipo_cuenta -
+          button.ben-copy-btn(type="button" data-copy-target="benDetail_tipo_cuenta" title="Copy")
+            i.fas.fa-copy
+      div.ben-field-row(data-field="pais_beneficiario")
+        span.ben-field-label Beneficiary Country
+        div.ben-field-right
+          span.ben-field-value#benDetail_pais_beneficiario -
+          button.ben-copy-btn(type="button" data-copy-target="benDetail_pais_beneficiario" title="Copy")
+            i.fas.fa-copy
+      div.ben-field-row(data-field="monedas")
+        span.ben-field-label Accepted Currencies
+        div.ben-field-right
+          span.ben-field-value#benDetail_monedas -
+          button.ben-copy-btn(type="button" data-copy-target="benDetail_monedas" title="Copy")
+            i.fas.fa-copy
+      div.ben-field-row(data-field="SORT")
+        span.ben-field-label SORT
+        div.ben-field-right
+          span.ben-field-value#benDetail_SORT -
+          button.ben-copy-btn(type="button" data-copy-target="benDetail_SORT" title="Copy")
+            i.fas.fa-copy
+      div.ben-field-row(data-field="SWIFT")
+        span.ben-field-label SWIFT
+        div.ben-field-right
+          span.ben-field-value#benDetail_SWIFT -
+          button.ben-copy-btn(type="button" data-copy-target="benDetail_SWIFT" title="Copy")
+            i.fas.fa-copy
+      div.ben-field-row(data-field="IBAN")
+        span.ben-field-label IBAN
+        div.ben-field-right
+          span.ben-field-value#benDetail_IBAN -
+          button.ben-copy-btn(type="button" data-copy-target="benDetail_IBAN" title="Copy")
+            i.fas.fa-copy
+      div.ben-field-row(data-field="ABA")
+        span.ben-field-label ABA
+        div.ben-field-right
+          span.ben-field-value#benDetail_ABA -
+          button.ben-copy-btn(type="button" data-copy-target="benDetail_ABA" title="Copy")
+            i.fas.fa-copy
+      div.ben-field-row(data-field="state_branch")
+        span.ben-field-label Bank State Branch
+        div.ben-field-right
+          span.ben-field-value#benDetail_state_branch -
+          button.ben-copy-btn(type="button" data-copy-target="benDetail_state_branch" title="Copy")
+            i.fas.fa-copy
+      div.ben-field-row(data-field="cable_beneficiario")
+        span.ben-field-label Beneficiary Clabe
+        div.ben-field-right
+          span.ben-field-value#benDetail_cable_beneficiario -
+          button.ben-copy-btn(type="button" data-copy-target="benDetail_cable_beneficiario" title="Copy")
+            i.fas.fa-copy
+      div.ben-field-row(data-field="direcion_beneficiario")
+        span.ben-field-label Beneficiary Address
+        div.ben-field-right
+          span.ben-field-value.ben-detail-multiline#benDetail_direcion_beneficiario -
+          button.ben-copy-btn(type="button" data-copy-target="benDetail_direcion_beneficiario" title="Copy")
+            i.fas.fa-copy
+      div.ben-field-row(data-field="direccion")
+        span.ben-field-label Bank Address
+        div.ben-field-right
+          span.ben-field-value.ben-detail-multiline#benDetail_direccion -
+          button.ben-copy-btn(type="button" data-copy-target="benDetail_direccion" title="Copy")
+            i.fas.fa-copy
+      div.ben-field-row(data-field="estado")
+        span.ben-field-label Status
+        div.ben-field-right
+          span.ben-field-value#benDetail_estado -
+
+    //- ── Column 2: Intermediary Bank ────────────────────────────────────
+    div.ben-detail-column#benDetail_intermediary_column(style="display:none;")
+      h6.ben-column-title Intermediary Bank
+      
+      div.ben-field-row(data-field="banco_intermediario")
+        span.ben-field-label Intermediary Bank
+        div.ben-field-right
+          span.ben-field-value#benDetail_banco_intermediario -
+          button.ben-copy-btn(type="button" data-copy-target="benDetail_banco_intermediario" title="Copy")
+            i.fas.fa-copy
+      div.ben-field-row(data-field="cuenta_banco_intermediario")
+        span.ben-field-label Account Number
+        div.ben-field-right
+          span.ben-field-value#benDetail_cuenta_banco_intermediario -
+          button.ben-copy-btn(type="button" data-copy-target="benDetail_cuenta_banco_intermediario" title="Copy")
+            i.fas.fa-copy
+      div.ben-field-row(data-field="tipo_cuenta_intermediario")
+        span.ben-field-label Account Type
+        div.ben-field-right
+          span.ben-field-value#benDetail_tipo_cuenta_intermediario -
+          button.ben-copy-btn(type="button" data-copy-target="benDetail_tipo_cuenta_intermediario" title="Copy")
+            i.fas.fa-copy
+      div.ben-field-row(data-field="pais_intermediario")
+        span.ben-field-label Country
+        div.ben-field-right
+          span.ben-field-value#benDetail_pais_intermediario -
+          button.ben-copy-btn(type="button" data-copy-target="benDetail_pais_intermediario" title="Copy")
+            i.fas.fa-copy
+      div.ben-field-row(data-field="SORT_banco_intermediario")
+        span.ben-field-label SORT
+        div.ben-field-right
+          span.ben-field-value#benDetail_SORT_banco_intermediario -
+          button.ben-copy-btn(type="button" data-copy-target="benDetail_SORT_banco_intermediario" title="Copy")
+            i.fas.fa-copy
+      div.ben-field-row(data-field="SWIFT_banco_intermediario")
+        span.ben-field-label SWIFT
+        div.ben-field-right
+          span.ben-field-value#benDetail_SWIFT_banco_intermediario -
+          button.ben-copy-btn(type="button" data-copy-target="benDetail_SWIFT_banco_intermediario" title="Copy")
+            i.fas.fa-copy
+      div.ben-field-row(data-field="IBAN_banco_intermediario")
+        span.ben-field-label IBAN
+        div.ben-field-right
+          span.ben-field-value#benDetail_IBAN_banco_intermediario -
+          button.ben-copy-btn(type="button" data-copy-target="benDetail_IBAN_banco_intermediario" title="Copy")
+            i.fas.fa-copy
+      div.ben-field-row(data-field="ABA_banco_intermediario")
+        span.ben-field-label ABA
+        div.ben-field-right
+          span.ben-field-value#benDetail_ABA_banco_intermediario -
+          button.ben-copy-btn(type="button" data-copy-target="benDetail_ABA_banco_intermediario" title="Copy")
+            i.fas.fa-copy
+      div.ben-field-row(data-field="state_branch_banco_intermediario")
+        span.ben-field-label State Branch
+        div.ben-field-right
+          span.ben-field-value#benDetail_state_branch_banco_intermediario -
+          button.ben-copy-btn(type="button" data-copy-target="benDetail_state_branch_banco_intermediario" title="Copy")
+            i.fas.fa-copy
+      div.ben-field-row(data-field="cable_intermediario")
+        span.ben-field-label Clabe
+        div.ben-field-right
+          span.ben-field-value#benDetail_cable_intermediario -
+          button.ben-copy-btn(type="button" data-copy-target="benDetail_cable_intermediario" title="Copy")
+            i.fas.fa-copy
+      div.ben-field-row(data-field="direccion_banco_intermediario")
+        span.ben-field-label Address
+        div.ben-field-right
+          span.ben-field-value.ben-detail-multiline#benDetail_direccion_banco_intermediario -
+          button.ben-copy-btn(type="button" data-copy-target="benDetail_direccion_banco_intermediario" title="Copy")
+            i.fas.fa-copy
+
+  //- ── Audit strip ────────────────────────────────────────────────────
+  div#benDetail_audit_strip(style="display:none;margin-top:12px;")
+    div(style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px;padding-top:8px;")
+      span#benDetail_audit_created(style="font-size:.72rem;color:#6b7280;")
+      span#benDetail_audit_modified(style="font-size:.72rem;color:#6b7280;")
+
+script.
+  // ── Copy-to-clipboard for detail view ──────────────────────────────
+  function copyToClipboard(text, btn) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function() {
+        showCopySuccess(btn);
+      }).catch(function() {
+        fallbackCopy(text, btn);
+      });
+    } else {
+      fallbackCopy(text, btn);
+    }
+  }
+
+  function fallbackCopy(text, btn) {
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.style.position = 'fixed';
+    textarea.style.opacity = '0';
+    document.body.appendChild(textarea);
+    try {
+      textarea.select();
+      document.execCommand('copy');
+      showCopySuccess(btn);
+    } catch(err) {
+      console.error('Copy failed:', err);
+    } finally {
+      document.body.removeChild(textarea);
+    }
+  }
+
+  function showCopySuccess(btn) {
+    const icon = btn.querySelector('i');
+    if (icon) {
+      icon.className = 'fas fa-check';
+      setTimeout(function() { icon.className = 'fas fa-copy'; }, 1500);
+    }
+  }
+
+  document.addEventListener('click', function(e) {
+    const btn = e.target.closest('.ben-copy-btn');
+    if (!btn) return;
+    const targetId = btn.getAttribute('data-copy-target');
+    const el = document.getElementById(targetId);
+    if (!el) return;
+    const text = el.textContent.trim();
+    if (!text || text === '-') return;
+    copyToClipboard(text, btn);
+  });
+
+  // ── Show/hide intermediary column ──────────────────────────────────
+  // When intermediary bank data is populated, this function should be called:
+  window.benShowIntermediaryColumn = function() {
+    const col = document.getElementById('benDetail_intermediary_column');
+    if (col) col.style.display = '';
+  };
+
+  window.benHideIntermediaryColumn = function() {
+    const col = document.getElementById('benDetail_intermediary_column');
+    if (col) col.style.display = 'none';
+  };
+
+style.
+  /* ── Ben detail columns layout ─────────────────────────────────── */
+  .ben-detail-columns {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+  }
+  @media (max-width: 768px) {
+    .ben-detail-columns {
+      grid-template-columns: 1fr;
+      gap: 16px;
+    }
+  }
+  .ben-detail-column {
+    flex: 1;
+    min-width: 0;
+  }
+  .ben-column-title {
+    font-size: .88rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    color: #00586f;
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid #00586f;
+  }
+  
+  /* ── Ben detail row layout ─────────────────────────────────────── */
+  .ben-field-row {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    padding: 7px 0;
+    border-bottom: 1px solid #f0f0f3;
+    gap: 10px;
+  }
+  .ben-field-row:last-child {
+    border-bottom: none;
+  }
+  .ben-field-label {
+    font-size: .72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    min-width: 145px;
+    flex-shrink: 0;
+    padding-top: 3px;
+    line-height: 1.4;
+  }
+  .ben-field-right {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    flex: 1;
+    min-width: 0;
+  }
+  .ben-field-value {
+    font-size: .88rem;
+    word-break: break-word;
+    line-height: 1.5;
+  }
+  .ben-detail-multiline {
+    white-space: pre-wrap;
+  }
+  /* Copy button — shown on row hover */
+  .ben-copy-btn {
+    background: none;
+    border: none;
+    padding: 0 2px;
+    cursor: pointer;
+    color: #d1d5db;
+    flex-shrink: 0;
+    line-height: 1;
+    transition: color .15s;
+    opacity: 0;
+    pointer-events: none;
+    margin-top: 2px;
+  }
+  .ben-field-row:hover .ben-copy-btn {
+    opacity: 1;
+    pointer-events: auto;
+  }
+  .ben-copy-btn:hover {
+    color: #00586f;
+  }
+  .ben-copy-btn i {
+    font-size: .75rem;
+  }
+  /* Status badge */
+  .ben-detail-status.active {
+    background: #dcfce7;
+    color: #16a34a;
+    padding: 2px 9px;
+    border-radius: 12px;
+    font-size: .75rem;
+    font-weight: 600;
+  }
+  .ben-detail-status.inactive {
+    background: #fee2e2;
+    color: #dc2626;
+    padding: 2px 9px;
+    border-radius: 12px;
+    font-size: .75rem;
+    font-weight: 600;
+  }
+  /* Divider between assign section and main fields */
+  .ben-detail-divider {
+    border: none;
+    border-top: 1px solid #e9ecef;
+    margin: 4px 0 2px;
+    opacity: 1;
+  }
+  /* Currency badges */
+  .ben-currency-badge {
+    display: inline-block;
+    background: #e0f2f7;
+    color: #00586f;
+    border: 1px solid #b0dce8;
+    border-radius: 10px;
+    font-size: .72rem;
+    font-weight: 600;
+    padding: 1px 8px;
+    margin: 1px 2px;
+  }

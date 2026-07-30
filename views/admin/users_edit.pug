@@ -1,0 +1,799 @@
+extends ../layout
+include ../mixins/floating-input
+include ../mixins/floating-select
+include ../mixins/floating-country-select
+include ../mixins/floating-date
+include ../mixins/breadcrumb
+
+block layout-content
+  div#layoutSidenav_content
+    main
+      div.container-fluid.px-4
+        +app-breadcrumb({
+          homeHref: '/',
+          items: [
+            { label: 'Users', href: '/users' },
+            { label: user.Name, active: true }
+          ]
+        })
+
+        div#alertContainer
+
+        div.row
+          div.col-xl-12
+            div.card.mb-4
+              div.card-header
+                i.fas.fa-user.me-1
+                | General Information
+              div.card-body
+                form#userForm
+                  div.row
+                    div.col-md-6
+                      +floating-input('Name', 'Name', 'text', true, '', '', '', { maxlength: 50, value: user.Name })
+                    div.col-md-6
+                      +floating-input('Email Address', 'Email', 'email', true, '', '', '', { maxlength: 50, value: user.Email })
+
+                  div.row
+                    div.col-md-6
+                      - var managerOptions = managers.map(m => ({ value: m.UserID, label: m.Name }))
+                      - var selectedManager = managerOptions.find(m => m.value === user.Manager)
+                      +floating-select('Manager', 'Manager', managerOptions, false, 'Select manager')
+                      script.
+                        document.addEventListener('DOMContentLoaded', function() {
+                          const managerSelect = document.getElementById('Manager');
+                          if (managerSelect && '#{user.Manager}') {
+                            managerSelect.value = '#{user.Manager}';
+                            managerSelect.classList.add('has-value', 'valid');
+                          }
+                        });
+                    div.col-md-6
+                      +floating-input('Position', 'xcargo', 'text', false, '', '', '', { maxlength: 50, value: user.xcargo || '' })
+
+                  div.row
+                    div.col-md-12
+                      +floating-country-select('Country location', 'Location', 'Location1', false, '', user.Location1 || '')
+                    div.col-md-6
+                      - var vacacionesOptions = [{ value: '0', label: 'No' }, { value: '1', label: 'Yes' }]
+                      +floating-select('Vacations', 'vacaciones', vacacionesOptions, false, 'Select option')
+                      script.
+                        document.addEventListener('DOMContentLoaded', function() {
+                          const vacacionesSelect = document.getElementById('vacaciones');
+                          if (vacacionesSelect) {
+                            vacacionesSelect.value = '#{user.vacaciones || 0}';
+                            if (vacacionesSelect.value) vacacionesSelect.classList.add('has-value', 'valid');
+                          }
+                        });
+                    div.col-md-6
+                      - var statusOption = [{ value: '1', label: 'Active' },{ value: '0', label: 'Inactive' }]
+                      +floating-select('User Status', 'Estado', statusOption, true, 'Select status')
+                      script.
+                        document.addEventListener('DOMContentLoaded', function() {
+                          const userStausSelect = document.getElementById('Estado');
+                          if (userStausSelect) {
+                            userStausSelect.value = '#{user.Estado || 0}';
+                            if (userStausSelect.value) userStausSelect.classList.add('has-value', 'valid');
+                          }
+                        });
+                  div.row
+                    div.col-md-6
+                      +floating-date('Initial Date', 'finicio', false, 'DD/MM/YYYY', '', '', { value: user.finicio || '' })
+                    div.col-md-6
+                      +floating-date('Departure Date', 'fsalida', false, 'DD/MM/YYYY', '', '', { value: user.fsalida || '' })
+                  input(type='hidden' name='umodificado' value=userProfile.UserID)
+        div.row
+          div.col-xl-6
+            div.card.mb-4
+              div.card-header
+                i.fas.fa-building.me-1
+                | Company Information
+              div.card-body
+                div.mb-3
+                  - var companyOptions = companies.map(c => ({ value: c.ccompania, label: c.xnombre }))
+                  +floating-select('Primary Company', 'ccompaniae', companyOptions, true, 'Select company', '', '', { onchange: 'loadDepartmentsEdit()' })
+                  script.
+                    document.addEventListener('DOMContentLoaded', function() {
+                      const companySelect = document.getElementById('ccompaniae');
+                      if (companySelect && '#{user.ccompania}') {
+                        companySelect.value = '#{user.ccompania}';
+                        companySelect.classList.add('has-value', 'valid');
+                      }
+                    });
+
+                div.mb-3
+                    label.form-label Additional Companies
+                    div#additionalCompaniesContainer.mb-2(style="min-height: 40px;")
+                      //- Companies will be added here as chips
+                    div.row
+                      div.col-md-8
+                        - var addCompanyOptions = companies.map(c => ({ value: c.ccompania, label: c.xnombre }))
+                        +floating-select('Select Company', 'addCompanySelect', addCompanyOptions, false, 'Select company')
+                      div.col-md-4.d-flex.align-items-end
+                        button#addCompanyBtn.btn.btn-lg.btn-primary(type="button")
+                          i.fas.fa-plus
+                    input#compania(type="hidden" name="compania" value=user.compania || '')
+
+          div.col-xl-6
+            div.card.mb-4
+              div.card-header
+                i.fas.fa-sitemap.me-1
+                | Department Information
+              div.card-body
+                div.mb-3
+                  - var departmentOptions = allDepartments.map(d => { var c = companies.find(comp => comp.ccompania === d.ccompania); return { value: d.id, label: c ? c.xnombre + ' - ' + d.nombre : d.nombre, 'data-company': d.ccompania }; })
+                  +floating-select('Primary Department', 'cdepartamentoe', departmentOptions, true, 'Select department')
+                  script.
+                    document.addEventListener('DOMContentLoaded', function() {
+                      const deptSelect = document.getElementById('cdepartamentoe');
+                      if (deptSelect && '#{user.cdepartamento}') {
+                        deptSelect.value = '#{user.cdepartamento}';
+                        deptSelect.classList.add('has-value', 'valid');
+                      }
+                    });
+
+                div.mb-3
+                  label.form-label Additional Departments
+                  div#additionalDepartmentsContainer.mb-2(style="min-height: 40px;")
+                    //- Departments will be added here as chips
+                  div.row
+                    div.col-md-8
+                      - var addDeptOptions = allDepartments.map(d => { var c = companies.find(comp => comp.ccompania === d.ccompania); return { value: d.id, label: c ? c.xnombre + ' - ' + d.nombre : d.nombre, 'data-company-id': d.ccompania, 'data-name': d.nombre, 'data-company-name': c ? c.xnombre : '' }; })
+                      +floating-select('Select Department', 'addDepartmentSelect', addDeptOptions, false, 'Select department')
+                    div.col-md-4.d-flex.align-items-end
+                      button#addDepartmentBtn.btn.btn-lg.btn-primary(type="button")
+                        i.fas.fa-plus
+                  input#departamento(type="hidden" name="departamento" value=user.departamento || '')
+
+        div.row
+          div.col-xl-12
+            div.card.mb-4
+              div.card-header
+                i.fas.fa-shield-alt.me-1
+                | Permissions and Modules
+              div.card-body
+                div.row.mb-3
+                  div.col-md-6
+                    h6.mb-3 Module Access
+                    div.row.mb-2
+                      div.col-md-6
+                        +floating-select('M_Admin', 'M_Admin', [{ value: 'Not', label: 'No' }, { value: 'View', label: 'Yes' }], false, 'Select option')
+                      div.col-md-6
+                        +floating-select('M_Conta', 'M_Conta', [{ value: 'Not', label: 'No' }, { value: 'View', label: 'Yes' }], false, 'Select option')
+                    div.row.mb-2
+                      div.col-md-6
+                        +floating-select('M_CRM', 'M_CRM', [{ value: 'Not', label: 'No' }, { value: 'View', label: 'Yes' }], false, 'Select option')
+                  
+                  div.col-md-6
+                    h6.mb-3 Forms Access
+                    div.row.mb-2
+                      div.col-md-6
+                        +floating-select('F_IT', 'F_IT', [{ value: 'Not', label: 'No' }, { value: 'View', label: 'Yes' }], false, 'Select option')
+                      div.col-md-6
+                        +floating-select('F_Conta', 'F_Conta', [{ value: 'Not', label: 'No' }, { value: 'View', label: 'Yes' }], false, 'Select option')
+                    div.row.mb-2
+                      div.col-md-6
+                        +floating-select('F_Admin', 'F_Admin', [{ value: 'Not', label: 'No' }, { value: 'View', label: 'Yes' }], false, 'Select option')
+                      div.col-md-6
+                        +floating-select('F_Finanzas', 'F_Finanzas', [{ value: 'Not', label: 'No' }, { value: 'View', label: 'Yes' }], false, 'Select option')
+                    div.row.mb-2
+                      div.col-md-6
+                        +floating-select('F_Governance', 'F_Governance', [{ value: 'Not', label: 'No' }, { value: 'View', label: 'Yes' }], false, 'Select option')
+                      div.col-md-6
+                        +floating-select('F_HR', 'F_HR', [{ value: 'Not', label: 'No' }, { value: 'View', label: 'Yes' }], false, 'Select option')
+                
+                div.row.mb-3
+                  div.col-md-6
+                    +floating-input('Modules', 'Modules', 'text', true, 'Claims, Accounting, IT', '', '', { maxlength: 100, value: user.Modules || '' })
+                    small.text-muted Comma-separated list of modules
+                  div.col-md-6
+                    +floating-input('Group', 'Grupo', 'text', false, 'Latam', '', '', { maxlength: 100, value: user.Grupo || '' })
+
+        div.row
+          div.col-xl-12
+            div.card.mb-4
+              div.card-header
+                i.fas.fa-key.me-1
+                | Reset Password
+              div.card-body
+                form#passwordForm
+                  div.row
+                    div.col-md-12
+                      p.mb-2 Send a temporary password to this user email. The user can use it in the password recovery flow.
+                      small.text-muted The temporary password expires in 24 hours. If it expires, you can send a new one again from here.
+                  
+                  div.row
+                    div.col-md-12
+                      button.btn.btn-warning(type="submit")
+                        i.fas.fa-key.me-1
+                        | Send Temporary Password
+
+        div.row
+          div.col-xl-12
+            div.card.mb-4
+              div.card-header
+                i.fas.fa-image.me-1
+                | User Image
+              div.card-body
+                p.small.text-muted Upload or change profile picture (PNG format only). The file will be saved as UserID.png
+                div.row.mb-3
+                  div.col-md-6
+                    label.form-label(for="userImageEdit") Profile Picture (PNG only)
+                    input#userImageEdit.form-control(type="file" accept=".png" name="userImageEdit")
+                    small.text-muted Maximum file size: 5MB
+                  div.col-md-6
+                    div#imagePreviewEdit(style="margin-top: 0.5rem;")
+                      img#previewImgEdit(src=`/pic/${user.UserID}.png` onerror="this.onerror=null;this.src='/pic/default.png';" style="max-width: 150px; max-height: 150px; border-radius: 50%; border: 2px solid #dee2e6;")
+
+        div.row
+          div.col-xl-12
+            div.card.mb-4
+              div.card-header
+                i.fas.fa-signature.me-1
+                | User Signature
+              div.card-body
+                p.small.text-muted Upload or replace the user's default signature (PNG only).
+                div.row.mb-3
+                  div.col-md-6
+                    label.form-label(for="userSignatureEdit") Signature File (PNG only)
+                    input#userSignatureEdit.form-control(type="file" accept=".png" name="userSignatureEdit")
+                    small.text-muted Maximum file size: 5MB
+                  div.col-md-6
+                    div#signaturePreviewEdit(style="margin-top: 0.5rem;")
+                      small.text-muted Select a PNG signature to preview
+
+        div.row.mb-4
+          div.col-md-12
+            button#saveBtn.btn.btn-primary.me-2(type="button")
+              i.fas.fa-save.me-1
+              | Save Changes
+            a.btn.btn-secondary(href=`/users/detail/${user.Id}`)
+              i.fas.fa-times.me-1
+              | Cancel
+
+      div#toast
+        div#notificacion_img
+        div#notificacion_texto
+
+      script.
+        const userId = #{user.Id};
+        const userProfileId = '#{userProfile.UserID}';
+
+          // Initialize permission selects with user data
+          document.addEventListener('DOMContentLoaded', function() {
+            const permissions = {
+              M_Admin: '#{user.M_Admin || "Not"}',
+              M_Conta: '#{user.M_Conta || "Not"}',
+              M_CRM: '#{user.M_CRM || "Not"}',
+              F_IT: '#{user.F_IT || "Not"}',
+              F_Conta: '#{user.F_Conta || "Not"}',
+              F_Admin: '#{user.F_Admin || "Not"}',
+              F_Finanzas: '#{user.F_Finanzas || "Not"}',
+              F_Governance: '#{user.F_Governance || "Not"}',
+              F_HR: '#{user.F_HR || "Not"}'
+            };
+
+            Object.keys(permissions).forEach(key => {
+              const select = document.getElementById(key);
+              if (select && permissions[key]) {
+                select.value = permissions[key];
+                select.classList.add('has-value', 'valid');
+                // Activate floating label
+                const label = select.parentElement.querySelector('label.floating-label');
+                if (label) {
+                  label.classList.add('active');
+                }
+              }
+            });
+          });
+
+          // Initialize additional companies management
+          let additionalCompanies = [];
+          const companiesData = !{JSON.stringify(companies)};
+          
+          // Initialize additional departments management
+          let additionalDepartments = [];
+          const departmentsData = !{JSON.stringify(allDepartments)};
+        
+          // Parse existing companies from user.compania
+          function initializeAdditionalCompanies() {
+            const companiaValue = '#{user.compania || ""}';
+            if (companiaValue) {
+              const ids = companiaValue.split(';').filter(id => id.trim() !== '');
+              ids.forEach(id => {
+                const company = companiesData.find(c => c.ccompania == id);
+                if (company && !additionalCompanies.find(c => c.ccompania == id)) {
+                  additionalCompanies.push({ ccompania: company.ccompania, xnombre: company.xnombre });
+                }
+              });
+            }
+            renderAdditionalCompanies();
+          }
+        
+          // Render additional companies as chips
+          function renderAdditionalCompanies() {
+            const container = document.getElementById('additionalCompaniesContainer');
+            container.innerHTML = '';
+          
+            if (additionalCompanies.length === 0) {
+              container.innerHTML = '<small class="text-muted">No additional companies added</small>';
+              document.getElementById('compania').value = '';
+              return;
+            }
+          
+            additionalCompanies.forEach(company => {
+              const chip = document.createElement('span');
+              chip.className = 'badge bg-primary me-2 mb-2 p-2';
+              chip.style.fontSize = '0.9rem';
+              chip.innerHTML = `
+                ${company.xnombre}
+                <button type="button" class="btn-close btn-close-white ms-2" style="font-size: 0.7rem;" onclick="removeCompany(${company.ccompania})"></button>
+              `;
+              container.appendChild(chip);
+            });
+          
+            // Update hidden input with semicolon-separated IDs
+            const ids = additionalCompanies.map(c => c.ccompania).join(';');
+            document.getElementById('compania').value = ids ? ids + ';' : '';
+            // Refresh department add-select to include depts from primary + additional companies
+            updateAddDepartmentOptions();
+          }
+        
+          // Remove company from list
+          function removeCompany(companyId) {
+            additionalCompanies = additionalCompanies.filter(c => c.ccompania != companyId);
+            renderAdditionalCompanies();
+          }
+        
+          // Add company to list
+          document.getElementById('addCompanyBtn').addEventListener('click', function() {
+            const select = document.getElementById('addCompanySelect');
+            const selectedValue = select.value;
+          
+            if (!selectedValue) {
+              showAlert('warning', 'Please select a company');
+              return;
+            }
+          
+            const companyId = selectedValue;
+            const selectedOption = select.options[select.selectedIndex];
+            const companyName = selectedOption ? selectedOption.textContent : '';
+          
+            // Check if already added
+            if (additionalCompanies.find(c => c.ccompania == companyId)) {
+              showAlert('warning', 'Company already added');
+              return;
+            }
+          
+            additionalCompanies.push({ ccompania: companyId, xnombre: companyName });
+            renderAdditionalCompanies();
+          
+            // Reset select
+            select.value = '';
+            select.classList.remove('has-value', 'valid');
+          });
+
+          // Update the Add Department select options to include departments from
+          // the primary company + any additional companies. Excludes departments
+          // already added as additionalDepartments.
+          function updateAddDepartmentOptions() {
+            const selectWrapper = document.querySelector('.floating-select-wrapper select#addDepartmentSelect');
+            if (!selectWrapper) return;
+
+            const select = selectWrapper;
+            const primaryCompanyId = document.getElementById('ccompaniae') ? document.getElementById('ccompaniae').value : '';
+
+            // gather company ids: primary + additional
+            const companyIds = new Set();
+            if (primaryCompanyId) companyIds.add(String(primaryCompanyId));
+            additionalCompanies.forEach(c => companyIds.add(String(c.ccompania)));
+
+            // filter departmentsData by companyIds (if none, include all)
+            const available = departmentsData.filter(d => {
+              if (companyIds.size === 0) return true;
+              return companyIds.has(String(d.ccompania));
+            });
+
+            // rebuild options
+            select.innerHTML = '<option value="">Select department</option>';
+            
+            available.forEach(dept => {
+              // skip if already added
+              if (additionalDepartments.find(d => String(d.id) === String(dept.id))) return;
+              const company = companiesData.find(c => String(c.ccompania) === String(dept.ccompania));
+              const displayName = company ? `${company.xnombre} - ${dept.nombre}` : dept.nombre;
+              const opt = document.createElement('option');
+              opt.value = dept.id;
+              opt.setAttribute('data-name', dept.nombre);
+              opt.setAttribute('data-company-id', dept.ccompania);
+              opt.setAttribute('data-company-name', company ? company.xnombre : '');
+              opt.textContent = displayName;
+              select.appendChild(opt);
+            });
+
+            // Reset select state
+            select.value = '';
+            select.classList.remove('has-value', 'valid');
+            const label = select.parentElement.querySelector('label');
+            if (label) {
+              label.classList.remove('active');
+            }
+          }
+          
+          // Parse existing departments from user.departamento
+          function initializeAdditionalDepartments() {
+            const departamentoValue = '#{user.departamento || ""}';
+            if (departamentoValue) {
+              const ids = departamentoValue.split(';').filter(id => id.trim() !== '');
+              ids.forEach(id => {
+                const dept = departmentsData.find(d => d.id == id);
+                if (dept && !additionalDepartments.find(d => d.id == id)) {
+                  const company = companiesData.find(c => c.ccompania == dept.ccompania);
+                  additionalDepartments.push({ 
+                    id: dept.id, 
+                    nombre: dept.nombre,
+                    ccompania: dept.ccompania,
+                    xnombreCompania: company ? company.xnombre : ''
+                  });
+                }
+              });
+            }
+            renderAdditionalDepartments();
+          }
+          
+          // Render additional departments as chips
+          function renderAdditionalDepartments() {
+            const container = document.getElementById('additionalDepartmentsContainer');
+            container.innerHTML = '';
+          
+            if (additionalDepartments.length === 0) {
+              container.innerHTML = '<small class="text-muted">No additional departments added</small>';
+              document.getElementById('departamento').value = '';
+              return;
+            }
+          
+            additionalDepartments.forEach(dept => {
+              const chip = document.createElement('span');
+              chip.className = 'badge bg-primary me-2 mb-2 p-2';
+              chip.style.fontSize = '0.9rem';
+              const displayText = dept.xnombreCompania ? `${dept.xnombreCompania} - ${dept.nombre} ` : dept.nombre;
+              chip.innerHTML = `
+                ${displayText}
+                <button type="button" class="btn-close btn-close-white ms-2" style="font-size: 0.7rem;" onclick="removeDepartment(${dept.id})"></button>
+              `;
+              container.appendChild(chip);
+            });
+          
+            // Update hidden input with semicolon-separated IDs
+            const ids = additionalDepartments.map(d => d.id).join(';');
+            document.getElementById('departamento').value = ids ? ids + ';' : '';
+            // Refresh options in addDepartmentSelect to exclude already added
+            updateAddDepartmentOptions();
+          }
+          
+          // Remove department from list
+          function removeDepartment(deptId) {
+            additionalDepartments = additionalDepartments.filter(d => d.id != deptId);
+            renderAdditionalDepartments();
+          }
+          
+          // Add department to list
+          document.getElementById('addDepartmentBtn').addEventListener('click', function() {
+            const select = document.getElementById('addDepartmentSelect');
+            const selectedValue = select.value;
+          
+            if (!selectedValue) {
+              showAlert('warning', 'Please select a department to add');
+              return;
+            }
+          
+            const deptId = selectedValue;
+            const selectedOption = select.options[select.selectedIndex];
+            const deptName = selectedOption.getAttribute('data-name') || '';
+            const companyId = selectedOption.getAttribute('data-company-id') || '';
+            const companyName = selectedOption.getAttribute('data-company-name') || '';
+          
+            // Check if already added
+            if (additionalDepartments.find(d => d.id == deptId)) {
+              showAlert('warning', 'Department already added');
+              return;
+            }
+          
+            additionalDepartments.push({ 
+              id: deptId, 
+              nombre: deptName,
+              ccompania: companyId,
+              xnombreCompania: companyName
+            });
+            renderAdditionalDepartments();
+          
+            // Reset select
+            select.value = '';
+            select.classList.remove('has-value', 'valid');
+          });
+
+        // Load departments based on selected company
+        function loadDepartmentsEdit() {
+          const companyId = document.getElementById('ccompaniae').value;
+          const deptSelect = document.getElementById('cdepartamentoe');
+          
+          if (!deptSelect) return;
+          
+          // Reset selection
+          deptSelect.value = '';
+          
+          // Get all options except the placeholder (first option)
+          const options = deptSelect.querySelectorAll('option:not(:first-child)');
+          
+          if (!companyId) {
+            // No company selected, show all departments
+            options.forEach(opt => {
+              opt.style.display = '';
+            });
+            updateAddDepartmentOptions();
+            return;
+          }
+          
+          // Show only departments from selected company
+          let hasVisibleOptions = false;
+          options.forEach(opt => {
+            const optCompanyId = opt.getAttribute('data-company');
+            if (String(optCompanyId) === String(companyId)) {
+              opt.style.display = '';
+              hasVisibleOptions = true;
+            } else {
+              opt.style.display = 'none';
+            }
+          });
+          
+          // If no departments available for this company, show message
+          if (!hasVisibleOptions) {
+            console.log('No departments available for company:', companyId);
+          }
+          
+          updateAddDepartmentOptions();
+        }
+
+        // Image preview for edit
+        document.getElementById('userImageEdit').addEventListener('change', function(e) {
+          const file = e.target.files[0];
+          if (file) {
+            if (!file.name.toLowerCase().endsWith('.png')) {
+              showAlert('danger', 'Only PNG files are allowed');
+              e.target.value = '';
+              return;
+            }
+            if (file.size > 5 * 1024 * 1024) {
+              showAlert('danger', 'File size must be less than 5MB');
+              e.target.value = '';
+              return;
+            }
+            const reader = new FileReader();
+            reader.onload = function(event) {
+              document.getElementById('previewImgEdit').src = event.target.result;
+            };
+            reader.readAsDataURL(file);
+          }
+        });
+
+        document.getElementById('userSignatureEdit').addEventListener('change', function(e) {
+          const file = e.target.files[0];
+          if (!file) {
+            document.getElementById('signaturePreviewEdit').innerHTML = '<small class="text-muted">Select a PNG signature to preview</small>';
+            return;
+          }
+
+          if (!file.name.toLowerCase().endsWith('.png')) {
+            showAlert('danger', 'Only PNG files are allowed for signature');
+            e.target.value = '';
+            document.getElementById('signaturePreviewEdit').innerHTML = '<small class="text-muted">Select a PNG signature to preview</small>';
+            return;
+          }
+          if (file.size > 5 * 1024 * 1024) {
+            showAlert('danger', 'Signature file size must be less than 5MB');
+            e.target.value = '';
+            document.getElementById('signaturePreviewEdit').innerHTML = '<small class="text-muted">Select a PNG signature to preview</small>';
+            return;
+          }
+
+          const reader = new FileReader();
+          reader.onload = function(event) {
+            document.getElementById('signaturePreviewEdit').innerHTML = `
+              <img src="${event.target.result}" alt="Signature preview" style="max-width: 320px; max-height: 120px; border: 1px solid #dee2e6; border-radius: 0.375rem; background: #fff; padding: 0.5rem;" />
+            `;
+          };
+          reader.readAsDataURL(file);
+        });
+
+        // Save user changes
+        document.getElementById('saveBtn').addEventListener('click', async function() {
+          const form = document.getElementById('userForm');
+          const formData = new FormData(form);
+          const data = Object.fromEntries(formData.entries());
+
+          // Add primary company and department (they're outside the form)
+          const ccompaniaeValue = document.getElementById('ccompaniae').value;
+          if (ccompaniaeValue) {
+            data.ccompaniae = ccompaniaeValue;
+          }
+          
+          const cdepartamentoeValue = document.getElementById('cdepartamentoe').value;
+          if (cdepartamentoeValue) {
+            data.cdepartamentoe = cdepartamentoeValue;
+          }
+
+          // Add additional companies field (it's outside the form)
+          const companiaValue = document.getElementById('compania').value;
+          if (companiaValue) {
+            data.compania = companiaValue;
+          }
+          
+          // Add additional departments field (it's outside the form)
+          const departamentoValue = document.getElementById('departamento').value;
+          if (departamentoValue) {
+            data.departamento = departamentoValue;
+          }
+
+          // Some permission/module fields are outside the <form> and
+          // therefore not included in FormData. Ensure they're added.
+          [
+            'M_Admin','M_Conta','M_CRM',
+            'F_IT','F_Conta','F_Admin','F_Finanzas','F_Governance','F_HR',
+            'Modules','Grupo'
+          ].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) data[id] = el.value;
+          });
+
+          try {
+            const response = await fetch(`/api/users/${userId}`, {
+              method: 'PUT',
+              headers: {
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify(data)
+            });
+
+            const result = await response.json();
+
+            if (result.result === 1) {
+              const warnings = [];
+
+              // If user image was selected, upload it separately
+              const userImageInput = document.getElementById('userImageEdit');
+              if (userImageInput.files && userImageInput.files[0]) {
+                const imageFormData = new FormData();
+                imageFormData.append('userImage', userImageInput.files[0]);
+                imageFormData.append('userID', '#{user.UserID}');
+
+                try {
+                  const imageResponse = await fetch(`/api/users/${userId}/image`, {
+                    method: 'POST',
+                    body: imageFormData
+                  });
+                  
+                  const imageResult = await imageResponse.json();
+                  if (imageResult.result !== 1) {
+                    console.error('Image upload failed:', imageResult.message);
+                    warnings.push('profile image could not be uploaded');
+                  }
+                } catch (imageError) {
+                  console.error('Error uploading image:', imageError);
+                  warnings.push('profile image could not be uploaded');
+                }
+              }
+
+              // If signature was selected, upload it separately
+              const userSignatureInput = document.getElementById('userSignatureEdit');
+              if (userSignatureInput.files && userSignatureInput.files[0]) {
+                const signatureFormData = new FormData();
+                signatureFormData.append('userSignature', userSignatureInput.files[0]);
+                signatureFormData.append('userID', '#{user.UserID}');
+
+                try {
+                  const signatureResponse = await fetch(`/api/users/${userId}/signature`, {
+                    method: 'POST',
+                    body: signatureFormData
+                  });
+                  const signatureResult = await signatureResponse.json();
+                  if (signatureResult.result !== 1) {
+                    console.error('Signature upload failed:', signatureResult.message);
+                    warnings.push('signature could not be uploaded');
+                  }
+                } catch (signatureError) {
+                  console.error('Error uploading signature:', signatureError);
+                  warnings.push('signature could not be uploaded');
+                }
+              }
+
+              if (warnings.length > 0) {
+                showAlert('warning', 'User updated, but ' + warnings.join(' and ') + '.');
+              } else {
+                showAlert('success', 'User updated successfully!');
+              }
+              setTimeout(() => {
+                window.location.href = `/users/detail/${userId}`;
+              }, 1500);
+            } else {
+              showAlert('danger', 'Error: ' + result.message);
+            }
+          } catch (error) {
+            showAlert('danger', 'Error updating user: ' + error.message);
+          }
+        });
+
+        // Send temporary password by email
+        document.getElementById('passwordForm').addEventListener('submit', async function(e) {
+          e.preventDefault();
+
+          const confirmed = window.confirm('A temporary password will be sent to the user email. Continue?');
+          if (!confirmed) {
+            return;
+          }
+
+          try {
+            const response = await fetch(`/api/users/${userId}/change-password`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({})
+            });
+
+            const result = await response.json();
+
+            if (result.result === 1) {
+              launch_toast('Temporary password sent successfully!', 1);
+            } else {
+              launch_toast(result.message || 'Error sending temporary password', 2);
+            }
+          } catch (error) {
+            launch_toast('Error sending temporary password: ' + error.message, 2);
+          }
+        });
+
+        function showAlert(type, message) {
+          const alertContainer = document.getElementById('alertContainer');
+          const alert = document.createElement('div');
+          alert.className = `alert alert-${type} alert-dismissible fade show mt-3`;
+          alert.role = 'alert';
+          alert.innerHTML = `
+            ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+          `;
+          alertContainer.innerHTML = '';
+          alertContainer.appendChild(alert);
+
+          setTimeout(() => {
+            alert.remove();
+          }, 5000);
+        }
+
+        // Initialize department filter on load
+        document.addEventListener('DOMContentLoaded', function() {
+          initializeAdditionalCompanies();
+          initializeAdditionalDepartments();
+          loadDepartmentsEdit();
+        });
+
+        $(document).ready(function(){
+          $("#finicio").datepicker({
+            dateFormat: "dd/mm/yy",
+            onSelect: function(selectedDate) {
+              const startDate = $(this).datepicker("getDate");
+              const endDate = $("#fsalida").datepicker("getDate");
+              if (endDate && endDate < startDate) {
+                $("#fsalida").datepicker("setDate", startDate);
+              }
+              $("#fsalida").datepicker("option", "minDate", startDate);
+            }
+          });
+          $("#fsalida").datepicker({
+            dateFormat: "dd/mm/yy",
+            onSelect: function(selectedDate) {
+              const startDate = $("#finicio").datepicker("getDate");
+              const endDate = $(this).datepicker("getDate");
+              if (startDate && endDate < startDate) {
+                $("#finicio").datepicker("setDate", endDate);
+              }
+            }
+          });
+        });

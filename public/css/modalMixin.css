@@ -1,0 +1,147 @@
+.modal-mixin {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+.modal-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0,0,0,0.45);
+  z-index: 1;
+}
+.modal-content {
+  position: relative;
+  z-index: 2;
+  background: #fff;
+  padding: 2rem 2.5rem;
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.18);
+  min-width: 340px;
+  max-width: 440px;
+  text-align: center;
+  animation: modal-in .18s ease;
+}
+@keyframes modal-in {
+  from { transform: scale(.93); opacity: 0; }
+  to   { transform: scale(1);   opacity: 1; }
+}
+.modal-icon {
+  margin-bottom: .75rem;
+  line-height: 1;
+}
+.modal-title {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #1a1a1a;
+  margin-bottom: .5rem;
+}
+.modal-message {
+  margin-bottom: 1.5rem;
+  font-size: .92rem;
+  color: #555;
+  line-height: 1.5;
+}
+.modal-actions {
+  display: flex;
+  justify-content: center;
+  gap: .75rem;
+}
+.modal-actions button {
+  padding: .45rem 1.6rem;
+  font-size: .92rem;
+  font-weight: 600;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: opacity .15s, transform .1s;
+}
+.modal-actions button:hover { opacity: .88; transform: translateY(-1px); }
+.modal-actions button:active { transform: translateY(0); }
+.modal-btn-ok  { color: #fff; }
+.modal-btn-cancel { background: #f0f0f0; color: #555; }
+.modal-btn-cancel:hover { background: #e4e4e4; }
+
+.password-expiry-modal-content {
+  text-align: left;
+}
+
+.password-expiry-modal-message {
+  margin-bottom: 1rem;
+}
+
+.password-expiry-modal-subtitle {
+  margin-top: .35rem;
+}
+
+.password-expiry-fields {
+  display: flex;
+  flex-direction: column;
+  gap: .45rem;
+  margin-bottom: 1.25rem;
+}
+
+.password-expiry-fields label {
+  font-size: .86rem;
+  font-weight: 600;
+  color: #333;
+}
+
+.password-expiry-fields input {
+  border: 1px solid #d2d6dc;
+  border-radius: 6px;
+  padding: .55rem .65rem;
+  font-size: .92rem;
+  outline: none;
+}
+
+.password-expiry-fields input:focus {
+  border-color: #f0ad4e;
+  box-shadow: 0 0 0 3px rgba(240, 173, 78, .2);
+}
+
+.password-expiry-error {
+  min-height: 1.1rem;
+  font-size: .84rem;
+  color: #c0392b;
+}
+
+/* =============================================
+   Dark Mode
+   ============================================= */
+[data-theme="dark"] .modal-content,
+[data-theme="dark"] .password-expiry-modal-content {
+  background: var(--surface-1);
+  color: var(--text-primary);
+  border: 1px solid var(--border-default);
+}
+
+[data-theme="dark"] .modal-title,
+[data-theme="dark"] .modal-message,
+[data-theme="dark"] .password-expiry-fields label {
+  color: var(--text-primary);
+}
+
+[data-theme="dark"] .modal-btn-cancel {
+  background: var(--surface-2);
+  color: var(--text-primary);
+  border: 1px solid var(--border-default);
+}
+
+[data-theme="dark"] .modal-btn-cancel:hover {
+  background: var(--surface-3);
+}
+
+[data-theme="dark"] .password-expiry-fields input {
+  background: var(--surface-2);
+  color: var(--text-primary);
+  border-color: var(--border-default);
+}

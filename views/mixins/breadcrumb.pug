@@ -1,0 +1,25 @@
+//- Generic breadcrumb mixin for list/detail pages.
+//- Example:
+//- +app-breadcrumb({ homeHref: '/', items: [{ label: title, active: true }] })
+mixin app-breadcrumb(opts)
+  - const _opts = opts || {}
+  - const _homeHref = _opts.homeHref || '/'
+  - const _homeLabel = _opts.homeLabel || 'Home'
+  - const _items = Array.isArray(_opts.items) ? _opts.items : []
+  - const _ariaLabel = _opts.ariaLabel || 'breadcrumb'
+
+  nav(aria-label=_ariaLabel)
+    ol.breadcrumb
+      li.breadcrumb-item
+        a.app-breadcrumb-home(href=_homeHref style='display:inline-flex;align-items:center;gap:0.35rem;')
+          i.fas.fa-home
+          span= _homeLabel
+
+      each item in _items
+        if item && item.active
+          li.breadcrumb-item.active(aria-current='page')= item.label
+        else if item && item.href
+          li.breadcrumb-item
+            a(href=item.href)= item.label
+        else if item
+          li.breadcrumb-item= item.label

@@ -1,0 +1,571 @@
+﻿extends ../layout
+include ../mixins/floating-input
+include ../mixins/floating-textarea
+include ../mixins/floating-rich-textarea
+include ../mixins/floating-select
+include ../mixins/floating-file
+include ../mixins/floating-beneficiary
+include ../ui/button-submit
+include ../mixins/breadcrumb
+
+block layout-content
+  div#layoutSidenav_content
+    main
+      div.container-fluid.px-4
+        +app-breadcrumb({
+            homeHref: '/',
+          items: [{ label: title, active: true }]
+        })
+        form#form_interdepartmental_request(method="post" action="" enctype="multipart/form-data")
+            div.row.Not
+                div.col-md-4
+                    input#id_dep_inicio(type="hidden" name="id_dep_inicio" value=userProfile.Dep)
+                div.col-md-4
+                    input#ctipo(type="hidden" name="ctipo")
+                div.col-md-4
+                    input#xnombre(type="hidden" name="xnombre" value=userProfile.UserName)
+                div.col-md-4
+                    input#username(type="hidden" name="username" value=userProfile.UsuarioID)
+                div.col-md-4
+                    input#okForm(type="hidden" name="okForm" value=okForm)
+                div.col-md-4
+                    input#mensaje(type="hidden" name="mensaje" value=mensaje)
+                div.col-md-4
+                    input#estado(type="hidden" name="estado")
+                div.col-md-4
+                    input#ccompania(type="hidden" name="ccompania" value=userMenu.compania)
+                div.col-md-4
+                    input#OldID(type="hidden" name="OldID" value='')
+            div.row.g-0
+              div.col-lg-9.col-md-8.pe-lg-3
+                div.row
+                    div.col-md-6
+                        +floating-select('Company', 'compania', [], true, '', '', '')
+                    div.col-md-6
+                        +floating-select('Approvals', 'approvals_select', [], true,  '', '', '')
+                div.row
+                    div.col-md-12
+                        +floating-select('Process', 'proceso', [], true,  '', '', '')
+                div.row
+                    div.col
+                        +floating-rich-textarea('Description of the request', 'description', true, '', '', '', {}, 4, '', 6500)
+                div#remittanceContainer.Not
+                    div.row
+                        div.col-md-6
+                            +floating-input('Remittance', 'remittance', 'number', false, '', '', '', {maxlength: '12'})
+                        div.col-md-6
+                            +floating-input('Remittance Amount', 'remitanceAmount', 'number', false, '', '', '', {min: '0.01', step: '.01', maxlength: '8', oninput: 'if(this.value < 0) this.value = 0;'})
+                include beneficiary_modal
+                include ../../views_sub/forms_sub_interdepartmental_request.pug
+                script.
+                  window._benDepartments = !{JSON.stringify(typeof departments !== 'undefined' ? departments : [])};
+                  window._benCompanies = !{JSON.stringify(typeof companies !== 'undefined' ? companies : [])};
+                  window._benDefaultCompania = !{JSON.stringify(typeof defaultCompania !== 'undefined' ? defaultCompania : '')};
+                  window._benDefaultDep = !{JSON.stringify(typeof defaultDep !== 'undefined' ? defaultDep : '')};
+                div.d-none
+                    select#verificador(name="verificador")
+                    select#aprobador(name="aprobador")
+                    select#firmante(name="firmante")
+                    select#operador(name="operador")
+                    select#ejecutor(name="ejecutor")
+                div.row
+                    div.col-md-8
+                        div.row#ArchivosApproval
+                        div.row.Not#signature_div
+
+              div.col-lg-3.col-md-4
+                div#actorsPanel.actors-panel
+                  h6.actors-panel-title
+                    i.fas.fa-users.me-2
+                    | Flow Members
+                  div#card-solicitante.actor-card
+                    img#photo-solicitante.actor-avatar(src=`pic/${userProfile.UsuarioID}.png` onerror="this.src='pic/default.png'")
+                    div.actor-info
+                      small.actor-role Requestor
+                      span#name-solicitante= userProfile.UserName
+                  div#card-verificador.actor-card
+                    img#photo-verificador.actor-avatar(src='pic/default.png' onerror="this.src='pic/default.png'")
+                    div.actor-info
+                      small.actor-role Verifier
+                      span#name-verificador —
+                  div#card-aprobador.actor-card
+                    img#photo-aprobador.actor-avatar(src='pic/default.png' onerror="this.src='pic/default.png'")
+                    div.actor-info
+                      small.actor-role Approver
+                      span#name-aprobador —
+                  div#card-firmante.actor-card
+                    img#photo-firmante.actor-avatar(src='pic/default.png' onerror="this.src='pic/default.png'")
+                    div.actor-info
+                      small.actor-role#labelChange1 Signer
+                      span#name-firmante —
+                      select#visible-selector-firmante.actor-visible-select.form-control(style="display:none;font-size:.75rem;margin-top:4px;")
+                        option(value="") Select...
+                  div#card-operador.actor-card
+                    img#photo-operador.actor-avatar(src='pic/default.png' onerror="this.src='pic/default.png'")
+                    div.actor-info
+                      small.actor-role#labelChange2 Operator
+                      span#name-operador —
+                      select#visible-selector-operador.actor-visible-select.form-control(style="display:none;font-size:.75rem;margin-top:4px;")
+                        option(value="") Select...
+                  div#card-ejecutor.actor-card
+                    img#photo-ejecutor.actor-avatar(src='pic/default.png' onerror="this.src='pic/default.png'")
+                    div.actor-info
+                      small.actor-role Executor
+                      span#name-ejecutor —
+            //- Cost Center Section (visible when ctipo==2 and department has cost codes)
+            div.col-md-9
+                div#costCenterSection.Not
+                    div.cost-report-block
+                        div.cost-report-header
+                            span.cost-report-num
+                                i.fas.fa-coins(style="margin-right:.4rem;")
+                                | Categorization Items
+                            button#btnAddCostCode.btn-row-add(type="button" onclick="addCostItem()")
+                                i.fas.fa-plus
+                                |  Add Item
+                        div.table-responsive
+                            table.cost-actions-table#costItemsTable
+                                thead
+                                    tr
+                                        th(style="width:35%;") Cost Category
+                                        th(style="width:30%;") Description
+                                        th(style="width:20%;") Amount
+                                        th(style="width:15%;")
+                                tbody#costItemsBody
+                                tfoot
+                                    tr.cost-total-row
+                                        td(colspan="2" style="text-align:right;font-weight:700;") Total:
+                                        td#costItemsTotal(style="font-weight:700;color:#00586f;") 0.00
+                                        td
+                        input#approval_items(type="hidden" name="approval_items" value="")
+                div.row.g-3
+                    div.col-12.col-md-6
+                        +floating-file('Upload Mandatory Documents', 'Signingfiles', true, true, true)
+                    div.col-12.col-md-6
+                        +floating-file('Supporting Documents', 'Supportfiles', false, true, false)
+                div.row.mt-3
+                    div.col-12.col-md-8
+                        div.form-check
+                            input#SummitCheck.form-check-input(type="checkbox", name="SummitCheck" required)
+                            label.form-check-label Are you sure you want to send this request?
+                div.row.mt-2
+                    div.col-12.col-md-3.col-lg-2
+                        +submit-button('submitApproval', 'Submit')
+    style.
+        .form-back-link {
+            color: #212529;
+            text-decoration: none;
+        }
+        .actors-panel {
+            position: sticky;
+            top: 80px;
+            background: #fff;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 1rem;
+            margin-top: 0.5rem;
+            box-shadow: 0 2px 8px rgba(0,0,0,.07);
+        }
+        .actors-panel-title {
+            font-size: .85rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: .05em;
+            color: #00586f;
+            border-bottom: 2px solid #00586f;
+            padding-bottom: .5rem;
+            margin-bottom: 1rem;
+        }
+        .actor-card {
+            display: flex;
+            align-items: center;
+            gap: .75rem;
+            padding: .5rem .25rem;
+            border-bottom: 1px solid #f0f0f0;
+        }
+        .actor-card:last-child { border-bottom: none; }
+        .actor-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 2px solid #dee2e6;
+            flex-shrink: 0;
+        }
+      .btn-row-add { background:#00586f; color:#fff; border:none; border-radius:6px; padding:4px 12px; font-size:.78rem; font-weight:600; cursor:pointer; display:inline-flex; align-items:center; gap:5px; }
+      .btn-row-add:hover { background:#004256; }
+        .actor-info {
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+        }
+        .actor-role {
+            font-size: .7rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            color: #6c757d;
+            letter-spacing: .04em;
+        }
+        .actor-info span {
+            font-size: .75rem;
+            font-weight: 500;
+            color: #212529;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .cost-report-block { margin-bottom:24px; border:1.5px solid #d1d5db; border-radius:10px; overflow:hidden; }
+        .cost-report-header { display:flex; justify-content:space-between; align-items:center; padding:10px 18px; border-bottom:1px solid #d1d5db; background:#fff; }
+        .cost-report-num { font-weight:400; font-size:.8rem; text-transform:uppercase; letter-spacing:.06em; }
+        .cost-actions-table { width:100%; border-collapse:collapse; font-size:.82rem; }
+        .cost-actions-table thead th { background:#f5f5f5; border:none; padding:7px 8px; font-size:.7rem; text-transform:uppercase; letter-spacing:.04em; color:#666; white-space:nowrap; font-weight:700; }
+        .cost-actions-table tbody tr { border-bottom:none; transition:background .1s; }
+        .cost-actions-table tbody tr:hover { background:#f8fdff; }
+        .cost-actions-table td { padding:4px 5px; vertical-align:middle; border:none; }
+        .cost-actions-table tfoot .cost-total-row { background:#f5f5f5; }
+        .cost-actions-table tfoot td { padding:7px 8px; border-top:1.5px solid #d1d5db; font-size:.82rem; border-bottom:none; }
+        .cost-input { width:100%; border:none; border-bottom:1px solid transparent; background:var(--surface-2); font-size:.82rem; padding:4px 5px; outline:none; border-radius:3px; transition:border-color .15s,background .15s; min-width:72px; }
+        .cost-input:focus { border-bottom-color:#00586f; }
+        .cost-select { width:100%; border:none; border-bottom:1px solid transparent; background:var(--surface-2); font-size:.82rem; padding:4px 5px; outline:none; border-radius:3px; transition:border-color .15s,background .15s; cursor:pointer; }
+        .cost-select:focus { border-bottom-color:#00586f; }
+        .btn-cost-remove { background:none; border:none; color:#ccc; cursor:pointer; border-radius:4px; padding:3px 6px; transition:color .15s,background .15s; }
+        .btn-cost-remove:hover { color:#dc3545; background:#fff0f0; }  
+
+        [data-theme="dark"] .form-back-link {
+            color: var(--text-primary);
+        }
+        [data-theme="dark"] .actors-panel,
+        [data-theme="dark"] .cost-report-block,
+        [data-theme="dark"] .cost-report-header,
+        [data-theme="dark"] .cost-actions-table thead th,
+        [data-theme="dark"] .cost-actions-table tfoot .cost-total-row,
+        [data-theme="dark"] .cost-input,
+        [data-theme="dark"] .cost-select {
+            background: var(--surface-2);
+            color: var(--text-primary);
+            border-color: var(--border-default);
+        }
+        [data-theme="dark"] .actors-panel-title,
+        [data-theme="dark"] .actor-info span,
+        [data-theme="dark"] .cost-report-num {
+            color: var(--text-primary);
+        }
+        [data-theme="dark"] .actor-role {
+            color: var(--text-muted);
+        }
+        [data-theme="dark"] .actor-card,
+        [data-theme="dark"] .actor-avatar,
+        [data-theme="dark"] .cost-actions-table tfoot td {
+            border-color: var(--border-default);
+        }
+        [data-theme="dark"] .cost-actions-table tbody tr:hover {
+            background: var(--surface-2);
+        }
+        [data-theme="dark"] .btn-cost-remove:hover {
+            background: #4c2d34;
+        }
+    
+    script.
+        var _costCodes = [];
+        var _costItemCounter = 0;
+        var _manualAmountBackup = null;
+
+        function toggleCostCenterSection() {
+            var ctipo = document.getElementById('ctipo') ? document.getElementById('ctipo').value : '';
+            var section = document.getElementById('costCenterSection');
+            if (!section) return;
+
+            if (String(ctipo) === '1' || String(ctipo) === '2') {
+            loadCostCodes(function (hasCodes) {
+                if (hasCodes) {
+                section.classList.remove('Not');
+                section.classList.add('row');
+                } else {
+                section.classList.remove('row');
+                section.classList.add('Not');
+                }
+            });
+            } else {
+            section.classList.remove('row');
+            section.classList.add('Not');
+            document.getElementById('costItemsBody').innerHTML = '';
+            updateCostItemsTotal();
+            syncApprovalItemsInput();
+            }
+        }
+
+        function loadCostCodes(callback) {
+            var flow = typeof _getSelectedFlow === 'function' ? _getSelectedFlow() : null;
+            if (!flow || !flow.cdepartamento) {
+            if (callback) callback(false);
+            return;
+            }
+
+            $.ajax({
+            url: '/get_cost_codes?cdepartment=' + flow.cdepartamento,
+            type: 'GET',
+            dataType: 'json',
+            success: function (res) {
+                if (res.result === 1) {
+                _costCodes = res.costCodes || [];
+                if (callback) callback(_costCodes.length > 0);
+                } else {
+                _costCodes = [];
+                if (callback) callback(false);
+                }
+            },
+            error: function () {
+                _costCodes = [];
+                if (callback) callback(false);
+            }
+            });
+        }
+
+        function buildCostCodeOptions() {
+            var html = '<option value="">Select category</option>';
+            for (var i = 0; i < _costCodes.length; i++) {
+            html += '<option value="' + _costCodes[i].cost_id + '">' +
+                    _costCodes[i].xname +
+                    '</option>';
+            }
+            return html;
+        }
+
+        function addCostItem() {
+            _costItemCounter++;
+
+            var row = document.createElement('tr');
+            row.id = 'costItem_' + _costItemCounter;
+
+            row.innerHTML =
+            '<td>' +
+                '<select class="cost-select cost-item-code" required onchange="this.style.borderBottom=\'\';syncApprovalItemsInput();">' +
+                buildCostCodeOptions() +
+                '</select>' +
+            '</td>' +
+            '<td>' +
+                '<input type="text" class="cost-input cost-item-name" maxlength="200" required oninput="this.style.borderBottom=\'\';syncApprovalItemsInput();">' +
+            '</td>' +
+            '<td>' +
+                '<input type="number" class="cost-input cost-item-amount" ' +
+                    'min="0.01" step="0.01" required ' +
+                    'oninput="this.style.borderBottom=\'\';updateCostItemsTotal();syncApprovalItemsInput();">' +
+            '</td>' +
+            '<td style="text-align:center;">' +
+                '<button type="button" class="btn-cost-remove" ' +
+                        'onclick="removeCostItem(\'' + row.id + '\')">' +
+                '<i class="fas fa-times"></i>' +
+                '</button>' +
+            '</td>';
+
+            document.getElementById('costItemsBody').appendChild(row);
+            syncMainAmountWithCostCenter();
+        }
+
+        function removeCostItem(rowId) {
+            var row = document.getElementById(rowId);
+            if (row) row.remove();
+            updateCostItemsTotal();
+            syncApprovalItemsInput();
+            syncMainAmountWithCostCenter();
+        }
+
+        function updateCostItemsTotal() {
+            var total = 0;
+            document.querySelectorAll('.cost-item-amount').forEach(function (el) {
+            var v = parseFloat(el.value);
+            if (!isNaN(v)) total += v;
+            });
+
+            var totalEl = document.getElementById('costItemsTotal');
+            if (totalEl) {
+            totalEl.textContent = total.toLocaleString('en-US', {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+            });
+            }
+
+            syncMainAmountWithCostCenter();
+        }
+
+        function syncMainAmountWithCostCenter() {
+            var mainAmount = document.getElementById('monto');
+            if (!mainAmount) return;
+
+            var rows = document.querySelectorAll('#costItemsBody tr');
+
+            if (rows.length > 0) {
+            if (_manualAmountBackup === null) {
+                _manualAmountBackup = mainAmount.value;
+            }
+
+            var total = 0;
+            rows.forEach(function (row) {
+                var amountInput = row.querySelector('.cost-item-amount');
+                var v = parseFloat(amountInput ? amountInput.value : 0);
+                if (!isNaN(v)) total += v;
+            });
+
+            mainAmount.value = total.toFixed(2);
+            mainAmount.readOnly = true;
+            mainAmount.classList.add('bg-light');
+            mainAmount.title = 'Calculated automatically from Cost Center Items';
+            } else {
+            mainAmount.readOnly = false;
+            mainAmount.classList.remove('bg-light');
+            mainAmount.title = '';
+
+            if (_manualAmountBackup !== null) {
+                mainAmount.value = _manualAmountBackup;
+                _manualAmountBackup = null;
+            }
+            }
+        }
+
+        function syncApprovalItemsInput() {
+            var rows = document.querySelectorAll('#costItemsBody tr');
+            var items = [];
+
+            rows.forEach(function (row) {
+            var code = row.querySelector('.cost-item-code');
+            var name = row.querySelector('.cost-item-name');
+            var amount = row.querySelector('.cost-item-amount');
+
+            if (code && code.value && amount && amount.value) {
+                items.push({
+                cost_id: Number(code.value),
+                name: name ? name.value : '',
+                amount: parseFloat(amount.value)
+                });
+            }
+            });
+
+            var hiddenInput = document.getElementById('approval_items');
+            if (hiddenInput) hiddenInput.value = JSON.stringify(items);
+        }
+
+        function openNewCostCodeForm() {
+            document.getElementById('newCostCodeForm').classList.remove('Not');
+            document.getElementById('newCostCodeForm').classList.add('row');
+            document.getElementById('newCostCodeName').focus();
+        }
+
+        function closeNewCostCodeForm() {
+            document.getElementById('newCostCodeForm').classList.remove('row');
+            document.getElementById('newCostCodeForm').classList.add('Not');
+            document.getElementById('newCostCodeName').value = '';
+        }
+
+        function saveCostCode() {
+            var xname = document.getElementById('newCostCodeName').value.trim();
+            if (!xname) { alert('Category name is required'); return; }
+            var flow = typeof _getSelectedFlow === 'function' ? _getSelectedFlow() : null;
+            if (!flow) return;
+            var ccompany = document.getElementById('compania') ? document.getElementById('compania').value : '';
+            $.ajax({
+                url: '/create_cost_code',
+                type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({ ccompany: Number(ccompany), cdepartment: flow.cdepartamento, xname: xname }),
+                dataType: 'json',
+                success: function(res) {
+                    if (res.result === 1) {
+                        closeNewCostCodeForm();
+                        loadCostCodes(function() {
+                            // Refresh options in existing rows
+                            var selects = document.querySelectorAll('.cost-item-code');
+                            var optHtml = buildCostCodeOptions();
+                            for (var i = 0; i < selects.length; i++) {
+                                var curr = selects[i].value;
+                                selects[i].innerHTML = optHtml;
+                                selects[i].value = curr;
+                            }
+                        });
+                        if (typeof launch_toast === 'function') launch_toast('Category created successfully', 1);
+                    } else {
+                        alert(res.error || 'Error creating category');
+                    }
+                },
+                error: function(xhr) {
+                    var msg = 'Error creating category';
+                    try { msg = JSON.parse(xhr.responseText).error || msg; } catch(_) {}
+                    alert(msg);
+                }
+            });
+        }
+        document.addEventListener('DOMContentLoaded', function () {
+            var approvalsSelect = document.getElementById('approvals_select');
+            if (approvalsSelect) {
+            approvalsSelect.addEventListener('change', function () {
+                setTimeout(toggleCostCenterSection, 100);
+            });
+            }
+
+            var form = document.getElementById('form_interdepartmental_request');
+            if (form) {
+            form.addEventListener('submit', function () {
+                syncMainAmountWithCostCenter();
+            });
+            }
+        });
+    script.
+
+        function updateActorCards() {
+            const actorMap = [
+                { role: 'verificador',  nameEl: 'name-verificador',  photoEl: 'photo-verificador' },
+                { role: 'aprobador',    nameEl: 'name-aprobador',    photoEl: 'photo-aprobador' },
+                { role: 'firmante',     nameEl: 'name-firmante',     photoEl: 'photo-firmante' },
+                { role: 'operador',     nameEl: 'name-operador',     photoEl: 'photo-operador' },
+                { role: 'ejecutor',     nameEl: 'name-ejecutor',     photoEl: 'photo-ejecutor' }
+            ];
+            actorMap.forEach(function({ role, nameEl, photoEl }) {
+                const sel = document.getElementById(role);
+                const nameSpan = document.getElementById(nameEl);
+                const photoImg = document.getElementById(photoEl);
+                const cardDiv = document.getElementById('card-' + role);
+                if (!sel || !nameSpan || !photoImg || !cardDiv) return;
+
+                // If a visible selector is active, card is managed by renderVisibleActorSelector
+                const visibleSel = document.getElementById('visible-selector-' + role);
+                if (visibleSel && visibleSel.style.display !== 'none') {
+                    cardDiv.style.display = '';
+                    return;
+                }
+
+                const selected = sel.options[sel.selectedIndex];
+                const name = selected ? selected.value : '';
+                const uid = selected ? selected.dataset.userid : 'N/A';
+                if (name === 'N/A' || name === '') {
+                    cardDiv.style.display = 'none';
+                } else {
+                    cardDiv.style.display = '';
+                    // Staff flows show "Active Re staff"
+                    nameSpan.textContent = (name.toLowerCase().includes('staff')) ? 'Active Re staff' : name;
+                    photoImg.src = (uid && uid !== 'N/A') ? 'pic/' + uid + '.png' : 'pic/default.png';
+                    photoImg.onerror = function() { this.src = 'pic/default.png'; this.onerror = null; };
+                }
+            });
+        }
+
+        // Update card when user manually changes a multi-option select
+        ['verificador','aprobador','firmante','operador','ejecutor'].forEach(function(id) {
+            const el = document.getElementById(id);
+            if (el) el.addEventListener('change', updateActorCards);
+        });
+
+        function handleBank(){
+            let bank = document.getElementById("banco").value
+            if(bank){
+                document.getElementById("labelChange1").innerHTML = "Signer"
+                document.getElementById("labelChange2").innerHTML = "Operator"
+            }
+        }
+        
+        document.addEventListener('DOMContentLoaded', function() {
+            const bancoElement = document.getElementById("banco");
+            if (bancoElement) {
+                const observer = new MutationObserver(function() {
+                });
+                observer.observe(bancoElement, { childList: true, subtree: true });
+            }
+        });

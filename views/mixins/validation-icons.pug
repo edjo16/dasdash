@@ -1,0 +1,8 @@
+//- Reusable validation icons using Font Awesome with dark mode support
+//- Usage: +successIcon() or +errorIcon()
+
+mixin successIcon()
+  i.validation-icon.success-icon.fas.fa-check-circle(role='img' aria-label='Valid input')
+
+mixin errorIcon()
+  i.validation-icon.error-icon.fas.fa-exclamation-circle(role='img' aria-label='Invalid input')

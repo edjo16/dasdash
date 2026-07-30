@@ -1,0 +1,16 @@
+extends ../../layout
+
+block layout-content
+  div#layoutSidenav_content
+    main
+      div.container-fluid.px-4
+        a(href='/temporary_change_locations' style='color:#212529')
+          i.fas.fa-chevron-left
+          span(style='padding-left: 0.5rem;') Back
+        h2.mt-4.mb-1 #{title}
+        p.text-muted.mb-0 This screen now uses the reusable modal component.
+
+  - const tclInitialMode = 'view'
+  - const tclInitialData = formData
+  - const tclStandalone = true
+  include ./forms_it_temporary_change_location_modal

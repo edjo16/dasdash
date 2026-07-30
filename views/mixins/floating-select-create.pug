@@ -1,0 +1,140 @@
+mixin floating-select-create(label, name, options=[], required=false, placeholder='Select an option', createUrl='', createText='New', className='', containerClass='', attrs={}, offcanvasTarget='offcanvasNewCompany')
+  div.floating-select-container(class=containerClass)
+    div.floating-select-wrapper.with-button
+      select(
+        id=name
+        name=name
+        class=`floating-select ${className}`
+        data-required=required
+      )&attributes(attrs)
+        option(value='' selected disabled)= placeholder
+        each option in options
+          - var dataAttrs = {}
+          - if (option['data-company']) dataAttrs['data-company'] = option['data-company']
+          - if (option['data-company-id']) dataAttrs['data-company-id'] = option['data-company-id']
+          - if (option['data-company-name']) dataAttrs['data-company-name'] = option['data-company-name']
+          - if (option['data-name']) dataAttrs['data-name'] = option['data-name']
+          - if (typeof attrs.defaultValue !== 'undefined' && option.value == attrs.defaultValue)
+           option(value=option.value selected)&attributes(dataAttrs)= option.label
+          - else
+           option(value=option.value)&attributes(dataAttrs)= option.label
+      
+      label.floating-label(for=name)= label + (required ? ' *' : '')
+
+      if createUrl
+        a.floating-select-create-btn(href=createUrl style="position:absolute;right:8px;top:50%;transform:translateY(-50%);font-size:.75rem;color:#00586f;font-weight:700;white-space:nowrap;text-decoration:none;padding:4px 8px;background:#e6f4f1;border-radius:6px;border:1px solid #d0e8ef;z-index:1;")= createText
+      else
+        button.floating-select-create-btn(type="button" data-bs-toggle="offcanvas" data-bs-target=`#${offcanvasTarget}` style="position:absolute;right:8px;top:50%;transform:translateY(-50%);font-size:.75rem;color:#00586f;font-weight:700;white-space:nowrap;text-decoration:none;padding:4px 8px;background:#e6f4f1;border-radius:6px;border:1px solid #d0e8ef;z-index:1;cursor:pointer;")= createText
+
+      include ./validation-icons.pug
+      +successIcon()
+      +errorIcon()
+
+    span.error-message(data-error-for=name)
+
+  style.
+    .floating-select-wrapper.with-button select {
+      padding-right: 100px;
+    }
+    .floating-select-wrapper.with-button::after {
+      content: '';
+      position: absolute;
+      right: 68px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 0;
+      height: 0;
+      border-left: 5px solid transparent;
+      border-right: 5px solid transparent;
+      border-top: 6px solid #00586f;
+      pointer-events: none;
+      z-index: 2;
+    }
+    .floating-select-create-btn:hover {
+      background: #d0e8ef;
+    }
+
+  script.
+    document.addEventListener('DOMContentLoaded', function() {
+      const select = document.getElementById('#{name}');
+      if (!select) return;
+      
+      function validateSelect() {
+        const value = select.value;
+        const isRequired = select.dataset.required === 'true';
+        const errorMsg = document.querySelector(`[data-error-for="#{name}"]`);
+        
+        // Remove previous states
+        select.classList.remove('valid', 'error', 'has-value');
+        errorMsg?.classList.remove('show');
+        
+        // Check if has value
+        if (value) {
+          select.classList.add('has-value');
+        }
+        
+        // Validate
+        if (isRequired && !value) {
+          if (select.dataset.touched === 'true') {
+            select.classList.add('error');
+            if (errorMsg) {
+              errorMsg.textContent = '#{label} is required';
+              errorMsg.classList.add('show');
+            }
+          }
+          return false;
+        } else if (value) {
+          select.classList.add('valid');
+          return true;
+        }
+        
+        return true;
+      }
+      
+      // Validate on change
+      select.addEventListener('change', function() {
+        select.dataset.touched = 'true';
+        validateSelect();
+      });
+      
+      // Mark as touched on blur
+      select.addEventListener('blur', function() {
+        select.dataset.touched = 'true';
+        validateSelect();
+      });
+      
+      // Initial validation if has value
+      if (select.value) {
+        select.classList.add('has-value');
+        validateSelect();
+      }
+      
+      // Expose validation methods globally for form-level validation
+      const selectId = '#{name}';
+      window['validateSelect_' + selectId] = function() {
+        select.dataset.touched = 'true';
+        return validateSelect();
+      };
+      
+      window['setSelectError_' + selectId] = function(message) {
+        const errorMsg = document.querySelector(`[data-error-for="#{name}"]`);
+        select.classList.remove('valid');
+        select.classList.add('error');
+        if (errorMsg) {
+          errorMsg.textContent = message || '#{label} is required';
+          errorMsg.classList.add('show');
+        }
+        return false;
+      };
+      
+      window['clearSelectError_' + selectId] = function() {
+        const errorMsg = document.querySelector(`[data-error-for="#{name}"]`);
+        select.classList.remove('error');
+        if (errorMsg) {
+          errorMsg.classList.remove('show');
+        }
+        if (select.value) {
+          select.classList.add('valid');
+        }
+      };
+    });

@@ -1,0 +1,834 @@
+extends ../layout
+include ../mixins/floating-input
+include ../mixins/floating-input-phone
+include ../mixins/floating-select
+include ../mixins/floating-select-create
+include ../mixins/floating-users
+include ../mixins/floating-textarea
+include ../mixins/breadcrumb
+
+block layout-content
+  div#layoutSidenav_content
+    main
+      div.container-fluid.px-4
+        div(style="display:flex;justify-content:space-between;align-items:center;")
+          div.container-fluid
+                +app-breadcrumb({
+                  homeHref: '/',
+                  items: [
+                    { label: 'Contacts', href: '/badaco-contacts' },
+                    { label: `${isEdit ? 'Edit Contact' : 'New Contact'}`, active: true }]
+                })
+          if isEdit
+            div#pagination-container(style="display:flex;gap:10px;")
+              if prevContactId
+                a.page-link(href=`/badaco-contacts/edit/${prevContactId}` aria-label="Previous" title="Previous Contact")
+                  i.fas.fa-chevron-left
+              else
+                span.page-link.disabled(style="color:#6c757d;cursor:not-allowed;")
+                  i.fas.fa-chevron-left
+              if nextContactId
+                a.page-link(href=`/badaco-contacts/edit/${nextContactId}` aria-label="Next" title="Next Contact")
+                  i.fas.fa-chevron-right
+              else
+                span.page-link.disabled(style="color:#6c757d;cursor:not-allowed;")
+                  i.fas.fa-chevron-right
+
+        div#alertContainer
+
+        form#contactForm(autocomplete="off")
+          input(type="hidden" name="UserID" value=userProfile.UserID)
+          if isEdit
+            input(type="hidden" name="contact_id" value=contact.contact_id)
+          
+          //- Company Information
+          - var countryOptions = allCountries.map(c => ({ value: c.cpais, label: c.xnombre_pais_ingles.trim() }))
+          div.row
+            div.col-xl-12(style="position: relative")
+              div.card.mb-4.p-2
+                div.card-header.text-primary
+                  i.fas.fa-building.me-1
+                  | Company Information
+                div.card-body(style="padding-bottom:25px")
+                  div.row
+                    div.col-md-6
+                      - var companyOptions = companies.map(c => ({ value: c.bmc_id, label: c.nombre + (c.xnombre_pais_ingles ? ' (' + c.xnombre_pais_ingles + ')' : '') }))
+                      +floating-select-create('Company name', 'bmc_id', companyOptions, true, 'Company', '', 'New')
+                      if isEdit && contact.bmc_id
+                        script.
+                          document.addEventListener('DOMContentLoaded', function() {
+                            const select = document.getElementById('bmc_id');
+                            if (select) {
+                              select.value = '#{contact.bmc_id}';
+                              select.classList.add('has-value', 'valid');
+                            }
+                          });
+                  //- Floating Button for Company Fields
+                  button#floatingCompanyBtn.floating-btn(type="button" style="display: none;")
+                    i.fas.fa-chevron-down.me-2#floatingChevronIcon
+                    span#floatingBtnText See company fields 
+                  //- Company Fields Section (Collapsible)
+                  div#companyFieldsSection.mt-3(style="display: none;")
+                    hr
+                    div.row
+                      div.col-md-6
+                        +floating-input('Company Name', 'company_nombre', 'text', false, '', '', '', { maxlength: 100, readonly: true })
+                      div.col-md-6
+                        +floating-input('Website', 'company_website', 'text', false, '', '', '', { maxlength: 100 })
+                    div.row
+                      div.col-md-6
+                        +floating-select('Company Country', 'company_pais', countryOptions, false, 'Country')
+                      div.col-md-6
+                        - var regionOptions = regions.map(c => ({ value: c.bmrg_id, label: c.name }))
+                        +floating-select('Company Region', 'company_region', regionOptions, false, 'Region')
+                    div.row
+                      div.col-md-6
+                        - var relationshipOptions = relationships.map(r => ({ value: r.bmrl_id, label: r.name }))
+                        +floating-select('Relationship Type', 'company_rela', relationshipOptions, false, 'Relationship')
+                      div.col-md-6
+                        +floating-input-phone('Contact Phone Number', 'company_telefono', false, '123-456-7890', 'PA')
+                    div.row
+                      div.col-md-6
+                        +floating-input('Email', 'company_email', 'email', false, '', '', '', { maxlength: 100 })
+                      div.col-md-6
+                        +floating-input('Address', 'company_address', 'text', false, '', '', '', { maxlength: 250 })
+                      div.col-md-6
+                        +floating-input('Domain', 'company_domain', 'text', false, '', '', '', { maxlength: 100 })
+                    div.row
+                      div.col-12.text-end.mt-3
+                        button#btnUpdateCompany.btn.btn-primary(type="button")
+                          i.fas.fa-save.me-1
+                          | Update Company
+                  
+          //- Personal Information
+          div.row
+            div.col-xl-12(style="position:relative;")
+              div.card.mb-4.p-2
+                div.card-header.text-primary
+                  i.fas.fa-user.me-1
+                  | Contact Information
+                div.card-body
+                  div.row
+                    div.col-md-6
+                      +floating-input('Full Name', 'name', 'text', true, '', '', '', { maxlength: 100, value: contact ? contact.name : '' })
+                    div.col-md-6
+                      div
+                        +floating-input('Email Address', 'email', 'email', true, '', '', '', { maxlength: 100, value: contact ? contact.email : '' })
+                        div#emailValidationMessage(style="display:none;color:#dc3545;font-size:0.875rem;margin-top:0.25rem;")
+                          i.fas.fa-exclamation-circle.me-1
+                          span Email already exists
+                  div.row
+                    div.col-md-6
+                      +floating-input('Contact Job Title', 'job_title', 'text', false, '', '', '', { maxlength: 75, value: contact ? contact.job_title : '' })
+                    div.col-md-6
+                      +floating-input-phone('Contact Phone Number', 'phone_number', false, '123-456-7890', 'PA', '', '', contact ? contact.phone_number : '')
+                    div.col-md-6
+                      - var jobLevelOptions = jobLevels.map(jl => ({ value: jl.bmjl_id, label: jl.name }))
+                      +floating-select-create('Contact Job Level', 'bmjl_id', jobLevelOptions, false, 'Job level', '', 'New', '', '', {}, 'offcanvasNewJobLevel')
+                      if isEdit && contact.bmjl_id
+                        script.
+                          document.addEventListener('DOMContentLoaded', function() {
+                            const select = document.getElementById('bmjl_id');
+                            if (select) {
+                              select.value = '#{contact.bmjl_id}';
+                              if (select.value) select.classList.add('has-value', 'valid');
+                            }
+                          });
+                    div.col-md-6
+                      - var users = grupousuarios_active.map(c => ({ value: c.UserID, label: c.Name, department:c.departamento }))
+                      +floating-users('Assign - Active Re Collaborator', 'contactos_asociados', users, contact && contact.contactos_asociados ? contact.contactos_asociados : [], false, 'Contact','', '', {}, true, 'Business Developer')
+                      if isEdit && contact.contact
+                        script.
+                          document.addEventListener('DOMContentLoaded', function() {
+                            const select = document.getElementById('contact');
+                            if (select) {
+                              select.value = '#{contact.contact}';
+                              if (select.value) select.classList.add('has-value', 'valid');
+                            }
+                          });
+                    div.row
+                      div.col-md-6
+                        +floating-select('Contact Country', 'countryContact', countryOptions, false, 'Country')
+                        if isEdit && contact.country
+                          script.
+                            document.addEventListener('DOMContentLoaded', function() {
+                              const select = document.getElementById('countryContact');
+                              if (select) {
+                                select.value = '#{contact.country}';
+                                if (select.value) select.classList.add('has-value', 'valid');
+                              }
+                            });
+                        - var eventos = events?.map(c => ({ value: c.id, label: `${c.event_name? c.event_name : c.visit_name } - ${c.category} `}))
+                        +floating-select('Contact Event', 'event', eventos, false, 'Event')
+                        if isEdit && contact.event
+                          script.
+                            document.addEventListener('DOMContentLoaded', function() {
+                              const select = document.getElementById('event');
+                              if (select) {
+                                select.value = '#{contact.event}';
+                                if (select.value) select.classList.add('has-value', 'valid');
+                              }
+                            });
+                      div.col-md-6.d-flex.align-items-stretch
+                        +floating-textarea('Address','address',false,'','','',{ maxlength: 100, value: contact ? contact.address : '' },3)
+                        if isEdit && contact.address
+                          script.
+                            document.addEventListener('DOMContentLoaded', function() {
+                              const textarea = document.getElementById('address');
+                              if (textarea) {
+                                textarea.value = '#{contact.address}';
+                                if (textarea.value.trim()) {
+                                  textarea.classList.add('has-value', 'valid');
+                                }
+                              }
+                            });
+                      div.col-md-6
+                        - var relationshipOptions = relationships.map(r => ({ value: r.bmrl_id, label: r.name }))
+                        +floating-select('Contact Relationship', 'contact_rl_id', relationshipOptions, false, 'Relationship', '', '', {})
+
+                        if isEdit && contact.contact_rl_id
+                          script.
+                            document.addEventListener('DOMContentLoaded', function() {
+                              const select = document.getElementById('contact_rl_id');
+                              if (select) {
+                                select.value = '#{contact.contact_rl_id}';
+                                if (select.value) {
+                                  select.classList.add('has-value', 'valid');
+                                }
+                              }
+                            });
+          //- Action Buttons
+          div.row
+            div.col-xl-12
+              div.card.mb-4
+                div.card-body.text-end
+                  a.btn.btn-secondary.btn-md.me-2(href=`/badaco-contacts`)
+                    i.fas.fa-times.me-1
+                    | Cancel
+                  button#btnSave.btn.btn-primary.btn-md(type="submit")
+                    i.fas.fa-save.me-1
+                    | #{isEdit ? 'Update Contact' : 'Create Contact'}
+
+  //- Offcanvas: New Company
+  div#offcanvasNewCompany.offcanvas.offcanvas-end(tabindex="-1" aria-labelledby="offcanvasNewCompanyLabel")
+    div.offcanvas-header
+      h5#offcanvasNewCompanyLabel.offcanvas-title
+        i.fas.fa-building.me-2
+        | New Company
+      button.btn-close(type="button" data-bs-dismiss="offcanvas" aria-label="Close")
+    div.offcanvas-body
+      form#formNewCompany
+        +floating-input('Company Name', 'companyNombre', 'text', true, '', '', '', { maxlength: 100 })
+        - var regionOptions = regions.map(c => ({ value: c.bmrg_id, label: c.name }))
+        - var relationshipOptions = relationships.map(r => ({ value: r.bmrl_id, label: r.name }))
+        +floating-input('Website', 'companyWebsite', 'text', true, '', '', '', { maxlength: 100 })
+        +floating-input('Email', 'companyEmail', 'email', false, '', '', '', { maxlength: 100 })
+        +floating-select('Company Country', 'companyPais', countryOptions, false, 'Country')
+        +floating-select('Business Relationship', 'companyRela', relationshipOptions, false, 'Select relationship')
+        +floating-input-phone('Phone', 'companyTelefono', false, '123-456-7890', 'PA')
+        +floating-textarea('Address', 'companyAddress', false, '', '', '', { maxlength: 250 }, 3)
+        div.d-grid.gap-2.mt-3
+          button#btnSaveCompany.btn.btn-primary(type="button")
+            i.fas.fa-save.me-1
+            | Save Company
+          button.btn.btn-secondary(type="button" data-bs-dismiss="offcanvas") Cancel
+
+  //- Offcanvas: New Job Level
+  div#offcanvasNewJobLevel.offcanvas.offcanvas-end(tabindex="-1" aria-labelledby="offcanvasNewJobLevelLabel")
+    div.offcanvas-header
+      h5#offcanvasNewJobLevelLabel.offcanvas-title
+        i.fas.fa-briefcase.me-2
+        | New Job Level
+      button.btn-close(type="button" data-bs-dismiss="offcanvas" aria-label="Close")
+    div.offcanvas-body
+      form#formNewJobLevel
+        +floating-input('Job Level Name', 'jobLevelName', 'text', true, '', '', '', { maxlength: 100 })
+        div.d-grid.gap-2.mt-3
+          button#btnSaveJobLevel.btn.btn-primary(type="button")
+            i.fas.fa-save.me-1
+            | Save Job Level
+          button.btn.btn-secondary(type="button" data-bs-dismiss="offcanvas") Cancel
+
+  //- Offcanvas: New Relationship
+  div#offcanvasNewRelationship.offcanvas.offcanvas-end(tabindex="-1" aria-labelledby="offcanvasNewRelationshipLabel")
+    div.offcanvas-header
+      h5#offcanvasNewRelationshipLabel.offcanvas-title
+        i.fas.fa-handshake.me-2
+        | New Relationship Type
+      button.btn-close(type="button" data-bs-dismiss="offcanvas" aria-label="Close")
+    div.offcanvas-body
+      form#formNewRelationship
+        +floating-input('Relationship Name', 'relationshipName', 'text', true, '', '', '', { maxlength: 100 })
+        div.d-grid.gap-2.mt-3
+          button#btnSaveRelationship.btn.btn-primary(type="button")
+            i.fas.fa-save.me-1
+            | Save Relationship
+          button.btn.btn-secondary(type="button" data-bs-dismiss="offcanvas") Cancel
+
+
+  style.
+    .card-header {
+      font-weight: 600;
+    }
+    
+    .floating-btn {
+      position: absolute;
+      left: 50%;
+      bottom: 5%;
+      max-width:200px;
+      transform: translateX(-50%);
+      z-index: 1000;
+      padding: 0.15rem 0.25rem;
+      background: #00586f;
+      color: white;
+      border: none;
+      border-radius: 10px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      font-weight: 400;
+      transition: all 0.3s ease;
+      cursor: pointer;
+    }
+    
+    .floating-btn:hover {
+      background: #1885a0;
+      box-shadow: 0 6px 16px rgba(0,0,0,0.2);
+      transform: translateX(-50%) translateY(-2px);
+    }
+    
+    .floating-btn i {
+      font-size: 1rem;
+    }
+    
+    #companyFieldsSection {
+      transition: all 0.3s ease;
+    }
+    
+    #pagination-container {
+      text-align: right;
+    }
+    
+    .page-link {
+      display: inline-block;
+      padding: 5px 10px;
+      margin: 0 5px;
+      text-decoration: none;
+      color: #00586f;
+      background-color: #fff;
+      border: 1px solid #dee2e6;
+      font-size: 16px;
+      cursor: pointer;
+      transition: background-color 0.3s, color 0.3s;
+      border-radius: 4px;
+    }
+    
+    .page-link:hover {
+      background-color: #00586f;
+      color: #fff;
+      border-color: #00586f;
+    }
+    
+    .page-link.disabled {
+      color: #6c757d;
+      cursor: not-allowed;
+      border-color: #dee2e6;
+    }
+    
+    .page-link i {
+      font-size: 18px;
+    }
+    #address.floating-input, .floating-textarea{ min-height: 100%; height: 100%; }
+    .floating-input-wrapper, .floating-input-container { height: 92%; width:100% }
+  script.
+    const isEdit = #{isEdit ? 'true' : 'false'};
+    const userID = '#{userProfile.UserID}';
+    const currentContactId = isEdit ? #{contact ? contact.contact_id : 'null'} : null;
+    let emailCheckTimeout;
+    let isEmailValid = true;
+    
+    // Email validation function
+    async function checkEmailAvailability(email) {
+      if (!email || email.trim() === '') {
+        document.getElementById('emailValidationMessage').style.display = 'none';
+        document.getElementById('email').classList.remove('is-invalid');
+        isEmailValid = true;
+        return;
+      }
+      
+      try {
+        const params = new URLSearchParams({
+          email: email,
+          excludeContactId: currentContactId || ''
+        });
+        
+        const response = await fetch(`/badaco/api/check-email?${params}`);
+        const data = await response.json();
+        
+        if (data.exists) {
+          document.getElementById('emailValidationMessage').style.display = 'block';
+          document.getElementById('email').classList.add('is-invalid');
+          isEmailValid = false;
+        } else {
+          document.getElementById('emailValidationMessage').style.display = 'none';
+          document.getElementById('email').classList.remove('is-invalid');
+          isEmailValid = true;
+        }
+      } catch (error) {
+        console.error('Error checking email:', error);
+      }
+    }
+    let companyFieldsVisible = false;
+    
+    document.addEventListener('DOMContentLoaded', function() {
+      const form = document.getElementById('contactForm');
+      const companySelect = document.getElementById('bmc_id');
+      const floatingBtn = document.getElementById('floatingCompanyBtn');
+      const companyFieldsSection = document.getElementById('companyFieldsSection');
+      const floatingBtnText = document.getElementById('floatingBtnText');
+      const emailInput = document.getElementById('email');
+      
+      // Initialize company fields as disabled since they're hidden by default
+      ['company_nombre', 'company_pais', 'company_region', 'company_rela', 
+       'company_telefono', 'company_email', 'company_address', 'company_domain', 'company_website'].forEach(id => {
+        const element = document.getElementById(id);
+        if (element) element.disabled = true;
+      });
+      
+      // Email input event listener for real-time validation
+      emailInput.addEventListener('input', function() {
+        clearTimeout(emailCheckTimeout);
+        emailCheckTimeout = setTimeout(() => {
+          checkEmailAvailability(this.value.trim());
+        }, 500);
+      });
+      
+      // Handle company selection
+      companySelect.addEventListener('change', function() {
+        const selectedCompanyId = this.value;
+        
+        if (selectedCompanyId) {
+          floatingBtn.style.display = 'block';
+          loadCompanyData(selectedCompanyId);
+        } else {
+          floatingBtn.style.display = 'none';
+          companyFieldsSection.style.display = 'none';
+          companyFieldsVisible = false;
+          floatingBtnText.textContent = 'See company fields';
+          // Disable company fields when hidden
+          ['company_nombre', 'company_pais', 'company_region', 'company_rela', 
+           'company_telefono', 'company_email', 'company_address', 'company_domain', 'company_website'].forEach(id => {
+            const element = document.getElementById(id);
+            if (element) element.disabled = true;
+          });
+        }
+      });
+      
+      // Toggle company fields visibility
+      floatingBtn.addEventListener('click', function() {
+        companyFieldsVisible = !companyFieldsVisible;
+        var chevronIcon = document.getElementById('floatingChevronIcon');
+        if (companyFieldsVisible) {
+          companyFieldsSection.style.display = 'block';
+          floatingBtnText.textContent = 'Show less fields';
+          if (chevronIcon) {
+            chevronIcon.classList.remove('fa-chevron-down');
+            chevronIcon.classList.add('fa-chevron-up');
+          }
+          // Enable company fields when visible
+          ['company_nombre', 'company_pais', 'company_region', 'company_rela', 
+           'company_telefono', 'company_email', 'company_address', 'company_domain', 'company_website'].forEach(id => {
+            const element = document.getElementById(id);
+            if (element) element.disabled = false;
+          });
+          // Scroll to company section
+          document.querySelector('.card.mb-4').scrollIntoView({ behavior: 'smooth', block: 'start' });
+        } else {
+          companyFieldsSection.style.display = 'none';
+          floatingBtnText.textContent = 'See company fields';
+          if (chevronIcon) {
+            chevronIcon.classList.remove('fa-chevron-up');
+            chevronIcon.classList.add('fa-chevron-down');
+          }
+          // Disable company fields when hidden to prevent validation issues
+          ['company_nombre', 'company_pais', 'company_region', 'company_rela', 
+           'company_telefono', 'company_email', 'company_address', 'company_domain', 'company_website'].forEach(id => {
+            const element = document.getElementById(id);
+            if (element) element.disabled = true;
+          });
+        }
+      });
+      
+      // Update company button
+      document.getElementById('btnUpdateCompany').addEventListener('click', async function() {
+        const selectedCompanyId = companySelect.value;
+        
+        if (!selectedCompanyId) {
+          launch_toast('Please select a company first', 2);
+          return;
+        }
+        
+        const btn = this;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Updating...';
+        
+        const companyData = {
+          bmc_id: parseInt(selectedCompanyId),
+          nombre: document.getElementById('company_nombre').value.trim(),
+          pais: document.getElementById('company_pais').value.trim(),
+          region: document.getElementById('company_region').value || null,
+          bmrl_id: document.getElementById('company_rela').value || null,
+          telefono: document.getElementById('company_telefono-hidden').value.trim(),
+          email: document.getElementById('company_email').value.trim(),
+          address: document.getElementById('company_address').value.trim(),
+          domain: document.getElementById('company_domain').value.trim(),
+          website: document.getElementById('company_website').value.trim(),
+          contact_rl_id: document.getElementById('contact_rl_id').value.trim(),
+          uingreso: userID
+        };
+        
+        try {
+          const response = await fetch(`/badaco/companies/update/${selectedCompanyId}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(companyData)
+          });
+          
+          const data = await response.json();
+          
+          if (data.success) {
+            launch_toast('Company updated successfully', 1);
+            // Update the company select option text if name changed
+            const selectedOption = companySelect.options[companySelect.selectedIndex];
+            const newLabel = companyData.nombre + (companyData.pais ? ' (' + companyData.pais + ')' : '');
+            selectedOption.text = newLabel;
+          } else {
+            launch_toast('Error: ' + data.error, 2);
+          }
+        } catch (error) {
+          console.error('Error:', error);
+          launch_toast('Error updating company', 2);
+        } finally {
+          btn.disabled = false;
+          btn.innerHTML = '<i class="fas fa-save me-1"></i> Update Company';
+        }
+      });
+      
+      // Load company data from server
+      async function loadCompanyData(companyId) {
+        try {
+          const response = await fetch(`/badaco/companies/${companyId}`);
+          const data = await response.json();
+          
+          if (data.success && data.company) {
+            const company = data.company;
+            
+            // Temporarily enable fields to populate them
+            const companyFieldIds = ['company_nombre', 'company_pais', 'company_region', 'company_rela', 
+             'company_telefono', 'company_email', 'company_address', 'company_domain', 'company_website'];
+            
+            companyFieldIds.forEach(id => {
+              const element = document.getElementById(id);
+              if (element) element.disabled = false;
+            });
+            
+            // Populate company fields
+            document.getElementById('company_nombre').value = company.nombre || '';
+            document.getElementById('company_pais').value = company.pais || '';
+            document.getElementById('company_region').value = company.bmrg_id || '';
+            document.getElementById('company_rela').value = company.bmrl_id || '';
+            document.getElementById('company_telefono').value = company.telefono || '';
+            if (window['setPhoneValue_company_telefono']) window['setPhoneValue_company_telefono'](company.telefono || '');
+            document.getElementById('company_email').value = company.email || '';
+            document.getElementById('company_address').value = company.address || '';
+            document.getElementById('company_domain').value = company.domain || '';
+            document.getElementById('company_website').value = company.website || '';
+
+            // Add 'has-value' class to inputs with values
+            companyFieldIds.forEach(id => {
+              const element = document.getElementById(id);
+              if (element && element.value) {
+                element.classList.add('has-value', 'valid');
+              }
+            });
+            
+            // If fields are not visible, disable them again
+            if (!companyFieldsVisible) {
+              companyFieldIds.forEach(id => {
+                const element = document.getElementById(id);
+                if (element) element.disabled = true;
+              });
+            }
+          }
+        } catch (error) {
+          console.error('Error loading company data:', error);
+        }
+      }
+      
+      // Check if company is already selected on page load
+      if (companySelect.value) {
+        floatingBtn.style.display = 'block';
+        loadCompanyData(companySelect.value);
+      }
+      
+      // Form validation function
+      function validateForm() {
+        let isValid = true;
+        const errors = [];
+
+        // Define required fields with their IDs and labels
+        const requiredFields = [
+          { id: 'name', label: 'Full Name', type: 'input' },
+          { id: 'bmc_id', label: 'Company', type: 'select' },
+          { id: 'email', label: 'Email Address', type: 'input' }
+        ];
+
+        // Validate each required field
+        requiredFields.forEach(field => {
+          const element = document.getElementById(field.id);
+          if (!element) return;
+          
+          const value = element.value.trim();
+          
+          if (!value) {
+            // Field is empty - mark as error
+            isValid = false;
+            errors.push(field.label);
+            
+            if (field.type === 'input') {
+              const setError = window['setInputError_' + field.id];
+              if (setError) {
+                setError(`${field.label} is required`);
+              } else {
+                element.classList.add('error');
+              }
+            } else if (field.type === 'select') {
+              const setError = window['setSelectError_' + field.id];
+              if (setError) {
+                setError(`${field.label} is required`);
+              } else {
+                element.classList.add('error');
+              }
+            }
+          } else {
+            // Field has value - clear any error
+            if (field.type === 'input') {
+              const clearError = window['clearInputError_' + field.id];
+              if (clearError) clearError();
+            } else if (field.type === 'select') {
+              const clearError = window['clearSelectError_' + field.id];
+              if (clearError) clearError();
+            }
+          }
+        });
+
+        // Show summary message if there are errors
+        if (!isValid) {
+          const errorMsg = 'Please fill in the required fields ';
+          launch_toast(errorMsg, 2);
+        }
+
+        return isValid;
+      }
+      
+      form.addEventListener('submit', async function(e) {
+        e.preventDefault();
+        
+        // Validate form first
+        if (!validateForm()) {
+          return; // Stop if validation fails
+        }
+        
+        // Check email validity
+        if (!isEmailValid) {
+          const emailInput = document.getElementById('email');
+          emailInput.classList.remove('valid');
+          emailInput.classList.remove('has-value');
+          emailInput.classList.add('is-invalid');
+          launch_toast('Email already exists. Please use a different email address.', 2);
+          return;
+        }
+        
+        // Disable submit button
+        const btnSave = document.getElementById('btnSave');
+        btnSave.disabled = true;
+        btnSave.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Saving...';
+        
+        try {
+          // Prepare form data (inside try so any DOM errors are caught)
+          let code = document.getElementById('phone_number-dialcode').textContent.trim();
+          const formData = {
+            UserID: userID,
+            name: document.getElementById('name').value.trim(),
+            email: document.getElementById('email').value.trim(),
+            phone_number: document.getElementById('phone_number-hidden').value.trim() || `${code} ${document.getElementById('phone_number').value.trim()}`,
+            contactos_asociados: Array.from(document.querySelectorAll('input[name="contactos_asociados[]"]')).map(input => input.value),
+            bmc_id: parseInt(document.getElementById('bmc_id').value),
+            job_title: document.getElementById('job_title').value.trim(),
+            bmjl_id: document.getElementById('bmjl_id').value ? parseInt(document.getElementById('bmjl_id').value) : null,
+            country: document.getElementById('countryContact').value.trim(),
+            address: document.getElementById('address').value.trim(),
+            event: document.getElementById('event').value ? parseInt(document.getElementById('event').value) : null,
+            contact_rl_id: document.getElementById('contact_rl_id').value.trim(),
+          };
+
+          let url, method;
+          
+          if (isEdit) {
+            const contactId = document.querySelector('input[name="contact_id"]').value;
+            url = `/badaco-contacts/update/${contactId}`;
+            method = 'POST';
+          } else {
+            url = '/badaco-contacts/create';
+            method = 'POST';
+          }
+          
+          const response = await fetch(url, {
+            method: method,
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(formData)
+          });
+          
+          const data = await response.json();
+          
+          if (data.success) {
+            if (isEdit) {
+              launch_toast('successfully updated', 1);
+              btnSave.disabled = false;
+              btnSave.innerHTML = '<i class="fas fa-save me-1"></i> Update Contact';
+            } else {
+              // Redirect immediately to the newly created contact detail
+              window.location.href = '/badaco-contacts/edit/' + data.contact_id
+            }
+          } else {
+            launch_toast('Error: ' + data.error, 2);
+            btnSave.disabled = false;
+            btnSave.innerHTML = '<i class="fas fa-save me-1"></i> ' + (isEdit ? 'Update Contact' : 'Create Contact');
+          }
+        } catch (error) {
+          launch_toast('Error saving contact', 2);
+
+          btnSave.disabled = false;
+          btnSave.innerHTML = '<i class="fas fa-save me-1"></i> ' + (isEdit ? 'Update Contact' : 'Create Contact');
+        }
+      });
+    });
+    
+    // ==================== COMPANY MODAL ====================
+    document.getElementById('btnSaveCompany').addEventListener('click', async function() {
+      const nombre = document.getElementById('companyNombre').value.trim();
+      const website = document.getElementById('companyWebsite').value.trim();
+
+      if (!nombre) {
+        launch_toast('Company name is required',2);
+        return;
+      }
+      if (!companyWebsite) {
+        launch_toast('Website is required',2);
+        return;
+      }
+      const btn = this;
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Saving...';
+      
+      try {
+        const response = await fetch('/badaco/companies/create', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            nombre: nombre,
+            pais: document.getElementById('companyPais').value.trim(),
+            bmrl_id: document.getElementById('companyRela').value.trim(),
+            telefono: document.getElementById('companyTelefono').value.trim(),
+            email: document.getElementById('companyEmail').value.trim(),
+            address: document.getElementById('companyAddress').value.trim(),
+            website: document.getElementById('companyWebsite').value.trim(),
+            uingreso: userID
+          })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+          // Add new option to select
+          const select = document.getElementById('bmc_id');
+          const option = document.createElement('option');
+          option.value = data.bmc_id;
+          option.text = nombre;
+          select.appendChild(option);
+          select.value = data.bmc_id;
+          select.classList.add('has-value', 'valid');
+          
+          // Close offcanvas and reset form
+          const offcanvas = bootstrap.Offcanvas.getInstance(document.getElementById('offcanvasNewCompany'));
+          offcanvas.hide();
+          document.getElementById('formNewCompany').reset();          
+          launch_toast('Company created successfully', 1);
+
+        } else {
+          launch_toast('Error: ' + data.error, 2);
+
+        }
+      } catch (error) {
+        console.error('Error:', error);
+        launch_toast('Error creating company', 2);
+
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-save me-1"></i> Save Company';
+      }
+    });
+    
+    // ==================== JOB LEVEL MODAL ====================
+    document.getElementById('btnSaveJobLevel').addEventListener('click', async function() {
+      const name = document.getElementById('jobLevelName').value.trim();
+      
+      if (!name) {
+        launch_toast('Job Level name is required', 2);
+        return;
+      }
+      
+      const btn = this;
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Saving...';
+      
+      try {
+        const response = await fetch('/badaco/joblevels/create', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: name,
+            UserID: userID
+          })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+          // Add new option to select
+          const select = document.getElementById('bmjl_id');
+          const option = document.createElement('option');
+          option.value = data.bmjl_id;
+          option.text = name;
+          select.appendChild(option);
+          select.value = data.bmjl_id;
+          select.classList.add('has-value', 'valid');
+          
+          // Close offcanvas and reset form
+          const offcanvas = bootstrap.Offcanvas.getInstance(document.getElementById('offcanvasNewJobLevel'));
+          offcanvas.hide();
+          document.getElementById('formNewJobLevel').reset();
+          
+          launch_toast('Job Level created successfully', 1);
+        } else {
+          launch_toast('Error: ' + data.error, 2);
+        }
+      } catch (error) {
+        launch_toast('Error creating job level',2);
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-save me-1"></i> Save Job Level';
+      }
+    });
+    
+

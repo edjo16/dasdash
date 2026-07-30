@@ -1,0 +1,254 @@
+//- ─────────────────────────────────────────────────────────────────────────────
+//- floating-ct-select  —  Searchable, lazy-loaded, grouped single-select
+//-
+//- Parameters:
+//-   label          {string}  Field label shown as floating label
+//-   name           {string}  id / name for the hidden input that holds the value
+//-   required       {bool}    Adds asterisk + validation (default false)
+//-   placeholder    {string}  Placeholder text (default 'Select an option')
+//-   fetchUrl       {string}  GET endpoint that returns { data:[{type_id, label, nombre_departamento}] }
+//-   newBtnCallback {string}  JS function name to call on "+ New" click (pass '' to hide button)
+//-   containerClass {string}  Extra class on the outer container div
+//-   className      {string}  Extra class on the .floating-ct-display div
+//- ─────────────────────────────────────────────────────────────────────────────
+mixin floating-ct-select(label, name, required=false, placeholder='Select an option', fetchUrl='/case-types-dropdown', newBtnCallback='', containerClass='', className='', devteam=false)
+  div.floating-ct-container(class=containerClass)
+    div.floating-ct-wrapper
+      div.floating-ct-display(
+        id=name+'_display'
+        tabindex="0"
+        data-required=required
+        data-name=name
+        class=className
+      )
+        span.ct-placeholder(id=name+'_placeholder')= placeholder
+        span.ct-selected-label(id=name+'_selected')
+        button.ct-clear-btn(type="button" title="Clear" id=name+'_clear') ×
+        i.fas.fa-chevron-down.ct-arrow
+
+      label.floating-label(for=name)= label + (required ? ' *' : '')
+
+      include ./validation-icons.pug
+      +successIcon()
+      +errorIcon()
+
+      div.ct-dropdown(id=name+'_dropdown')
+        div.ct-dd-header
+          input.ct-search-input(type="text" placeholder="Search…" autocomplete="off" id=name+'_search')
+          button.ct-refresh-btn(type="button" title="Refresh" id=name+'_refresh') ⟳
+          if newBtnCallback && devteam
+            button.ct-new-btn(type="button" id=name+'_new') + New
+        ul.ct-options(id=name+'_options')
+
+      input(type="hidden" id=name name=name)
+      input(type="hidden" id=name+'_label' name=name+'_label')
+
+    span.error-message(data-error-for=name)
+
+  script.
+    (function(){
+      var _name        = '#{name}';
+      var _fetchUrl    = '#{fetchUrl}';
+      var _newCallback = '#{newBtnCallback}';
+      var _required    = ('#{required}' === 'true');
+      var _label       = '#{label}';
+      var _data        = [];
+      var _loaded      = false;
+      var _loading     = false;
+
+      function g(id){ return document.getElementById(id); }
+
+      function _open(){
+        var disp = g(_name+'_display');
+        var dd   = g(_name+'_dropdown');
+        if(!disp || !dd) return;
+        disp.classList.add('open');
+        dd.classList.add('show');
+        var s = g(_name+'_search');
+        if(s){ s.value = ''; }
+        _render('');
+        if(s) s.focus();
+        if(!_loaded) _load();
+      }
+
+      function _close(){
+        var disp = g(_name+'_display');
+        var dd   = g(_name+'_dropdown');
+        if(disp) disp.classList.remove('open');
+        if(dd)   dd.classList.remove('show');
+      }
+
+      function _select(typeId, label){
+        g(_name).value          = typeId;
+        g(_name+'_label').value = label;
+        g(_name+'_placeholder').style.display = 'none';
+        var lbl = g(_name+'_selected');
+        lbl.textContent    = label;
+        lbl.style.display  = 'block';
+        g(_name+'_clear').style.display = 'block';
+        var disp = g(_name+'_display');
+        disp.classList.remove('error');
+        disp.classList.add('has-value', 'valid');
+        disp.dataset.touched = 'true';
+        var errEl = document.querySelector('[data-error-for="' + _name + '"]');
+        if(errEl){ errEl.textContent = ''; errEl.classList.remove('show'); }
+        _close();
+      }
+
+      function _clear(){
+        g(_name).value          = '';
+        g(_name+'_label').value = '';
+        g(_name+'_placeholder').style.display = '';
+        var lbl = g(_name+'_selected');
+        lbl.textContent   = '';
+        lbl.style.display = 'none';
+        g(_name+'_clear').style.display = 'none';
+        g(_name+'_display').classList.remove('has-value','valid','error');
+      }
+
+      function _render(q){
+        var ul = g(_name+'_options');
+        if(!ul) return;
+        var lq = q.toLowerCase().trim();
+        var filtered = lq
+          ? _data.filter(function(r){
+              return r.label.toLowerCase().indexOf(lq) > -1
+                  || (r.nombre_departamento||'').toLowerCase().indexOf(lq) > -1;
+            })
+          : _data;
+        if(filtered.length === 0){
+          ul.innerHTML = '<li class="ct-no-results py-2 px-3 text-muted">No results found</li>';
+          return;
+        }
+        var groups = {};
+        filtered.forEach(function(r){
+          var dep = r.nombre_departamento || 'Other';
+          if(!groups[dep]) groups[dep] = [];
+          groups[dep].push(r);
+        });
+        var html = '';
+        Object.keys(groups).sort(function(a,b){ return a.localeCompare(b); }).forEach(function(dep){
+          html += '<li class="ct-dep-label">' + dep + '</li>';
+          groups[dep].forEach(function(r){
+            html += '<li class="ct-option" data-id="' + r.type_id
+                  + '" data-label="' + String(r.label).replace(/&/g,'&amp;').replace(/"/g,'&quot;') + '">'
+                  + '<span class="ct-option-name">' + r.label + '</span>'
+                  + '</li>';
+          });
+        });
+        ul.innerHTML = html;
+        ul.querySelectorAll('.ct-option').forEach(function(li){
+          li.addEventListener('click', function(){ _select(this.dataset.id, this.dataset.label); });
+        });
+      }
+
+      async function _load(){
+        if(_loading) return;
+        _loading = true;
+        var ul = g(_name+'_options');
+        if(ul) ul.innerHTML = '<li class="ct-loading py-2 px-3 text-muted">'
+          + '<span class="spinner-border spinner-border-sm me-1"></span> Loading…</li>';
+        try{
+          var res = await fetch(_fetchUrl);
+          if(!res.ok) throw new Error('Status ' + res.status);
+          var json = await res.json();
+          _data   = json.data || [];
+          _loaded = true;
+          var s = g(_name+'_search');
+          _render(s ? s.value : '');
+        }catch(err){
+          console.error('[floating-ct-select]', err);
+          if(ul) ul.innerHTML = '<li class="text-danger py-2 px-3">Error loading options</li>';
+        }finally{
+          _loading = false;
+        }
+      }
+
+      function _validate(){
+        var disp  = g(_name+'_display');
+        var val   = (g(_name)?.value || '').trim();
+        var errEl = document.querySelector('[data-error-for="' + _name + '"]');
+        disp.classList.remove('valid','error');
+        if(errEl) errEl.classList.remove('show');
+        if(_required && !val){
+          if(disp.dataset.touched === 'true'){
+            disp.classList.add('error');
+            if(errEl){ errEl.textContent = _label + ' is required'; errEl.classList.add('show'); }
+          }
+          return false;
+        } else if(val){
+          disp.classList.add('valid');
+          return true;
+        }
+        return true;
+      }
+
+      // ── Global API (same pattern as other floating-* components) ─────────────
+      window['validateCtSelect_' + _name] = function(){
+        g(_name+'_display').dataset.touched = 'true';
+        return _validate();
+      };
+      window['setCtSelectError_' + _name] = function(msg){
+        var disp  = g(_name+'_display');
+        var errEl = document.querySelector('[data-error-for="' + _name + '"]');
+        disp.classList.remove('valid'); disp.classList.add('error');
+        if(errEl){ errEl.textContent = msg || (_label + ' is required'); errEl.classList.add('show'); }
+        return false;
+      };
+      window['clearCtSelectError_' + _name] = function(){
+        var disp  = g(_name+'_display');
+        var errEl = document.querySelector('[data-error-for="' + _name + '"]');
+        disp.classList.remove('error');
+        if(errEl) errEl.classList.remove('show');
+        if(g(_name)?.value) disp.classList.add('valid');
+      };
+      // Reload list; optionally auto-select a freshly-created item by its id
+      window['refreshCtSelect_' + _name] = async function(autoSelectId){
+        _loaded = false; _data = [];
+        var dd = g(_name+'_dropdown');
+        if(dd && dd.classList.contains('show')) await _load();
+        if(autoSelectId){
+          if(!_loaded) await _load();
+          var found = _data.find(function(r){ return String(r.type_id) === String(autoSelectId); });
+          if(found) _select(String(found.type_id), found.label);
+        }
+      };
+
+      // ── Event wiring ─────────────────────────────────────────────────────────
+      document.addEventListener('DOMContentLoaded', function(){
+        var display  = g(_name+'_display');
+        var dropdown = g(_name+'_dropdown');
+        if(!display || !dropdown) return;
+
+        display.addEventListener('click', function(e){
+          if(e.target.id === _name+'_clear' || (e.target.closest && e.target.closest('#'+_name+'_clear'))) return;
+          dropdown.classList.contains('show') ? _close() : _open();
+        });
+        display.addEventListener('blur', function(){
+          display.dataset.touched = 'true';
+          _validate();
+        });
+        g(_name+'_clear')?.addEventListener('click', function(e){
+          e.stopPropagation();
+          _clear();
+        });
+        g(_name+'_search')?.addEventListener('input', function(){
+          if(!_loaded) _load(); else _render(this.value);
+        });
+        g(_name+'_refresh')?.addEventListener('click', function(e){
+          e.stopPropagation();
+          _loaded = false; _data = [];
+          _load();
+        });
+        if(_newCallback){
+          g(_name+'_new')?.addEventListener('click', function(e){
+            e.stopPropagation();
+            _close();
+            if(typeof window[_newCallback] === 'function') window[_newCallback]();
+          });
+        }
+        document.addEventListener('click', function(e){
+          if(!display.contains(e.target) && !dropdown.contains(e.target)) _close();
+        });
+      });
+    })();

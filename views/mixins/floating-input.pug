@@ -1,0 +1,129 @@
+mixin floating-input(label, name, type='text', required=false, placeholder='', className='', containerClass='', attrs={}, readOnly=false)
+  - if (readOnly || (attrs && attrs.readonly)) attrs.readonly = true
+  div.floating-input-container(class=containerClass)
+    div.floating-input-wrapper
+      input(
+        type=type
+        id=name
+        name=name
+        class=`floating-input ${className}`
+        placeholder=placeholder
+        data-required=required
+        autocomplete='off'
+      )&attributes(attrs)
+      label.floating-label(for=name)= label + (required ? ' *' : '')
+
+      include ./validation-icons.pug
+      +successIcon()
+      +errorIcon()
+
+      span.error-message(data-error-for=name)
+  script.
+    function validateSafeInput(input) {
+      // Permite arroba si es tipo email
+      var allowAt = input.type === 'email' || input.getAttribute('type') === 'email';
+      var safePattern = allowAt ? /^[\w\s.,@áéíóúÁÉÍÓÚüÜñÑ-]*$/ : /^[\w\s.,áéíóúÁÉÍÓÚüÜñÑ-]*$/;
+      if (!safePattern.test(input.value)) {
+      input.value = input.value.replace(allowAt ? /[^\w\s.,@áéíóúÁÉÍÓÚüÜñÑ-]/g : /[^\w\s.,áéíóúÁÉÍÓÚüÜñÑ-]/g, '');
+      }
+    }
+    document.addEventListener('DOMContentLoaded', function() {
+      document.querySelectorAll('.floating-input:not([type="datetime-local"])').forEach(function(el) {
+        el.addEventListener('input', function() { validateSafeInput(this); });
+      });
+    });
+
+  script.
+    document.addEventListener('DOMContentLoaded', function() {
+      const input = document.getElementById('#{name}');
+      if (!input) return;
+      
+      function validateInput() {
+        const value = input.value.trim();
+        const isRequired = input.dataset.required === 'true';
+        const errorMsg = document.querySelector(`[data-error-for="#{name}"]`);
+        
+        // Remove previous states
+        input.classList.remove('valid', 'error', 'has-value');
+        errorMsg?.classList.remove('show');
+        
+        // Check if has value
+        if (value) {
+          input.classList.add('has-value');
+        }
+        
+        // Validate
+        if (isRequired && !value) {
+          if (input === document.activeElement || input.dataset.touched === 'true') {
+            input.classList.add('error');
+            if (errorMsg) {
+              errorMsg.textContent = '#{label} is required';
+              errorMsg.classList.add('show');
+            }
+          }
+          return false;
+        } else if (value) {
+          // Email validation
+          if (input.type === 'email') {
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (!emailRegex.test(value)) {
+              input.classList.add('error');
+              if (errorMsg) {
+                errorMsg.textContent = 'Please enter a valid email';
+                errorMsg.classList.add('show');
+              }
+              return false;
+            }
+          }
+          
+          input.classList.add('valid');
+          return true;
+        }
+        
+        return true;
+      }
+      
+      // Validate on input
+      input.addEventListener('input', validateInput);
+      
+      // Mark as touched on blur
+      input.addEventListener('blur', function() {
+        input.dataset.touched = 'true';
+        validateInput();
+      });
+      
+      // Initial validation if has value
+      if (input.value) {
+        input.classList.add('has-value');
+        validateInput();
+      }
+      
+      // Expose validation methods globally for form-level validation
+      const inputId = '#{name}';
+      window['validateInput_' + inputId] = function() {
+        input.dataset.touched = 'true';
+        return validateInput();
+      };
+      
+      window['setInputError_' + inputId] = function(message) {
+        const errorMsg = document.querySelector(`[data-error-for="#{name}"]`);
+        input.classList.remove('valid');
+        input.classList.add('error');
+        if (errorMsg) {
+          errorMsg.textContent = message || '#{label} is required';
+          errorMsg.classList.add('show');
+        }
+        return false;
+      };
+      
+      window['clearInputError_' + inputId] = function() {
+        const errorMsg = document.querySelector(`[data-error-for="#{name}"]`);
+        input.classList.remove('error');
+        if (errorMsg) {
+          errorMsg.classList.remove('show');
+        }
+        if (input.value.trim()) {
+          input.classList.add('valid');
+        }
+      };
+    });

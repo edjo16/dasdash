@@ -1,0 +1,451 @@
+//- ─────────────────────────────────────────────────────────────────────────────
+//- ai-chat-modal  —  Reusable AI chat modal component
+//-
+//- Parameters:
+//-   modalId      {string}  id of the overlay div                (default: 'aiSummaryModal')
+//-   closeId      {string}  id of the × close button             (default: 'closeAiModal')
+//-   chatWindowId {string}  id of the scrollable chat area       (default: 'aiChatWindow')
+//-   loadingId    {string}  id of the loading row                (default: 'aiLoadingRow')
+//-   promptId     {string}  id of the textarea                   (default: 'aiUserPrompt')
+//-   sendBtnId    {string}  id of the send/summarize button      (default: 'aiSendBtn')
+//-   title        {string}  Header title text                    (default: 'AI Assistant')
+//-   btnLabel     {string}  Label on the send button             (default: 'Summarize')
+//-   welcomeMsg   {string}  First bot message (leave '' to skip) (default: built-in)
+//-
+//- Usage:
+//-   include ../mixins/ai-chat-modal
+//-   +ai-chat-modal()
+//-
+//- Custom IDs example:
+//-   +ai-chat-modal('myAiModal', 'myClose', 'myChat', 'myLoading', 'myPrompt', 'mySend', 'Smart Summary', 'Send')
+//- ─────────────────────────────────────────────────────────────────────────────
+
+mixin ai-chat-modal(modalId='aiSummaryModal', closeId='closeAiModal', chatWindowId='aiChatWindow', loadingId='aiLoadingRow', promptId='aiUserPrompt', sendBtnId='aiSendBtn', title='AI Assistant', btnLabel='Summarize', welcomeMsg='')
+  - var _welcome = welcomeMsg || 'Hello! I can analyze the messages from this case and generate a structured summary for you. You can add extra instructions below, or just click **Summarize** to proceed.'
+  div(id=modalId class='ai-modal-overlay')
+    div.ai-modal-container
+      div.ai-modal-header
+        div.ai-modal-title
+          img(src="/icono-ia.png" width="28" height="28" style="object-fit:contain;" onerror="this.style.display='none'")
+          span= title
+        button.ai-modal-close(id=closeId type="button" aria-label="Close") ×
+      div.ai-chat-window(id=chatWindowId)
+        div.ai-bubble.ai-bubble--bot
+          div.ai-bubble__avatar 🤖
+          div.ai-bubble__content= _welcome
+      div.ai-loading-row(id=loadingId style="display:none;")
+        div.ai-spinner
+        span Thinking…
+      div.ai-suggestions-row
+        button.ai-suggestion-chip(type="button" data-action="summarize")
+          i.fas.fa-magic(style="margin-right:5px;")
+          | Summarize
+        button.ai-suggestion-chip(type="button" data-action="keypoints")
+          i.fas.fa-list-ul(style="margin-right:5px;")
+          | Key Points
+        button.ai-suggestion-chip(type="button" data-action="actions")
+          i.fas.fa-tasks(style="margin-right:5px;")
+          | Action Items
+      div.ai-files-row(id="aiFilesPanel" hidden)
+        div.ai-files-header
+          button.ai-files-toggle(type="button" id="aiFilesToggle" aria-expanded="true" aria-controls="aiFilesList")
+            i.fas.fa-chevron-down.ai-files-chevron(id="aiFilesChevron")
+            span.ai-files-toggle-label
+              i.fas.fa-file-pdf(style="margin-right:6px;color:#c0392b;")
+              span#aiFilesCount 0
+              |  Attachment(s)
+          span#aiDocsStatus.ai-docs-status(aria-live="polite")
+        ul.ai-files-list(id="aiFilesList")
+      div.ai-input-row
+        div.ai-textarea-wrapper
+          textarea.ai-user-input(id=promptId rows="2" placeholder="Ask something… (Enter to send, Shift+Enter for new line)")
+          button.ai-send-btn(id=sendBtnId type="button" aria-label="Send")
+            i.fas.fa-paper-plane
+  style.
+    /* ── AI Modal overlay ── */
+    .ai-modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 10000;
+      justify-content: center;
+      align-items: center;
+      background-color: #08080854;
+
+    }
+    .ai-modal-overlay.open { display: flex; }
+
+    /* ── Modal box ── */
+    .ai-modal-container {
+      background: #fff;
+      border-radius: 14px;
+      width: 680px;
+      max-width: 96vw;
+      max-height: 88vh;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 12px 48px rgba(0,0,0,.25);
+      overflow: hidden;
+    }
+    @media (max-width: 768px) {
+      .ai-modal-container {
+        width: 98vw;
+        max-height: 95vh;
+        border-radius: 10px;
+      }
+    }
+
+    /* ── Header ── */
+    .ai-modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: .75rem 1.25rem;
+      border-bottom: 2px solid #00586f;
+      flex-shrink: 0;
+    }
+    .ai-modal-title {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 600;
+      font-size: 1rem;
+      color: #212529;
+    }
+    .ai-modal-close {
+      font-size: 1.8rem;
+      cursor: pointer;
+      color: #6c757d;
+      line-height: 1;
+      user-select: none;
+      background: none;
+      border: none;
+      padding: 0;
+    }
+    .ai-modal-close:hover { color: #dc3545; }
+
+    /* ── Chat window ── */
+    .ai-chat-window {
+      flex: 1;
+      overflow-y: auto;
+      padding: 1rem 1.25rem;
+      display: flex;
+      flex-direction: column;
+      gap: .75rem;
+      background: #f8f9fa;
+    }
+    .ai-chat-window::-webkit-scrollbar { width: 5px; }
+    .ai-chat-window::-webkit-scrollbar-track { background: transparent; }
+    .ai-chat-window::-webkit-scrollbar-thumb { background: #c0cdd4; border-radius: 10px; }
+    .ai-chat-window::-webkit-scrollbar-thumb:hover { background: #00586f; }
+
+    /* ── Bubbles ── */
+    .ai-bubble {
+      display: flex;
+      gap: .6rem;
+      align-items: flex-start;
+    }
+    .ai-bubble--user { flex-direction: row-reverse; }
+
+    .ai-bubble__avatar {
+      font-size: 1.4rem;
+      flex-shrink: 0;
+      margin-top: 2px;
+      width: 32px;
+      height: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .ai-bubble__avatar img {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      object-fit: cover;
+    }
+    .ai-bubble__content {
+      background: #fff;
+      border: 1px solid #dee2e6;
+      border-radius: 10px;
+      padding: .55rem .85rem;
+      font-size: .9rem;
+      max-width: 82%;
+      line-height: 1.55;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .ai-bubble--user .ai-bubble__content {
+      background: #00586f;
+      color: #fff;
+      border-color: #00586f;
+    }
+
+    /* ── Loading row ── */
+    .ai-loading-row {
+      display: flex;
+      align-items: center;
+      gap: .6rem;
+      padding: .5rem 1.25rem;
+      font-size: .85rem;
+      color: #6c757d;
+      flex-shrink: 0;
+    }
+    .ai-spinner {
+      width: 18px;
+      height: 18px;
+      border: 2px solid #dee2e6;
+      border-top-color: #00586f;
+      border-radius: 50%;
+      animation: ai-spin .7s linear infinite;
+      flex-shrink: 0;
+    }
+    @keyframes ai-spin { to { transform: rotate(360deg); } }
+
+    /* ── Suggestion chips ── */
+    .ai-suggestions-row {
+      display: flex;
+      gap: .4rem;
+      padding: .5rem 1.25rem .5rem;
+      flex-wrap: wrap;
+      background: #fff;
+      flex-shrink: 0;
+    }
+    .ai-suggestion-chip {
+      background: #f0f8fa;
+      border: 1px solid #00586f;
+      color: #00586f;
+      border-radius: 16px;
+      padding: .2rem .7rem;
+      font-size: .78rem;
+      cursor: pointer;
+      transition: all .2s;
+      font-weight: 500;
+    }
+    .ai-suggestion-chip:hover {
+      background: #00586f;
+      color: #fff;
+    }
+
+    /* ── Files panel ── */
+    .ai-files-row {
+      padding: .35rem .5rem .45rem;
+      margin: 0 .75rem;
+      border-bottom: 1px solid #edf1f3;
+      background: #fff;
+      flex-shrink: 0;
+    }
+    .ai-files-row[hidden] { display: none !important; }
+    .ai-files-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: .75rem;
+      flex-wrap: wrap;
+    }
+    .ai-files-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: .4rem;
+      background: none;
+      border: none;
+      padding: .15rem .25rem;
+      font-size: .8rem;
+      color: #00586f;
+      font-weight: 600;
+      cursor: pointer;
+      border-radius: 4px;
+    }
+    .ai-files-toggle:hover { background: #f0f8fa; }
+    .ai-files-chevron {
+      transition: transform .2s ease;
+      font-size: .75rem;
+    }
+    .ai-files-row--collapsed .ai-files-chevron { transform: rotate(-90deg); }
+    .ai-files-row--collapsed .ai-files-list { display: none; }
+    .ai-files-row--loading .ai-files-toggle { opacity: .6; cursor: progress; }
+    .ai-docs-status {
+      font-size: .72rem;
+      color: #6c757d;
+    }
+    .ai-files-list {
+      list-style: none;
+      margin: .35rem 0 0;
+      padding: 0;
+      max-height: 160px;
+      overflow-y: auto;
+      border: 1px solid #edf1f3;
+      border-radius: 6px;
+      background: #fafcfd;
+    }
+    .ai-files-list::-webkit-scrollbar { width: 5px; }
+    .ai-files-list::-webkit-scrollbar-thumb { background: #c0cdd4; border-radius: 10px; }
+    .ai-file-item {
+      border-bottom: 1px solid #edf1f3;
+    }
+    .ai-file-item:last-child { border-bottom: none; }
+    .ai-file-label {
+      display: flex;
+      align-items: center;
+      gap: .55rem;
+      padding: .3rem .55rem;
+      cursor: pointer;
+      margin: 0;
+      font-size: .78rem;
+      color: #495057;
+    }
+    .ai-file-label:hover { background: #f0f8fa; }
+    .ai-file-check {
+      width: 14px;
+      height: 14px;
+      accent-color: #00586f;
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+    .ai-file-name {
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      color: #212529;
+    }
+    .ai-file-meta {
+      font-size: .7rem;
+      color: #6c757d;
+      flex-shrink: 0;
+    }
+    .ai-file-item--disabled .ai-file-label { color: #adb5bd; cursor: not-allowed; }
+    .ai-file-item--disabled .ai-file-name { color: #adb5bd; text-decoration: line-through; }
+    .ai-file-item--disabled .ai-file-meta { color: #c0392b; }
+    .ai-file-item--disabled .ai-file-check { cursor: not-allowed; }
+
+    /* ── Input row ── */
+    .ai-input-row {
+      padding: .6rem 1.25rem .75rem;
+      border-top: 1px solid #dee2e6;
+      background: #fff;
+      flex-shrink: 0;
+    }
+    .ai-textarea-wrapper {
+      position: relative;
+    }
+    .ai-user-input {
+      width: 100%;
+      resize: none;
+      border: 1px solid #ced4da;
+      border-radius: 8px;
+      padding: .5rem 2.75rem .5rem .75rem;
+      font-size: .875rem;
+      outline: none;
+      transition: border-color .2s;
+      box-sizing: border-box;
+    }
+    .ai-user-input:focus { border-color: #00586f; }
+    .ai-send-btn {
+      position: absolute;
+      bottom: 1.15rem;
+      right: .35rem;
+      background: #00586f;
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      width: 2rem;
+      height: 2rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: background .2s;
+      flex-shrink: 0;
+    }
+    .ai-send-btn:hover  { background: #004558; }
+    .ai-send-btn:disabled { background: #adb5bd; cursor: not-allowed; }
+
+    /* ── Add-to-case action row (below bot bubbles) ── */
+    .ai-bubble-actions {
+      padding-left: calc(32px + .6rem);
+      margin-top: -.1rem;
+      padding-bottom: .35rem;
+    }
+    .ai-save-btn {
+      font-size: .72rem;
+      color: #00586f;
+      background: none;
+      border: 1px solid #00586f;
+      border-radius: 12px;
+      padding: .15rem .65rem;
+      cursor: pointer;
+      transition: all .2s;
+      font-weight: 500;
+    }
+    .ai-save-btn:hover:not(:disabled):not(.saved) {
+      background: #00586f;
+      color: #fff;
+    }
+    .ai-save-btn:disabled { opacity: .7; cursor: default; }
+    .ai-save-btn.saved { border-color: #198754; color: #198754; cursor: default; }
+
+    /* ── Dark theme ── */
+    [data-theme="dark"] .ai-modal-container{
+      background: var(--surface-2);
+    }
+    [data-theme="dark"] .ai-suggestions-row,
+    [data-theme="dark"] .ai-files-row,
+    [data-theme="dark"] .ai-input-row,
+    [data-theme="dark"] .ai-bubble__content,
+    [data-theme="dark"] .ai-files-list,
+    [data-theme="dark"] .ai-user-input {
+      background: var(--surface-1);
+      color: var(--text-primary);
+      border-color: var(--border-default);
+    }
+    [data-theme="dark"] .ai-modal-header,
+    [data-theme="dark"] .ai-input-row,
+    [data-theme="dark"] .ai-files-row {
+      border-color: var(--border-default);
+    }
+    [data-theme="dark"] .ai-modal-title,
+    [data-theme="dark"] .ai-file-name,
+    [data-theme="dark"] .ai-bubble__content {
+      color: var(--text-primary);
+    }
+    [data-theme="dark"] .ai-modal-close,
+    [data-theme="dark"] .ai-docs-status,
+    [data-theme="dark"] .ai-file-meta,
+    [data-theme="dark"] .ai-loading-row {
+      color: var(--text-muted);
+    }
+    [data-theme="dark"] .ai-chat-window {
+      background: var(--surface-2);
+    }
+    [data-theme="dark"] .ai-bubble--user .ai-bubble__content {
+      background: #255868;
+      border-color: #255868;
+      color: #fff;
+    }
+    [data-theme="dark"] .ai-suggestion-chip {
+      background: rgba(140, 197, 211, 0.12);
+      border-color: #6ba9b8;
+      color: #b9dce6;
+    }
+    [data-theme="dark"] .ai-suggestion-chip:hover {
+      background: #2f6170;
+      color: #fff;
+      border-color: #2f6170;
+    }
+    [data-theme="dark"] .ai-files-toggle,
+    [data-theme="dark"] .ai-save-btn {
+      color: #9ccedb;
+      border-color: #5f8d9a;
+    }
+    [data-theme="dark"] .ai-files-toggle:hover,
+    [data-theme="dark"] .ai-file-label:hover,
+    [data-theme="dark"] .ai-save-btn:hover:not(:disabled):not(.saved) {
+      background: var(--surface-3);
+      color: #e8f4f7;
+    }
+    [data-theme="dark"] .ai-send-btn {
+      background: #255868;
+    }
+    [data-theme="dark"] .ai-send-btn:hover {
+      background: #2f6170;
+    }

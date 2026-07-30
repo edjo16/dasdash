@@ -1,0 +1,877 @@
+extends ../layout
+include ../mixins/floating-input
+include ../mixins/floating-select
+include ../mixins/floating-country-select
+include ../mixins/floating-date
+include ../mixins/breadcrumb
+
+block layout-content
+  div#layoutSidenav_content
+    main
+      div.container-fluid.px-4
+        +app-breadcrumb({
+          homeHref: '/',
+          items: [
+            { label: 'Users', href: '/users' },
+            { label: `${title}`, active: true }]
+        })
+        div#alertContainer
+
+        div.row
+          div.col-xl-12
+            div.card.mb-4
+              div.card-header.bg-primary.text-white
+                i.fas.fa-copy.me-1
+                | Copy from Existing User
+              div.card-body
+                div.row
+                  div.col-md-8
+                    - var usersList = selectUsers.map(u => ({ value: u.UserID, label: `${u.Name} (${u.UserID})` }))
+                    +floating-select('Copy from existing User', 'copyFromUser', usersList, false, 'Select a user to copy')
+                  div.col-md-4.d-flex.align-items-end
+                    button#copyUserBtn.btn.btn-lg.btn-primary(type="button" style="width: 100%;")
+                      i.fas.fa-copy.me-2
+                      | Copy User Data
+
+        div.row
+          div.col-xl-12
+            div.card.mb-4
+              div.card-header
+                i.fas.fa-user.me-1
+                | General Information
+              div.card-body
+                form#userForm
+                  div.row
+                    div.col-md-6
+                      +floating-input('User ID', 'UserID', 'text', true, '', '', '', { maxlength: 50 })
+                    div.col-md-6
+                      +floating-input('Name', 'Name', 'text', true, '', '', '', { maxlength: 100 })
+                  div.row
+                    div.col-md-6
+                      +floating-input('Email Address', 'Email', 'email', true, '', '', '', { maxlength: 50 })
+                    div.col-md-6
+                      - var managerOptions = managers.map(m => ({ value: m.UserID, label: m.Name }))
+                      +floating-select('Manager Name', 'Manager', managerOptions, false, 'Select manager')
+                  div.row
+                    div.col-md-6
+                      +floating-input('Position', 'xcargo', 'text', false, '', '', '', { maxlength: 50 })
+                    div.col-md-12
+                      +floating-country-select('Location of the collaborator', 'Location', 'Location1')
+                  div.row
+                    div.col-md-6
+                      +floating-date('Initial Date', 'finicio', false, 'DD/MM/YYYY', '', '', {value: ''})
+                    div.col-md-6
+                      +floating-date('Departure Date', 'fsalida', false, 'DD/MM/YYYY', '', '', {value: ''})
+                  input(type='hidden' name='uingreso' value=userProfile.UserID)
+        div.row
+          div.col-xl-6
+            div.card.mb-4
+              div.card-header
+                i.fas.fa-building.me-1
+                | Company Information
+              div.card-body
+                div.mb-3
+                  - var companyOptions = companies.map(c => ({ value: c.ccompania, label: c.xnombre }))
+                  script.
+                    window.ccompaniaOnChange = function() { loadDepartmentsCreate(); };
+                  +floating-select('Primary Company', 'ccompania', companyOptions, true, 'Select company', '', '', { onchange: 'loadDepartmentsCreate()' })
+
+                div.mb-3
+                    label.form-label(for="compania") Additional Companies
+                    div#additionalCompaniesContainer.mb-2(style="min-height: 40px;")
+                      small.text-muted No additional companies added
+                    div.row
+                      div.col-md-8
+                        - var addCompanyOptions = companies.map(c => ({ value: c.ccompania, label: c.xnombre }))
+                        +floating-select('Select Other Company', 'addCompanySelect', addCompanyOptions, false, 'Select company')
+                      div.col-md-4.d-flex.align-items-end
+                        button#addCompanyBtn.btn.btn-lg.btn-primary(type="button")
+                          i.fas.fa-plus
+                        input#compania(type="hidden" name="compania" value="")
+
+          div.col-xl-6
+            div.card.mb-4
+              div.card-header
+                i.fas.fa-sitemap.me-1
+                | Department Information
+              div.card-body
+                div.mb-3
+                  - var departmentOptions = allDepartments.map(d => { var c = companies.find(comp => comp.ccompania === d.ccompania); return { value: d.id, label: c ? c.xnombre + ' - ' + d.nombre : d.nombre, 'data-company': d.ccompania }; })
+                  +floating-select('Primary Department', 'cdepartamentos', departmentOptions, true, 'Select department')
+
+                div.mb-3
+                  label.form-label Additional Departments
+                  div#additionalDepartmentsContainer.mb-2(style="min-height: 40px;")
+                    small.text-muted No additional departments added
+                  div.row
+                    div.col-md-8
+                      - var addDepartmentOptions = allDepartments.map(d => { var c = companies.find(comp => comp.ccompania === d.ccompania); return { value: d.id, label: c ? c.xnombre + ' - ' + d.nombre : d.nombre, 'data-company-id': d.ccompania, 'data-name': d.nombre, 'data-company-name': c ? c.xnombre : '' }; })
+                      +floating-select('Select Other Department', 'addDepartmentSelect', addDepartmentOptions, false, 'Select department')
+                    div.col-md-4.d-flex.align-items-end
+                      button#addDepartmentBtn.btn.btn-lg.btn-primary(type="button")
+                        i.fas.fa-plus
+                input#departamento(type="hidden" name="departamento" value="")
+
+        div.row
+          div.col-xl-12
+            div.card.mb-4
+              div.card-header
+                i.fas.fa-shield-alt.me-1
+                | Permissions and Modules
+              div.card-body
+                - var accessOptions = [{ value: 'Not', label: 'No' }, { value: 'View', label: 'Yes' }]
+                div.row.mb-3
+                  div.col-md-6
+                    h6.mb-3 Module Access
+                    div.row.mb-2
+                      div.col-md-6
+                        +floating-select('M_Admin Access', 'M_Admin', accessOptions, false, 'Select access')
+                      div.col-md-6
+                        +floating-select('M_Conta Access', 'M_Conta', accessOptions, false, 'Select access')
+                    div.row.mb-2
+                      div.col-md-6
+                        +floating-select('M_CRM Access', 'M_CRM', accessOptions, false, 'Select access')
+                  
+                  div.col-md-6
+                    h6.mb-3 Forms Access
+                    div.row.mb-2
+                      div.col-md-6
+                        +floating-select('F_IT Access', 'F_IT', accessOptions, false, 'Select access')
+                      div.col-md-6
+                        +floating-select('F_Conta Access', 'F_Conta', accessOptions, false, 'Select access')
+                    div.row.mb-2
+                      div.col-md-6
+                        +floating-select('F_Admin Access', 'F_Admin', accessOptions, false, 'Select access')
+                      div.col-md-6
+                        +floating-select('F_Finanzas Access', 'F_Finanzas', accessOptions, false, 'Select access')
+                    div.row.mb-2
+                      div.col-md-6
+                        +floating-select('F_Governance Access', 'F_Governance', accessOptions, false, 'Select access')
+                      div.col-md-6
+                        +floating-select('F_HR Access', 'F_HR', accessOptions, false, 'Select access')
+                
+                div.row.mb-3
+                  div.col-md-6
+                    +floating-input('Modules', 'Modules', 'text', true, 'Claims, Accounting, IT', '', '', { maxlength: 100 })
+                    small.text-muted Comma-separated list of modules
+                  div.col-md-6
+                    +floating-input('Group', 'Grupo', 'text', false, 'Latam', '', '', { maxlength: 100 })
+
+        div.row
+          div.col-xl-12
+            div.card.mb-4
+              div.card-header
+                i.fas.fa-image.me-1
+                | User Image
+              div.card-body
+                p.small.text-muted Upload a profile picture (PNG format only). The file will be saved as UserID.png
+                div.row.mb-3
+                  div.col-md-6
+                    label.form-label(for="userImage") Profile Picture (PNG only)
+                    input#userImage.form-control(type="file" accept=".png" name="userImage")
+                    small.text-muted Maximum file size: 5MB
+                  div.col-md-6
+                    div#imagePreview(style="margin-top: 0.5rem;")
+                      img#previewImg(src="/pic/default.png" style="max-width: 150px; max-height: 150px; border-radius: 50%; border: 2px solid #dee2e6;")
+
+        div.row
+          div.col-xl-12
+            div.card.mb-4
+              div.card-header
+                i.fas.fa-signature.me-1
+                | User Signature
+              div.card-body
+                p.small.text-muted Upload a digital signature (PNG format only). This signature will be available in the PDF signer.
+                div.row.mb-3
+                  div.col-md-6
+                    label.form-label(for="userSignature") Signature File (PNG only)
+                    input#userSignature.form-control(type="file" accept=".png" name="userSignature")
+                    small.text-muted Maximum file size: 5MB
+                  div.col-md-6
+                    div#signaturePreview(style="margin-top: 0.5rem;")
+                      small.text-muted No signature selected
+
+        div.row
+          div.col-xl-12
+            div.card.mb-4
+              div.card-header
+                i.fas.fa-key.me-1
+                | Password
+              div.card-body
+                p.small.text-muted
+                  span.text-danger.fw-bold * REQUIRED: 
+                  | You must generate a password for the user. The password will expire in 3 months.
+                div.row.mb-3
+                  div.col-md-12
+                    div#passwordSection
+                      button#generatePasswordBtn.btn.btn-sm.btn-secondary(type="button")
+                        i.fas.fa-random.me-1
+                        | Generate Password *
+                      span#passwordDisplay.ms-3.fw-bold
+                      div#passwordError.text-danger.small.mt-2(style="display: none;")
+                        i.fas.fa-exclamation-circle.me-1
+                        | Please generate a password before creating the user
+
+        div.row.mb-4
+          div.col-md-12
+            button#createBtn.btn.btn-primary.me-2(type="button")
+              i.fas.fa-user-plus.me-1
+              | Create User
+            a.btn.btn-secondary(href=`/users`)
+              i.fas.fa-times.me-1
+              | Cancel
+
+      div#toast
+        div#notificacion_img
+        div#notificacion_texto
+
+      script.
+        // Client-side data
+        const userProfileId = '#{userProfile.UserID}';
+        let additionalCompanies = [];
+        const companiesData = !{JSON.stringify(companies)};
+        let additionalDepartments = [];
+        const departmentsData = !{JSON.stringify(allDepartments)};
+        const allUsers = !{JSON.stringify(selectUsers)};
+        // Copy user data functionality
+        document.getElementById('copyUserBtn').addEventListener('click', async function() {
+          const copySelect = document.getElementById('copyFromUser');
+          const selectedUserID = copySelect.value;
+          
+          if (!selectedUserID) {
+            launch_toast('Please select a user to copy from', 2);
+            return;
+          }
+
+          try {
+            // Show loading state
+            this.disabled = true;
+            this.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Loading...';
+
+            // Find user in local array to get the numeric Id
+            const localUser = allUsers.find(u => u.UserID == selectedUserID);
+            if (!localUser || !localUser.Id) {
+              throw new Error('User not found in local data');
+            }
+            // Fetch complete user data from API using numeric Id
+            const response = await fetch(`/api/users/${localUser.Id}`);
+            if (!response.ok) throw new Error('Failed to fetch user data');
+            
+            const result = await response.json();
+            if (result.result !== 1) throw new Error(result.message || 'Error fetching user');
+            
+            const userData = result.data;
+
+            // Fill form fields (excluding UserID, Name and Email - those must be unique)
+            // Basic fields
+            if (userData.Manager) {
+              const managerSelect = document.getElementById('Manager');
+              managerSelect.value = userData.Manager;
+              managerSelect.classList.add('has-value');
+              if (window['validateSelect_Manager']) window['validateSelect_Manager']();
+            }
+            if (userData.xcargo) {
+              document.getElementById('xcargo').value = userData.xcargo;
+              if (window['validateInput_xcargo']) window['validateInput_xcargo']();
+            }
+            if (userData.Location) {
+              document.getElementById('Location').value = userData.Location;
+              if (window['validateInput_Location']) window['validateInput_Location']();
+            }
+            // Primary Company
+            if (userData.ccompania) {
+              const companySelect = document.getElementById('ccompania');
+              companySelect.value = userData.ccompania;
+              companySelect.classList.add('has-value', 'valid');
+              if (window['validateSelect_ccompania']) window['validateSelect_ccompania']();
+              loadDepartmentsCreate(); // Trigger department filtering
+            }
+
+            // Primary Department (wait for departments to load)
+            setTimeout(() => {
+              if (userData.cdepartamento) {
+                const deptSelect = document.getElementById('cdepartamentos');
+                deptSelect.value = userData.cdepartamento;
+                deptSelect.classList.add('has-value', 'valid');
+                if (window['validateSelect_cdepartamentos']) window['validateSelect_cdepartamentos']();
+              }
+            }, 200);
+
+            // Additional Companies
+            additionalCompanies = [];
+            if (userData.compania) {
+              const companyIds = userData.compania.split(';').filter(id => id.trim());
+              companyIds.forEach(id => {
+                const company = companiesData.find(c => String(c.ccompania) === String(id));
+                if (company && !additionalCompanies.find(c => c.ccompania == id)) {
+                  additionalCompanies.push({ ccompania: id, xnombre: company.xnombre });
+                }
+              });
+              renderAdditionalCompanies();
+            }
+
+            // Additional Departments
+            additionalDepartments = [];
+            if (userData.departamento) {
+              const deptIds = userData.departamento.split(';').filter(id => id.trim());
+              deptIds.forEach(id => {
+                const dept = departmentsData.find(d => String(d.id) === String(id));
+                if (dept && !additionalDepartments.find(d => d.id == id)) {
+                  const company = companiesData.find(c => String(c.ccompania) === String(dept.ccompania));
+                  additionalDepartments.push({ 
+                    id: id, 
+                    nombre: dept.nombre, 
+                    ccompania: dept.ccompania,
+                    xnombreCompania: company ? company.xnombre : ''
+                  });
+                }
+              });
+              renderAdditionalDepartments();
+            }
+
+            // Permissions - Module Access
+            const moduleFields = ['M_Admin', 'M_Conta', 'M_CRM'];
+            moduleFields.forEach(field => {
+              if (userData[field] !== undefined) {
+                const select = document.getElementById(field);
+                if (select) {
+                  select.value = userData[field];
+                  if (userData[field]) select.classList.add('has-value');
+                  if (window['validateSelect_' + field]) window['validateSelect_' + field]();
+                }
+              }
+            });
+
+            // Permissions - Forms Access
+            const formFields = ['F_IT', 'F_Conta', 'F_Admin', 'F_Finanzas', 'F_Governance', 'F_HR'];
+            formFields.forEach(field => {
+              if (userData[field] !== undefined) {
+                const select = document.getElementById(field);
+                if (select) {
+                  select.value = userData[field];
+                  if (userData[field]) select.classList.add('has-value');
+                  if (window['validateSelect_' + field]) window['validateSelect_' + field]();
+                }
+              }
+            });
+
+            // Modules and Group
+            if (userData.Modules) {
+              document.getElementById('Modules').value = userData.Modules;
+              document.getElementById('Modules').classList.add('has-value', 'valid');
+              if (window['validateInput_Modules']) window['validateInput_Modules']();
+            }
+            if (userData.Grupo) {
+              document.getElementById('Grupo').value = userData.Grupo;
+              if (window['validateInput_Grupo']) window['validateInput_Grupo']();
+            }
+
+            // Success message
+            launch_toast(`User data copied from ${userData.Name}. Please update User ID and Name.`, 1);
+            
+            // Scroll to top to show UserID and Name fields
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+            
+            // Focus on UserID field
+            setTimeout(() => {
+              document.getElementById('UserID').focus();
+            }, 500);
+
+          } catch (error) {
+            console.error('Error copying user:', error);
+            launch_toast('Error copying user data: ' + error.message, 2);
+          } finally {
+            // Reset button state
+            this.disabled = false;
+            this.innerHTML = '<i class="fas fa-copy me-2"></i>Copy User Data';
+          }
+        });
+
+        function initializeAdditionalCompanies() {
+          renderAdditionalCompanies();
+        }
+
+        function renderAdditionalCompanies() {
+          const container = document.getElementById('additionalCompaniesContainer');
+          container.innerHTML = '';
+          if (additionalCompanies.length === 0) {
+            container.innerHTML = '<small class="text-muted">No additional companies added</small>';
+            document.getElementById('compania').value = '';
+            return;
+          }
+          additionalCompanies.forEach(company => {
+            const chip = document.createElement('span');
+            chip.className = 'badge bg-primary me-2 mb-2 p-2';
+            chip.style.fontSize = '0.9rem';
+            chip.innerHTML = `
+              ${company.xnombre}
+              <button type="button" class="btn-close btn-close-white ms-2" style="font-size: 0.7rem;" onclick="removeCompany(${company.ccompania})"></button>
+            `;
+            container.appendChild(chip);
+          });
+          const ids = additionalCompanies.map(c => c.ccompania).join(';');
+          document.getElementById('compania').value = ids;
+          updateAddDepartmentOptions();
+        }
+
+        function removeCompany(companyId) {
+          additionalCompanies = additionalCompanies.filter(c => c.ccompania != companyId);
+          renderAdditionalCompanies();
+        }
+
+        document.getElementById('addCompanyBtn').addEventListener('click', function() {
+          const select = document.getElementById('addCompanySelect');
+          const selectedValue = select.value;
+          if (!selectedValue) { 
+            launch_toast('Please select a company to add', 2); 
+            return; 
+          }
+          
+          const companyId = selectedValue;
+          const selectedOption = select.options[select.selectedIndex];
+          const companyName = selectedOption ? selectedOption.textContent : '';
+          
+          if (additionalCompanies.find(c => c.ccompania == companyId)) { 
+            launch_toast('Company already added', 2); 
+            return; 
+          }
+          
+          additionalCompanies.push({ ccompania: companyId, xnombre: companyName });
+          renderAdditionalCompanies();
+          select.value = '';
+          
+          // Update visual state of select
+          select.classList.remove('has-value', 'valid');
+        });
+
+        function updateAddDepartmentOptions() {
+          const select = document.getElementById('addDepartmentSelect');
+          if (!select) return;
+          select.innerHTML = '';
+          const placeholder = document.createElement('option');
+          placeholder.value = '';
+          placeholder.textContent = 'Select Department to Add';
+          select.appendChild(placeholder);
+          const primaryCompanyId = document.getElementById('ccompania') ? document.getElementById('ccompania').value : '';
+          const companyIds = new Set();
+          if (primaryCompanyId) companyIds.add(String(primaryCompanyId));
+          additionalCompanies.forEach(c => companyIds.add(String(c.ccompania)));
+          const available = departmentsData.filter(d => { if (companyIds.size === 0) return true; return companyIds.has(String(d.ccompania)); });
+          available.forEach(dept => {
+            if (additionalDepartments.find(d => String(d.id) === String(dept.id))) return;
+            const company = companiesData.find(c => String(c.ccompania) === String(dept.ccompania));
+            const displayName = company ? `${company.xnombre} - ${dept.nombre}` : dept.nombre;
+            const opt = document.createElement('option');
+            opt.value = dept.id;
+            opt.setAttribute('data-name', dept.nombre);
+            opt.setAttribute('data-company-id', dept.ccompania);
+            opt.setAttribute('data-company-name', company ? company.xnombre : '');
+            opt.textContent = displayName;
+            select.appendChild(opt);
+          });
+        }
+
+        function initializeAdditionalDepartments() { renderAdditionalDepartments(); }
+
+        function renderAdditionalDepartments() {
+          const container = document.getElementById('additionalDepartmentsContainer');
+          container.innerHTML = '';
+          if (additionalDepartments.length === 0) {
+            container.innerHTML = '<small class="text-muted">No additional departments added</small>';
+            document.getElementById('departamento').value = '';
+            return;
+          }
+          additionalDepartments.forEach(dept => {
+            const chip = document.createElement('span');
+            chip.className = 'badge bg-primary me-2 mb-2 p-2';
+            chip.style.fontSize = '0.9rem';
+            const displayText = dept.xnombreCompania ? `${dept.xnombreCompania} - ${dept.nombre} ` : dept.nombre;
+            chip.innerHTML = `
+              ${displayText}
+              <button type="button" class="btn-close btn-close-white ms-2" style="font-size: 0.7rem;" onclick="removeDepartment(${dept.id})"></button>
+            `;
+            container.appendChild(chip);
+          });
+          const ids = additionalDepartments.map(d => d.id).join(';');
+          document.getElementById('departamento').value = ids;
+          updateAddDepartmentOptions();
+        }
+
+        function removeDepartment(deptId) { additionalDepartments = additionalDepartments.filter(d => d.id != deptId); renderAdditionalDepartments(); }
+
+        document.getElementById('addDepartmentBtn').addEventListener('click', function() {
+          const select = document.getElementById('addDepartmentSelect');
+          const selectedValue = select.value;
+          if (!selectedValue) { 
+            launch_toast('Please select a department to add', 2); 
+            return; 
+          }
+          
+          const deptId = selectedValue;
+          const selectedOption = select.options[select.selectedIndex];
+          const deptName = selectedOption.getAttribute('data-name') || '';
+          const companyId = selectedOption.getAttribute('data-company-id') || '';
+          const companyName = selectedOption.getAttribute('data-company-name') || '';
+          
+          if (additionalDepartments.find(d => d.id == deptId)) { 
+            launch_toast('Department already added', 2); 
+            return; 
+          }
+          
+          additionalDepartments.push({ id: deptId, nombre: deptName, ccompania: companyId, xnombreCompania: companyName });
+          renderAdditionalDepartments();
+          select.value = '';
+          
+          // Update visual state of select
+          select.classList.remove('has-value', 'valid');
+        });
+
+        function loadDepartmentsCreate() {
+          const companyId = document.getElementById('ccompania').value;
+          const deptSelect = document.getElementById('cdepartamentos');
+          
+          if (!deptSelect) return;
+          
+          // Reset selection
+          deptSelect.value = '';
+          
+          // Get all options except the placeholder (first option)
+          const options = deptSelect.querySelectorAll('option:not(:first-child)');
+          
+          if (!companyId) {
+            // No company selected, show all departments
+            options.forEach(opt => {
+              opt.style.display = '';
+            });
+            updateAddDepartmentOptions();
+            return;
+          }
+          
+          // Show only departments from selected company
+          let hasVisibleOptions = false;
+          options.forEach(opt => {
+            const optCompanyId = opt.getAttribute('data-company');
+            if (String(optCompanyId) === String(companyId)) {
+              opt.style.display = '';
+              hasVisibleOptions = true;
+            } else {
+              opt.style.display = 'none';
+            }
+          });
+          
+          // If no departments available for this company, show message
+          if (!hasVisibleOptions) {
+            console.log('No departments available for company:', companyId);
+          }
+          
+          updateAddDepartmentOptions();
+          
+          // Update visual state of select
+          setTimeout(() => {
+            const selectEl = document.getElementById('cdepartamentos');
+            if (selectEl && selectEl.value) {
+              selectEl.classList.add('has-value', 'valid');
+            } else {
+              selectEl.classList.remove('has-value', 'valid');
+            }
+          }, 100);
+        }
+
+        // Temp password utilities
+        function generateRandomPassword(len = 10) {
+          const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()_+-=';
+          let pwd = '';
+          for (let i = 0; i < len; i++) pwd += chars.charAt(Math.floor(Math.random() * chars.length));
+          return pwd;
+        }
+
+        // Image preview
+        document.getElementById('userImage').addEventListener('change', function(e) {
+          const file = e.target.files[0];
+          if (file) {
+            if (!file.name.toLowerCase().endsWith('.png')) {
+              launch_toast('Only PNG files are allowed', 2);
+              e.target.value = '';
+              return;
+            }
+            if (file.size > 5 * 1024 * 1024) {
+              launch_toast('File size must be less than 5MB', 2);
+              e.target.value = '';
+              return;
+            }
+            const reader = new FileReader();
+            reader.onload = function(event) {
+              document.getElementById('previewImg').src = event.target.result;
+            };
+            reader.readAsDataURL(file);
+          }
+        });
+
+        // Signature preview
+        document.getElementById('userSignature').addEventListener('change', function(e) {
+          const file = e.target.files[0];
+          if (!file) {
+            document.getElementById('signaturePreview').innerHTML = '<small class="text-muted">No signature selected</small>';
+            return;
+          }
+
+          if (!file.name.toLowerCase().endsWith('.png')) {
+            launch_toast('Only PNG files are allowed for signature', 2);
+            e.target.value = '';
+            document.getElementById('signaturePreview').innerHTML = '<small class="text-muted">No signature selected</small>';
+            return;
+          }
+          if (file.size > 5 * 1024 * 1024) {
+            launch_toast('Signature file size must be less than 5MB', 2);
+            e.target.value = '';
+            document.getElementById('signaturePreview').innerHTML = '<small class="text-muted">No signature selected</small>';
+            return;
+          }
+
+          const reader = new FileReader();
+          reader.onload = function(event) {
+            document.getElementById('signaturePreview').innerHTML = `
+              <img src="${event.target.result}" alt="Signature preview" style="max-width: 320px; max-height: 120px; border: 1px solid #dee2e6; border-radius: 0.375rem; background: #fff; padding: 0.5rem;" />
+            `;
+          };
+          reader.readAsDataURL(file);
+        });
+
+        let lastGeneratedPassword = '';
+        document.getElementById('generatePasswordBtn').addEventListener('click', function() {
+          lastGeneratedPassword = generateRandomPassword(10);
+          const passwordDisplay = document.getElementById('passwordDisplay');
+          passwordDisplay.textContent = 'Password: ' + lastGeneratedPassword;
+          passwordDisplay.style.color = '#10b981';
+          
+          // Hide error message if visible
+          document.getElementById('passwordError').style.display = 'none';
+          document.getElementById('passwordSection').style.border = '';
+          document.getElementById('passwordSection').style.padding = '';
+          document.getElementById('passwordSection').style.borderRadius = '';
+          
+          // Visual feedback
+          this.classList.remove('btn-secondary');
+          this.classList.add('btn-success');
+          this.innerHTML = '<i class="fas fa-check me-1"></i>Password Generated';
+        });
+
+        // Form validation function
+        function validateForm() {
+          let isValid = true;
+          const errors = [];
+
+          // Define required fields with their IDs and labels
+          const requiredFields = [
+            { id: 'UserID', label: 'User ID', type: 'input' },
+            { id: 'Name', label: 'Full Name', type: 'input' },
+            { id: 'Email', label: 'Email', type: 'input' },
+            { id: 'ccompania', label: 'Primary Company', type: 'select' },
+            { id: 'cdepartamentos', label: 'Primary Department', type: 'select' },
+            { id: 'Modules', label: 'Modules', type: 'input' }
+          ];
+
+          // Validate each required field
+          requiredFields.forEach(field => {
+            const element = document.getElementById(field.id);
+            if (!element) {
+              console.warn('Field not found:', field.id);
+              return;
+            }
+
+            const value = element.value ? element.value.trim() : '';
+            
+            if (!value) {
+              // Field is empty - mark as error
+              isValid = false;
+              errors.push(field.label);
+              
+              if (field.type === 'input') {
+                const setError = window['setInputError_' + field.id];
+                if (setError) {
+                  setError(`${field.label} is required`);
+                }
+              } else if (field.type === 'select') {
+                const setError = window['setSelectError_' + field.id];
+                if (setError) {
+                  setError(`${field.label} is required`);
+                }
+              }
+            } else {
+              // Field has value - clear any error
+              if (field.type === 'input') {
+                const clearError = window['clearInputError_' + field.id];
+                if (clearError) clearError();
+              } else if (field.type === 'select') {
+                const clearError = window['clearSelectError_' + field.id];
+                if (clearError) clearError();
+              }
+            }
+          });
+
+          // Validate password generation
+          if (!lastGeneratedPassword) {
+            isValid = false;
+            errors.push('Password');
+            
+            // Show error in password section
+            const passwordError = document.getElementById('passwordError');
+            const passwordSection = document.getElementById('passwordSection');
+            if (passwordError) {
+              passwordError.style.display = 'block';
+            }
+            if (passwordSection) {
+              passwordSection.style.border = '2px solid #ef4444';
+              passwordSection.style.padding = '1rem';
+              passwordSection.style.borderRadius = '0.375rem';
+            }
+          } else {
+            // Clear password error if exists
+            const passwordError = document.getElementById('passwordError');
+            const passwordSection = document.getElementById('passwordSection');
+            if (passwordError) {
+              passwordError.style.display = 'none';
+            }
+            if (passwordSection) {
+              passwordSection.style.border = '';
+              passwordSection.style.padding = '';
+              passwordSection.style.borderRadius = '';
+            }
+          }
+
+          // Show summary message if there are errors
+          if (!isValid) {
+            const errorMsg = errors.length >= 1 
+              && `Please fill in the required fields`
+            launch_toast(errorMsg, 2);
+          }
+
+          return isValid;
+        }
+
+        // Create user
+        document.getElementById('createBtn').addEventListener('click', async function() {
+          // Validate form first
+          if (!validateForm()) {
+            return; // Stop if validation fails
+          }
+
+          const form = document.getElementById('userForm');
+          const formData = new FormData();
+          
+          // Add all form fields
+          const formElements = form.elements;
+          for (let i = 0; i < formElements.length; i++) {
+            const element = formElements[i];
+            if (element.name && element.type !== 'file') {
+              formData.append(element.name, element.value || '');
+            }
+          }
+          
+          // Add user image if selected
+          const userImageInput = document.getElementById('userImage');
+          if (userImageInput.files && userImageInput.files[0]) {
+            formData.append('userImage', userImageInput.files[0]);
+          }
+
+          // Add user signature if selected
+          const userSignatureInput = document.getElementById('userSignature');
+          if (userSignatureInput.files && userSignatureInput.files[0]) {
+            formData.append('userSignature', userSignatureInput.files[0]);
+          }
+
+          // Primary company and department (manually captured - outside form)
+          const ccompaniaEl = document.getElementById('ccompania');
+          if (ccompaniaEl && ccompaniaEl.value) {
+            formData.append('ccompania', ccompaniaEl.value);
+          }
+          
+          const cdepartamentoEl = document.getElementById('cdepartamentos');
+          if (cdepartamentoEl && cdepartamentoEl.value) {
+            formData.append('cdepartamentos', cdepartamentoEl.value);
+          }
+
+          // additional companies/departments
+          const companiaValue = document.getElementById('compania').value;
+          if (companiaValue) formData.append('compania', companiaValue);
+          const departamentoValue = document.getElementById('departamento').value;
+          if (departamentoValue) formData.append('departamento', departamentoValue);
+
+          // add permission fields
+          ['M_Admin','M_Conta','M_CRM','F_IT','F_Conta','F_Admin','F_Finanzas','F_Governance','F_HR','Modules','Grupo'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) formData.append(id, el.value || '');
+          });
+
+          // Password (generate if user didn't click generate)
+          if (!lastGeneratedPassword) {
+            lastGeneratedPassword = generateRandomPassword(10);
+            document.getElementById('passwordDisplay').textContent = 'Password: ' + lastGeneratedPassword;
+          }
+          formData.append('password', lastGeneratedPassword);
+
+          // Add URL parameters (p and iddevteam) to the request
+          const urlParams = new URLSearchParams(window.location.search);
+          const pValue = urlParams.get('p');
+          const iddevteamValue = urlParams.get('iddevteam');
+          
+          if (pValue) formData.append('p', pValue);
+          if (iddevteamValue) formData.append('iddevteam', iddevteamValue);
+
+          try {
+            const response = await fetch('/api/users', {
+              method: 'POST',
+              body: formData
+            });
+            const result = await response.json();
+            if (result.result === 1) {
+              if (result.signature_warning) {
+                launch_toast('User created, but signature was not saved: ' + result.signature_warning, 2);
+              } else {
+                launch_toast('User created successfully!', 1);
+              }
+              setTimeout(() => {
+                const newId = result.id || result.Id || result.insertId;
+                if (newId) window.location.href = `/users/detail/${newId}`;
+                else window.location.href = `/users`;
+              }, 1200);
+            } else {
+              launch_toast('Error: ' + (result.message || 'Unknown error'), 2);
+            }
+          } catch (err) {
+            launch_toast('Error creating user: ' + err.message, 2);
+          }
+        });
+
+        document.addEventListener('DOMContentLoaded', function() {
+          initializeAdditionalCompanies();
+          initializeAdditionalDepartments();
+          updateAddDepartmentOptions();
+          
+          // Initialize department filter
+          loadDepartmentsCreate();
+        });
+
+        $(document).ready(function(){
+          $("#finicio").datepicker({
+            dateFormat: "dd/mm/yy",
+            onSelect: function(selectedDate) {
+              const startDate = $(this).datepicker("getDate");
+              const endDate = $("#fsalida").datepicker("getDate");
+              if (endDate && endDate < startDate) {
+                $("#fsalida").datepicker("setDate", startDate);
+              }
+              $("#fsalida").datepicker("option", "minDate", startDate);
+            }
+          });
+          $("#fsalida").datepicker({
+            dateFormat: "dd/mm/yy",
+            onSelect: function(selectedDate) {
+              const startDate = $("#finicio").datepicker("getDate");
+              const endDate = $(this).datepicker("getDate");
+              if (startDate && endDate < startDate) {
+                $("#finicio").datepicker("setDate", endDate);
+              }
+            }
+          });
+        });

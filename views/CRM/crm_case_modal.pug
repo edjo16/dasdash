@@ -1,0 +1,307 @@
+include ../mixins/floating-input
+include ../mixins/floating-textarea
+include ../mixins/modal-container
+
+//- ── Beneficiary Modal ──────────────────────────────────────────────────
++modal-container('crm_case_type_Modal', 'modalBenTitle', 'modalBenClose', 'modalBenCancel', 'modalBenSave', 'Case Type')
+  input#modalCaseTypeId(type="hidden")
+  div#modal_case_assign_row.row.mb-1
+    div.col-md-6.mb-2
+      +floating-select('Company', 'modal_case_compania_modal_select', [], true, ' Company')
+    div.col-md-6.mb-2
+      +floating-select('Department', 'modal_case_departamento_select', [], true, 'Department')
+  div.row
+    div.col-md-6.mb-2
+      +floating-input('Label', 'modal_label', 'text', true, 'Keywords to describe the case type', '', '', {maxlength: 55})
+    div.col-md-6.mb-2
+      - var estadoOptions = [{ value: '1', label: 'Active' }, { value: '0', label: 'Inactive' }]
+      +floating-select('Status', 'modal_estado', estadoOptions, false, 'Select status')
+
+script.
+  (function(){
+  /* =====================================================
+    Helpers / Base
+    ===================================================== */
+  const get = id => document.getElementById(id);
+
+  const MODAL_FIELDS = [
+    'label',
+    'estado'
+  ];
+
+  /* =====================================================
+    Modal helpers (SIN CAMBIOS)
+    ===================================================== */
+  function setModalVal(field, v) {
+    const el = get('modal_' + field);
+    if (!el) return;
+    el.value = v ?? '';
+    if (el.value) el.classList.add('has-value');
+    else el.classList.remove('has-value');
+  }
+
+  function resetModal() {
+    MODAL_FIELDS.forEach(function(f) {
+      const el = get('modal_' + f);
+      if (!el) return;
+      el.value = '';
+      el.classList.remove('valid', 'error', 'has-value');
+      el.removeAttribute('data-touched');
+      el.removeAttribute('readonly');
+      const errEl = document.querySelector('[data-error-for="modal_' + f + '"]');
+      if (errEl) {
+        errEl.textContent = '';
+        errEl.classList.remove('show');
+      }
+    });
+
+    ['modal_case_departamento_select','modal_case_compania_modal_select']
+      .forEach(function(id) {
+        const el = get(id);
+        if (el) {
+          el.value = '';
+          el.classList.remove('valid','error','has-value');
+        }
+      });
+  }
+
+  function setModalReadonly(readonly) {
+    MODAL_FIELDS.forEach(function(f) {
+      const el = get('modal_' + f);
+      if (!el) return;
+      if (el.tagName === 'SELECT') {
+        readonly ? el.setAttribute('disabled', true)
+                : el.removeAttribute('disabled');
+      } else {
+        readonly ? el.setAttribute('readonly', true)
+                : el.removeAttribute('readonly');
+      }
+    });
+    get('modalBenSave').style.display = readonly ? 'none' : '';
+  }
+
+  function closeModal() {
+    get('crm_case_type_Modal').classList.remove('open');
+    document.body.style.overflow = '';
+  }
+
+  /* =====================================================
+    ✅ FIX 1: Filter Departments by Company
+    ===================================================== */
+  function filterDepsForCompany(ccompania) {
+
+    const esc = s => String(s ?? '')
+      .replace(/&/g,'&')
+      .replace(/</g,'<')
+      .replace(/>/g,'>')
+      .replace(/"/g,'"');
+
+    const depSel = get('modal_case_departamento_select');
+    if (!depSel) return;
+
+    const deps = (window._benDepartments || [])
+      .filter(d => String(d.ccompania) === String(ccompania));
+
+    depSel.innerHTML =
+      '<option value="">Department</option>' +
+      deps.map(d =>
+        `<option value="${esc(d.id)}">${esc(d.nombre)}</option>`
+      ).join('');
+
+    depSel.value = '';
+    depSel.classList.remove('has-value','valid','error');
+
+    if (deps.length === 1) {
+      depSel.value = String(deps[0].id);
+      depSel.classList.add('has-value');
+    }
+  }
+
+  /* =====================================================
+    ✅ FIX 2: Populate Company + cascade Department
+    ===================================================== */
+  function populateAssignSelectsCase() {
+
+    const esc = s => String(s ?? '').replace(/&/g,'&').replace(/</g,'<').replace(/>/g,'>').replace(/"/g,'"');
+
+    const companies = window._benCompanies || [];
+    const compSel = get('modal_case_compania_modal_select');
+    if (!compSel) return;
+
+    compSel.innerHTML =
+      '<option value="">Company</option>' +
+      companies.map(c =>
+        `<option value="${esc(c.ccompania)}">${esc(c.xnombre)}</option>`
+      ).join('');
+
+    let selected = '';
+
+    const defaultComp = window._benDefaultCompania != null
+      ? String(window._benDefaultCompania)
+      : '';
+
+    if (defaultComp &&
+        companies.some(c => String(c.ccompania) === defaultComp)) {
+      selected = defaultComp;
+    } else if (companies.length === 1) {
+      selected = String(companies[0].ccompania);
+    }
+
+    if (selected) {
+      compSel.value = selected;
+      compSel.classList.add('has-value');
+    }
+
+    filterDepsForCompany(compSel.value);
+
+    const defaultDep = window._benDefaultDep != null
+      ? String(window._benDefaultDep)
+      : '';
+
+    const depSel = get('modal_case_departamento_select');
+    if (defaultDep && depSel &&
+        Array.from(depSel.options).some(o => o.value === defaultDep)) {
+      depSel.value = defaultDep;
+      depSel.classList.add('has-value');
+    }
+
+    const row = get('modal_case_assign_row');
+    if (row) row.style.display = '';
+  }
+
+  async function saveModal() {
+    const type_id = get('modalCaseTypeId')?.value || null;
+    const REQUIRED = [
+      { id: 'modal_label', label: 'Beneficiary name' }
+    ];
+    const assignRow = get('modal_case_assign_row');
+    if (!type_id && assignRow && assignRow.style.display !== 'none') {
+      REQUIRED.push({ id: 'modal_case_departamento_select',    label: 'Department' });
+      REQUIRED.push({ id: 'modal_case_compania_modal_select',  label: 'Company'    });
+    }
+    let ok = true;
+    REQUIRED.forEach(function(f) {
+      const el = get(f.id);
+      if (!el) return;
+      el.classList.remove('valid','error','has-value');
+      if (!el.value.trim()) { el.classList.add('error'); ok = false; }
+      else el.classList.add('valid','has-value');
+    });
+    // Intermediary fields required when countries differ
+
+    const user = get('username')?.value || '';
+    const payload = { type_id: type_id || null };
+    MODAL_FIELDS.forEach(function(f) { payload[f] = get('modal_' + f)?.value || ''; });
+    payload.departamento_modal = get('modal_case_departamento_select')?.value || '';
+    payload.compania_modal     = get('modal_case_compania_modal_select')?.value || '';
+    if (!type_id) {
+      payload.user     = user;
+      payload.compania = get('compania_val')?.value || '';
+    } else {
+      payload.uingreso = user;
+    }
+    try {
+      const res = await fetch('/add_case_type', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      if (res.status === 409) {
+        launch_toast('Case Type already exists.', 2);
+        return;
+      }
+      if (!res.ok) throw new Error('Status ' + res.status);
+      const saved = await res.json().catch(() => null);
+      if (!type_id && saved?.type_id) {
+        get('modalCaseTypeId').value = saved.type_id;
+      }
+      launch_toast(type_id ? 'Case Type successfully updated.' : 'Case Type successfully created.', 1);
+      closeModal();
+      window._beneficiaryLastActionIsNew = !type_id;
+      const newId = (!type_id && saved?.type_id) ? saved.type_id : null;
+      if (typeof window._beneficiaryListRefresh === 'function') window._beneficiaryListRefresh(newId);
+    } catch(err) {
+      console.error(err);
+      launch_toast('Error saving Case Type.', 2);
+    }
+  }
+  window.openNewCaseTypeModal = function() {
+    const modal = get('crm_case_type_Modal');
+
+    resetModal();
+    get('modalBenTitle').textContent = 'New Case Type';
+    get('modalCaseTypeId').value = '';
+
+    setModalReadonly(false);
+    setModalVal('estado', '1');
+
+    populateAssignSelectsCase();
+
+    modal.classList.add('open');
+    document.body.style.overflow = 'hidden';
+  };
+
+  window.openCaseTypeModal = async function(id) {
+    const modal = get('crm_case_type_Modal');
+    resetModal();
+    get('modalBenTitle').textContent = 'Edit Case Type';
+    get('modalCaseTypeId').value = id;
+
+    try {
+      const res = await fetch('/case-type-detail-json?id=' + encodeURIComponent(id));
+      if (!res.ok) throw new Error('Status ' + res.status);
+      const json = await res.json();
+      const caseType = json.case_type || {};
+
+      // Populate Company and Department dropdowns
+      populateAssignSelectsCase();
+
+      // Set Company value
+      if (caseType.compania) {
+        const compSel = get('modal_case_compania_modal_select');
+        compSel.value = String(caseType.compania);
+        compSel.classList.add('has-value');
+        filterDepsForCompany(compSel.value);
+      }
+
+      // Set Department value
+      if (caseType.departamento) {
+        const depSel = get('modal_case_departamento_select');
+        depSel.value = String(caseType.departamento);
+        if (depSel.value) depSel.classList.add('has-value');
+      }
+
+      // Set other fields
+      setModalVal('label', caseType.label);
+      setModalVal('estado', caseType.estado);
+
+      // Set readonly based on edit permission
+      const readonly = !json.canEdit;
+      setModalReadonly(readonly);
+
+      // Show/hide assign row based on permissions
+      const row = get('modal_case_assign_row');
+      if (row) {
+        row.style.display = readonly ? 'none' : '';
+      }
+
+      modal.classList.add('open');
+      document.body.style.overflow = 'hidden';
+    } catch(err) {
+      console.error(err);
+      launch_toast('Error loading Case Type details.', 2);
+    }
+  };
+
+  document.addEventListener('DOMContentLoaded', function() {
+    get('modalBenClose')?.addEventListener('click', closeModal);
+    get('modalBenCancel')?.addEventListener('click', closeModal);
+    get('modalBenSave')?.addEventListener('click', saveModal);
+
+    get('modal_case_compania_modal_select')
+      ?.addEventListener('change', function() {
+        filterDepsForCompany(this.value);
+      });
+  });
+
+  })();

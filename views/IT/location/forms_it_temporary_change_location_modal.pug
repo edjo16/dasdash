@@ -1,0 +1,467 @@
+include ../../mixins/modal-container
+include ../../mixins/floating-input
+include ../../mixins/floating-select
+include ../../mixins/floating-textarea
+
++modal-container('tclModal', 'tclModalTitle', 'tclModalClose', 'tclModalCancel', 'tclModalSave', 'Temporary Change Location')
+  input#tcl_id(type='hidden')
+  input#tcl_hidden_collaborator_name(type='hidden' value=(userMenu && userMenu.Name) ? userMenu.Name : '')
+  input#tcl_hidden_collaborator_title(type='hidden' value=(userMenu && userMenu.xcargo) ? userMenu.xcargo : '')
+  input#tcl_hidden_department(type='hidden' value=(userProfile && userProfile.cdepartamento) ? userProfile.cdepartamento : '')
+  input#tcl_hidden_manager(type='hidden' value=(userProfile && userProfile.manager && userProfile.manager.UserID) ? userProfile.manager.UserID : '')
+  input#tcl_hidden_manager_name(type='hidden' value=(userProfile && userProfile.manager && userProfile.manager.Name) ? userProfile.manager.Name : '')
+  input#tcl_hidden_manager_title(type='hidden' value=(userProfile && userProfile.manager && userProfile.manager.xcargo) ? userProfile.manager.xcargo : '')
+  input#tcl_hidden_area_supervisor(type='hidden' value=(userProfile && userProfile.area_supervisor) ? userProfile.area_supervisor : '')
+  input#tcl_hidden_suplente(type='hidden' value=(userProfile && userProfile.suplente) ? userProfile.suplente : '')
+
+  div#tclViewInfo(style='display:none;')
+    div.row.mb-2
+      div.col-md-4
+        p.text-muted.small.mb-0 Status
+        span#tcl_view_status -
+      div.col-md-8
+        p.text-muted.small.mb-0 Date Created
+        p#tcl_view_date.mb-0 -
+    hr.mt-2.mb-3
+
+  div.row
+    div.col-md-6.mb-2
+      +floating-input("Collaborator name", 'tcl_collaborator_name', 'text', false, '', '', '', {}, true)
+    div.col-md-6.mb-2
+      +floating-input("Collaborator job title", 'tcl_collaborator_title', 'text', false, '', '', '', {}, true)
+
+  div.row.Not
+    div.col-md-6.mb-2
+      +floating-input('Department', 'tcl_department', 'text', false, '', '', '', {}, true)
+    div.col-md-6.mb-2
+      +floating-input('Direct leader', 'tcl_manager', 'text', false, '', '', '', {}, true)
+
+  div.row.Not
+    div.col-md-6.mb-2
+      +floating-input("Leader's job title", 'tcl_manager_title', 'text', false, '', '', '', {}, true)
+    div.col-md-6.mb-2
+      +floating-input('Area supervisor', 'tcl_area_supervisor', 'text', false, '', '', '', {}, true)
+
+  div.row
+    div.col-md-6.mb-2.Not
+      +floating-input('Suplente', 'tcl_suplente', 'text', false, '', '', '', {}, true)
+    div.col-md-6.mb-2
+      - const _countries = (typeof countries !== 'undefined' && countries && countries.length > 0) ? countries : []
+      - const _countryOptions = _countries.map(function (country) {
+      -   const label = country.xnombre_pais_ingles || country.country || country;
+      -   return { value: label, label: label };
+      - })
+      +floating-select('Country', 'tcl_country', _countryOptions, true, 'Country')
+
+    div.col-md-6.mb-2
+      +floating-input('Start Date', 'tcl_start_date', 'date', true)
+    div.col-md-6.mb-2
+      +floating-input('End Date', 'tcl_end_date', 'date', true)
+
+  div.row
+    div.col-md-12.mb-2
+      +floating-textarea('Comments', 'tcl_comments', false, 'Add details about this temporary change location', '', '', { maxlength: '500' }, 4)
+
+script.
+  (function () {
+    const get = (id) => document.getElementById(id);
+    const isStandalone = !{JSON.stringify(typeof tclStandalone !== 'undefined' ? tclStandalone : false)};
+    const initialMode = !{JSON.stringify(typeof tclInitialMode !== 'undefined' ? tclInitialMode : null)};
+    const initialData = !{JSON.stringify(typeof tclInitialData !== 'undefined' ? tclInitialData : null)};
+
+    const editableFields = ['tcl_country', 'tcl_start_date', 'tcl_end_date', 'tcl_comments'];
+
+    function openModal() {
+      const modal = get('tclModal');
+      if (!modal) return;
+      modal.classList.add('open');
+      document.body.style.overflow = 'hidden';
+    }
+
+    function goToList() {
+      const url = new URL(window.location.href);
+      url.pathname = '/temporary_change_locations';
+      url.searchParams.delete('id');
+      window.location.href = url.pathname + url.search;
+    }
+
+    function closeModal() {
+      const modal = get('tclModal');
+      if (modal) modal.classList.remove('open');
+      document.body.style.overflow = '';
+      if (isStandalone) {
+        goToList();
+      }
+    }
+
+    function parseDate(value) {
+      if (!value) return null;
+      if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+        const dt = new Date(value + 'T00:00:00');
+        return isNaN(dt.getTime()) ? null : dt;
+      }
+      if (/^\d{2}\/\d{2}\/\d{4}$/.test(value)) {
+        const parts = value.split('/');
+        const dt = new Date(Number(parts[2]), Number(parts[1]) - 1, Number(parts[0]));
+        return isNaN(dt.getTime()) ? null : dt;
+      }
+      const dt = new Date(value);
+      return isNaN(dt.getTime()) ? null : dt;
+    }
+
+    function dateToInput(value) {
+      const dt = parseDate(value);
+      if (!dt) return '';
+      const y = dt.getFullYear();
+      const m = String(dt.getMonth() + 1).padStart(2, '0');
+      const d = String(dt.getDate()).padStart(2, '0');
+      return y + '-' + m + '-' + d;
+    }
+
+    function dateToDisplay(value) {
+      const dt = parseDate(value);
+      if (!dt) return '-';
+      return dt.toLocaleDateString('en-GB');
+    }
+
+    function setFieldValue(id, value) {
+      const el = get(id);
+      if (!el) return;
+      const val = value == null ? '' : String(value);
+
+      if (el.tagName === 'SELECT') {
+        const hasOption = Array.from(el.options).some((option) => option.value === val);
+        if (!hasOption && val) {
+          const option = document.createElement('option');
+          option.value = val;
+          option.textContent = val;
+          el.appendChild(option);
+        }
+      }
+
+      el.value = val;
+      el.classList.toggle('has-value', !!val);
+      el.classList.remove('error');
+    }
+
+    function clearField(id) {
+      const el = get(id);
+      if (!el) return;
+      el.value = '';
+      el.classList.remove('valid', 'error', 'has-value');
+      el.removeAttribute('data-touched');
+      const errEl = document.querySelector('[data-error-for="' + id + '"]');
+      if (errEl) {
+        errEl.textContent = '';
+        errEl.classList.remove('show');
+      }
+    }
+
+    function setMode(mode) {
+      const isView = mode === 'view';
+      const modal = get('tclModal');
+      if (modal) modal.dataset.mode = mode;
+      const saveBtn = get('tclModalSave');
+      const viewInfo = get('tclViewInfo');
+
+      if (saveBtn) saveBtn.style.display = isView ? 'none' : '';
+      if (viewInfo) viewInfo.style.display = isView ? '' : 'none';
+
+      editableFields.forEach((id) => {
+        const field = get(id);
+        if (!field) return;
+        if (field.tagName === 'SELECT') {
+          field.disabled = isView;
+        } else {
+          field.readOnly = isView;
+        }
+      });
+    }
+
+    function fillCreateDefaults() {
+      setFieldValue('tcl_collaborator_name', get('tcl_hidden_collaborator_name') ? get('tcl_hidden_collaborator_name').value : '');
+      setFieldValue('tcl_collaborator_title', get('tcl_hidden_collaborator_title') ? get('tcl_hidden_collaborator_title').value : '');
+      setFieldValue('tcl_department', get('tcl_hidden_department') ? get('tcl_hidden_department').value : '');
+
+      const managerLabel = (get('tcl_hidden_manager_name') && get('tcl_hidden_manager_name').value)
+        || (get('tcl_hidden_manager') && get('tcl_hidden_manager').value)
+        || '';
+      setFieldValue('tcl_manager', managerLabel);
+      setFieldValue('tcl_manager_title', get('tcl_hidden_manager_title') ? get('tcl_hidden_manager_title').value : '');
+      setFieldValue('tcl_area_supervisor', get('tcl_hidden_area_supervisor') ? get('tcl_hidden_area_supervisor').value : '');
+      setFieldValue('tcl_suplente', get('tcl_hidden_suplente') ? get('tcl_hidden_suplente').value : '');
+    }
+
+    function resetForm() {
+      ['tcl_id', 'tcl_country', 'tcl_start_date', 'tcl_end_date', 'tcl_comments'].forEach(clearField);
+      fillCreateDefaults();
+      const status = get('tcl_view_status');
+      const date = get('tcl_view_date');
+      if (status) status.textContent = '-';
+      if (date) date.textContent = '-';
+      if (get('tclModalTitle')) get('tclModalTitle').textContent = 'Temporary Change Location';
+    }
+
+    function normalizeDate(date) {
+      const d = new Date(date);
+      d.setHours(0, 0, 0, 0);
+      return d;
+    }
+
+    function getStatusHtml(initialDate, endDate) {
+      const today = normalizeDate(new Date());
+      const initial = normalizeDate(initialDate);
+      const end = normalizeDate(endDate);
+
+      let status;
+
+      if (today < initial) {
+        status = 'Planned';
+      } else if (today <= end) {
+        status = 'Ongoing';
+      } else {
+        status = 'Finished';
+      }
+
+      if (status === 'Planned') {
+        return '<span class="tcl-status-badge tcl-status-planned">Planned</span>';
+      }
+      if (status === 'Ongoing') {
+        return '<span class="tcl-status-badge tcl-status-ongoing">Ongoing</span>';
+      }
+      if (status === 'Finished') {
+        return '<span class="tcl-status-badge tcl-status-finished">Finished</span>';
+      }
+      return '<span class="tcl-status-badge tcl-status-planned">' + (status || '-') + '</span>';
+    }
+
+    function fillFromDetail(formData) {
+      setFieldValue('tcl_id', formData.id || '');
+      setFieldValue('tcl_collaborator_name', formData.collaborator_name || '');
+      setFieldValue('tcl_collaborator_title', formData.collaborator_title || '');
+      setFieldValue('tcl_department', formData.department || '');
+      setFieldValue('tcl_manager', formData.manager || '');
+      setFieldValue('tcl_manager_title', formData.manager_title || '');
+      setFieldValue('tcl_area_supervisor', formData.area_supervisor || '');
+      setFieldValue('tcl_suplente', formData.suplente || '');
+      setFieldValue('tcl_country', formData.country || '');
+      setFieldValue('tcl_start_date', dateToInput(formData.start_date));
+      setFieldValue('tcl_end_date', dateToInput(formData.end_date));
+      setFieldValue('tcl_comments', formData.comments || '');
+
+      if (get('tcl_view_status')) get('tcl_view_status').innerHTML = getStatusHtml(formData.start_date, formData.end_date);
+      if (get('tcl_view_date')) get('tcl_view_date').textContent = dateToDisplay(formData.date_created);
+      if (get('tclModalTitle')) get('tclModalTitle').textContent = 'Temporary Change Location #' + (formData.id || '');
+    }
+
+    function setDateMinimums() {
+      const startInput = get('tcl_start_date');
+      const endInput = get('tcl_end_date');
+      if (!startInput || !endInput) return;
+
+      const today = new Date();
+      const todayValue = today.toISOString().split('T')[0];
+      startInput.min = todayValue;
+      endInput.min = startInput.value || todayValue;
+    }
+
+    function markInvalid(id) {
+      const el = get(id);
+      if (!el) return;
+      el.classList.remove('valid');
+      el.classList.add('error');
+    }
+
+    function markValid(id) {
+      const el = get(id);
+      if (!el) return;
+      el.classList.remove('error');
+      el.classList.add('valid', 'has-value');
+    }
+
+    async function submitCreate() {
+      const country = get('tcl_country') ? get('tcl_country').value.trim() : '';
+      const startDate = get('tcl_start_date') ? get('tcl_start_date').value : '';
+      const endDate = get('tcl_end_date') ? get('tcl_end_date').value : '';
+
+      ['tcl_country', 'tcl_start_date', 'tcl_end_date'].forEach((id) => {
+        const el = get(id);
+        if (el) el.classList.remove('error', 'valid');
+      });
+
+      let isValid = true;
+
+      if (!country) {
+        markInvalid('tcl_country');
+        isValid = false;
+      } else {
+        markValid('tcl_country');
+      }
+      if (!startDate) {
+        markInvalid('tcl_start_date');
+        isValid = false;
+      } else {
+        markValid('tcl_start_date');
+      }
+      if (!endDate) {
+        markInvalid('tcl_end_date');
+        isValid = false;
+      } else {
+        markValid('tcl_end_date');
+      }
+
+      if (!isValid) {
+        launch_toast('Error, required fields are empty', 2);
+        return;
+      }
+
+      if (new Date(endDate) < new Date(startDate)) {
+        markInvalid('tcl_end_date');
+        launch_toast('End date cannot be earlier than start date', 2);
+        return;
+      }
+
+      const saveBtn = get('tclModalSave');
+      if (saveBtn) {
+        saveBtn.disabled = true;
+        saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Saving...';
+      }
+
+      try {
+        const payload = new URLSearchParams();
+        payload.append('collaborator_name', get('tcl_collaborator_name') ? get('tcl_collaborator_name').value : '');
+        payload.append('collaborator_title', get('tcl_collaborator_title') ? get('tcl_collaborator_title').value : '');
+        payload.append('department', get('tcl_department') ? get('tcl_department').value : '');
+        payload.append('manager', get('tcl_hidden_manager') ? get('tcl_hidden_manager').value : '');
+        payload.append('manager_title', get('tcl_manager_title') ? get('tcl_manager_title').value : '');
+        payload.append('area_supervisor', get('tcl_area_supervisor') ? get('tcl_area_supervisor').value : '');
+        payload.append('suplente', get('tcl_suplente') ? get('tcl_suplente').value : '');
+        payload.append('country', country);
+        payload.append('start_date', startDate);
+        payload.append('end_date', endDate);
+        payload.append('comments', get('tcl_comments') ? get('tcl_comments').value : '');
+
+        const response = await fetch('/forms_it_temporary_change_location/', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+            'X-Requested-With': 'XMLHttpRequest',
+            'Accept': 'application/json'
+          },
+          body: payload.toString()
+        });
+
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw new Error(data.error || ('Request failed with status ' + response.status));
+        }
+
+        launch_toast('Successfully Created', 1);
+
+        if (isStandalone && data.id) {
+          window.location.href = '/temporary_change_locations/' + encodeURIComponent(data.id) + window.location.search;
+          return;
+        }
+
+        if (typeof window.fetchFormsTemporaryChangesLocation === 'function') {
+          await window.fetchFormsTemporaryChangesLocation();
+        }
+
+        if (data.id && typeof window.openTemporaryChangeLocationViewModal === 'function') {
+          window.openTemporaryChangeLocationViewModal(data.id);
+        } else if (data.redirectUrl) {
+          window.location.href = data.redirectUrl;
+        } else {
+          closeModal();
+        }
+      } catch (error) {
+        console.error(error);
+        launch_toast(error.message || 'Error creating temporary change location', 2);
+      } finally {
+        if (saveBtn) {
+          saveBtn.disabled = false;
+          saveBtn.innerHTML = '<i class="fas fa-save me-1"></i> Save';
+        }
+      }
+    }
+
+    function openCreateModal() {
+      resetForm();
+      setMode('create');
+      setDateMinimums();
+      if (get('tclModalTitle')) get('tclModalTitle').textContent = 'New Temporary Change Location';
+      openModal();
+    }
+
+    async function openViewModal(id) {
+      resetForm();
+      setMode('view');
+      if (get('tclModalTitle')) get('tclModalTitle').textContent = 'Loading...';
+      openModal();
+
+      try {
+        const response = await fetch('/temporary_change_locations_json/' + encodeURIComponent(id));
+        if (!response.ok) {
+          throw new Error('Error loading detail (status ' + response.status + ')');
+        }
+        const payload = await response.json();
+        fillFromDetail(payload.formData || {});
+      } catch (error) {
+        console.error(error);
+        launch_toast('Error loading temporary change location detail', 2);
+        if (get('tclModalTitle')) get('tclModalTitle').textContent = 'Temporary Change Location';
+      }
+    }
+
+    function wireEvents() {
+      const closeBtn = get('tclModalClose');
+      const cancelBtn = get('tclModalCancel');
+      const saveBtn = get('tclModalSave');
+      const startDate = get('tcl_start_date');
+      const endDate = get('tcl_end_date');
+
+      if (closeBtn) closeBtn.addEventListener('click', closeModal);
+      if (cancelBtn) cancelBtn.addEventListener('click', closeModal);
+      if (saveBtn) saveBtn.addEventListener('click', submitCreate);
+
+      if (startDate && endDate) {
+        startDate.addEventListener('change', function () {
+          endDate.min = startDate.value || '';
+          if (endDate.value && startDate.value && endDate.value < startDate.value) {
+            endDate.value = '';
+          }
+        });
+      }
+    }
+
+    window.openTemporaryChangeLocationCreateModal = openCreateModal;
+    window.openTemporaryChangeLocationViewModal = openViewModal;
+    window.fetchFormsTemporaryChangesLocation = window.fetchFormsTemporaryChangesLocation || null;
+
+    document.addEventListener('DOMContentLoaded', function () {
+      wireEvents();
+
+      if (initialMode === 'create') {
+        openCreateModal();
+        return;
+      }
+
+      if (initialMode === 'view') {
+        setMode('view');
+        resetForm();
+        if (initialData && typeof initialData === 'object' && Object.keys(initialData).length > 0) {
+          fillFromDetail(initialData);
+          openModal();
+          return;
+        }
+
+        const parts = window.location.pathname.split('/').filter(Boolean);
+        const maybeId = parts.length ? parts[parts.length - 1] : null;
+        if (maybeId && /^\d+$/.test(maybeId)) {
+          openViewModal(maybeId);
+        } else {
+          openModal();
+        }
+      }
+    });
+  })();

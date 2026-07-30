@@ -1,0 +1,32 @@
+mixin add-reference(opts = {})
+  - var selectorId = opts.selectorId || 'reference_type_selector'
+  - var tooltip = opts.tooltip || 'You can add approval or other CRM references to this case'
+  - var showSIR = opts.showSIR || false
+  - var showCAS = opts.showCAS || false
+  - var bodyId = opts.bodyId || 'div_reference'
+  - var sectionClass = opts.sectionClass || ''
+  - var hideBody = opts.hideBody || false
+
+  div.add-section(class=sectionClass style="margin:.5rem;padding:.5rem;")
+    div.add-section-header(style="display:flex; justify-content:space-between; align-items:center;")
+      div(style="display:flex; align-items:center; gap:8px;")
+        h5(style="margin:0; font-size:0.8rem; font-weight:600;") Add Reference
+        i.fas.fa-info-circle(style="color:#00586f; font-size:0.8rem; cursor:help;" title=tooltip)
+      div(style="display:flex; align-items:center; gap:10px;")
+        select(id=selectorId class="form-control form-control-sm reference-type-selector" style="width:auto; min-width:120px;")
+          option(value="" disabled selected) Select one reference
+          option(value="approval") Approval
+          option(value="crm") CRM
+          if showSIR
+            option(value="sir") SIR
+          if showCAS
+            option(value="cas") CAS
+    if !hideBody
+      div(id=bodyId class="add-section-body")
+        if block
+          block
+        else
+          if showSIR || showCAS
+            p You can add approval, CRM, SIR or CAS references to this case
+          else
+            p You can add approval or other CRM references to this case

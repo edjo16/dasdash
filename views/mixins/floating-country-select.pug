@@ -1,0 +1,353 @@
+mixin floating-country-select(label, nameLocation, nameLocation1, required=false, containerClass='', initialCodes='')
+  -
+    var countryList = [
+    { code: "AF", name: "Afghanistan" },
+    { code: "AL", name: "Albania" },
+    { code: "DZ", name: "Algeria" },
+    { code: "AS", name: "American Samoa" },
+    { code: "AD", name: "Andorra" },
+    { code: "AO", name: "Angola" },
+    { code: "AI", name: "Anguilla" },
+    { code: "AQ", name: "Antarctica" },
+    { code: "AG", name: "Antigua and Barbuda" },
+    { code: "AR", name: "Argentina" },
+    { code: "AM", name: "Armenia" },
+    { code: "AW", name: "Aruba" },
+    { code: "AU", name: "Australia" },
+    { code: "AT", name: "Austria" },
+    { code: "AZ", name: "Azerbaijan" },
+    { code: "BS", name: "Bahamas" },
+    { code: "BH", name: "Bahrain" },
+    { code: "BD", name: "Bangladesh" },
+    { code: "BB", name: "Barbados" },
+    { code: "BY", name: "Belarus" },
+    { code: "BE", name: "Belgium" },
+    { code: "BZ", name: "Belize" },
+    { code: "BJ", name: "Benin" },
+    { code: "BM", name: "Bermuda" },
+    { code: "BT", name: "Bhutan" },
+    { code: "BO", name: "Bolivia" },
+    { code: "BA", name: "Bosnia and Herzegovina" },
+    { code: "BW", name: "Botswana" },
+    { code: "BR", name: "Brazil" },
+    { code: "IO", name: "British Indian Ocean Territory" },
+    { code: "VG", name: "British Virgin Islands" },
+    { code: "BN", name: "Brunei" },
+    { code: "BG", name: "Bulgaria" },
+    { code: "BF", name: "Burkina Faso" },
+    { code: "BI", name: "Burundi" },
+    { code: "KH", name: "Cambodia" },
+    { code: "CM", name: "Cameroon" },
+    { code: "CA", name: "Canada" },
+    { code: "CV", name: "Cape Verde" },
+    { code: "KY", name: "Cayman Islands" },
+    { code: "CF", name: "Central African Republic" },
+    { code: "TD", name: "Chad" },
+    { code: "CL", name: "Chile" },
+    { code: "CN", name: "China" },
+    { code: "CX", name: "Christmas Island" },
+    { code: "CC", name: "Cocos Islands" },
+    { code: "CO", name: "Colombia" },
+    { code: "KM", name: "Comoros" },
+    { code: "CK", name: "Cook Islands" },
+    { code: "CR", name: "Costa Rica" },
+    { code: "HR", name: "Croatia" },
+    { code: "CU", name: "Cuba" },
+    { code: "CY", name: "Cyprus" },
+    { code: "CZ", name: "Czech Republic" },
+    { code: "DK", name: "Denmark" },
+    { code: "DJ", name: "Djibouti" },
+    { code: "DM", name: "Dominica" },
+    { code: "DO", name: "Dominican Republic" },
+    { code: "EC", name: "Ecuador" },
+    { code: "EG", name: "Egypt" },
+    { code: "SV", name: "El Salvador" },
+    { code: "GQ", name: "Equatorial Guinea" },
+    { code: "ER", name: "Eritrea" },
+    { code: "EE", name: "Estonia" },
+    { code: "ET", name: "Ethiopia" },
+    { code: "FJ", name: "Fiji" },
+    { code: "FI", name: "Finland" },
+    { code: "FR", name: "France" },
+    { code: "GA", name: "Gabon" },
+    { code: "GM", name: "Gambia" },
+    { code: "GE", name: "Georgia" },
+    { code: "DE", name: "Germany" },
+    { code: "GH", name: "Ghana" },
+    { code: "GR", name: "Greece" },
+    { code: "GD", name: "Grenada" },
+    { code: "GT", name: "Guatemala" },
+    { code: "GN", name: "Guinea" },
+    { code: "GW", name: "Guinea-Bissau" },
+    { code: "GY", name: "Guyana" },
+    { code: "HT", name: "Haiti" },
+    { code: "HN", name: "Honduras" },
+    { code: "HU", name: "Hungary" },
+    { code: "IS", name: "Iceland" },
+    { code: "IN", name: "India" },
+    { code: "ID", name: "Indonesia" },
+    { code: "IR", name: "Iran" },
+    { code: "IQ", name: "Iraq" },
+    { code: "IE", name: "Ireland" },
+    { code: "IL", name: "Israel" },
+    { code: "IT", name: "Italy" },
+    { code: "JM", name: "Jamaica" },
+    { code: "JP", name: "Japan" },
+    { code: "JO", name: "Jordan" },
+    { code: "KZ", name: "Kazakhstan" },
+    { code: "KE", name: "Kenya" },
+    { code: "KI", name: "Kiribati" },
+    { code: "KW", name: "Kuwait" },
+    { code: "KG", name: "Kyrgyzstan" },
+    { code: "LA", name: "Laos" },
+    { code: "LV", name: "Latvia" },
+    { code: "LB", name: "Lebanon" },
+    { code: "LS", name: "Lesotho" },
+    { code: "LR", name: "Liberia" },
+    { code: "LY", name: "Libya" },
+    { code: "LI", name: "Liechtenstein" },
+    { code: "LT", name: "Lithuania" },
+    { code: "LU", name: "Luxembourg" },
+    { code: "MO", name: "Macau" },
+    { code: "MK", name: "North Macedonia" },
+    { code: "MG", name: "Madagascar" },
+    { code: "MW", name: "Malawi" },
+    { code: "MY", name: "Malaysia" },
+    { code: "MV", name: "Maldives" },
+    { code: "ML", name: "Mali" },
+    { code: "MT", name: "Malta" },
+    { code: "MH", name: "Marshall Islands" },
+    { code: "MR", name: "Mauritania" },
+    { code: "MU", name: "Mauritius" },
+    { code: "MX", name: "Mexico" },
+    { code: "FM", name: "Micronesia" },
+    { code: "MD", name: "Moldova" },
+    { code: "MC", name: "Monaco" },
+    { code: "MN", name: "Mongolia" },
+    { code: "ME", name: "Montenegro" },
+    { code: "MA", name: "Morocco" },
+    { code: "MZ", name: "Mozambique" },
+    { code: "MM", name: "Myanmar (Burma)" },
+    { code: "NA", name: "Namibia" },
+    { code: "NR", name: "Nauru" },
+    { code: "NP", name: "Nepal" },
+    { code: "NL", name: "Netherlands" },
+    { code: "NZ", name: "New Zealand" },
+    { code: "NI", name: "Nicaragua" },
+    { code: "NE", name: "Niger" },
+    { code: "NG", name: "Nigeria" },
+    { code: "NO", name: "Norway" },
+    { code: "OM", name: "Oman" },
+    { code: "PK", name: "Pakistan" },
+    { code: "PW", name: "Palau" },
+    { code: "PS", name: "Palestine" },
+    { code: "PA", name: "Panama" },
+    { code: "PG", name: "Papua New Guinea" },
+    { code: "PY", name: "Paraguay" },
+    { code: "PE", name: "Peru" },
+    { code: "PH", name: "Philippines" },
+    { code: "PL", name: "Poland" },
+    { code: "PT", name: "Portugal" },
+    { code: "QA", name: "Qatar" },
+    { code: "RO", name: "Romania" },
+    { code: "RU", name: "Russia" },
+    { code: "RW", name: "Rwanda" },
+    { code: "KN", name: "Saint Kitts and Nevis" },
+    { code: "LC", name: "Saint Lucia" },
+    { code: "VC", name: "Saint Vincent and the Grenadines" },
+    { code: "WS", name: "Samoa" },
+    { code: "SM", name: "San Marino" },
+    { code: "ST", name: "Sao Tome and Principe" },
+    { code: "SA", name: "Saudi Arabia" },
+    { code: "SN", name: "Senegal" },
+    { code: "RS", name: "Serbia" },
+    { code: "SC", name: "Seychelles" },
+    { code: "SL", name: "Sierra Leone" },
+    { code: "SG", name: "Singapore" },
+    { code: "SK", name: "Slovakia" },
+    { code: "SI", name: "Slovenia" },
+    { code: "SB", name: "Solomon Islands" },
+    { code: "SO", name: "Somalia" },
+    { code: "ZA", name: "South Africa" },
+    { code: "KR", name: "South Korea" },
+    { code: "SS", name: "South Sudan" },
+    { code: "ES", name: "Spain" },
+    { code: "LK", name: "Sri Lanka" },
+    { code: "SD", name: "Sudan" },
+    { code: "SR", name: "Suriname" },
+    { code: "SE", name: "Sweden" },
+    { code: "CH", name: "Switzerland" },
+    { code: "SY", name: "Syria" },
+    { code: "TW", name: "Taiwan" },
+    { code: "TJ", name: "Tajikistan" },
+    { code: "TZ", name: "Tanzania" },
+    { code: "TH", name: "Thailand" },
+    { code: "TL", name: "Timor-Leste" },
+    { code: "TG", name: "Togo" },
+    { code: "TO", name: "Tonga" },
+    { code: "TT", name: "Trinidad and Tobago" },
+    { code: "TN", name: "Tunisia" },
+    { code: "TR", name: "Turkey" },
+    { code: "TM", name: "Turkmenistan" },
+    { code: "TV", name: "Tuvalu" },
+    { code: "UG", name: "Uganda" },
+    { code: "UA", name: "Ukraine" },
+    { code: "AE", name: "United Arab Emirates" },
+    { code: "GB", name: "United Kingdom" },
+    { code: "US", name: "United States" },
+    { code: "UY", name: "Uruguay" },
+    { code: "UZ", name: "Uzbekistan" },
+    { code: "VU", name: "Vanuatu" },
+    { code: "VA", name: "Vatican City" },
+    { code: "VE", name: "Venezuela" },
+    { code: "VN", name: "Vietnam" },
+    { code: "YE", name: "Yemen" },
+    { code: "ZM", name: "Zambia" },
+    { code: "ZW", name: "Zimbabwe" }
+    ]
+
+  div.floating-select-container(class=containerClass)
+    div.floating-select-wrapper
+      select(
+        id=`${nameLocation}_picker`
+        class='floating-select'
+        data-required=required
+      )
+        option(value='' selected disabled)= 'Select a country'
+        each c in countryList
+          option(value=c.code data-name=c.name)= `${c.name} (${c.code})`
+
+      label.floating-label(for=`${nameLocation}_picker`)= label + (required ? ' *' : '')
+
+      include ./validation-icons.pug
+      +successIcon()
+      +errorIcon()
+
+    span.error-message(data-error-for=`${nameLocation}_picker`)
+
+    div.d-flex.flex-wrap.gap-1.mt-2(id=`${nameLocation}_chips`)
+
+    input(type='hidden' name=nameLocation id=nameLocation)
+    input(type='hidden' name=nameLocation1 id=nameLocation1)
+
+  script.
+    (function() {
+      var locId     = '#{nameLocation}';
+      var loc1Id    = '#{nameLocation1}';
+      var initCodes = '#{initialCodes}';
+
+      document.addEventListener('DOMContentLoaded', function() {
+        var picker    = document.getElementById(locId + '_picker');
+        var chipsEl   = document.getElementById(locId + '_chips');
+        var locInput  = document.getElementById(locId);
+        var loc1Input = document.getElementById(loc1Id);
+        var errorMsg  = document.querySelector('[data-error-for="' + locId + '_picker"]');
+
+        if (!picker || !chipsEl || !locInput || !loc1Input) return;
+
+        var selected = [];
+
+        function updateInputs() {
+          locInput.value  = selected.map(function(s) { return s.name; }).join(',');
+          loc1Input.value = selected.map(function(s) { return s.code; }).join(',');
+        }
+
+        function updateSelectState() {
+          picker.classList.remove('valid', 'error', 'has-value');
+          if (selected.length > 0) {
+            picker.classList.add('has-value', 'valid');
+            if (errorMsg) errorMsg.classList.remove('show');
+          } else if (picker.dataset.required === 'true' && picker.dataset.touched === 'true') {
+            picker.classList.add('error');
+            if (errorMsg) {
+              errorMsg.textContent = '#{label} is required';
+              errorMsg.classList.add('show');
+            }
+          }
+        }
+
+        function renderChips() {
+          chipsEl.innerHTML = '';
+          selected.forEach(function(s) {
+            var chip = document.createElement('span');
+            chip.className = 'badge bg-primary d-inline-flex align-items-center gap-1 me-1 mb-1';
+            chip.style.fontSize = '0.8rem';
+            var text = document.createTextNode(s.name + ' (' + s.code + ')');
+            var closeBtn = document.createElement('button');
+            closeBtn.type = 'button';
+            closeBtn.className = 'btn-close btn-close-white';
+            closeBtn.style.cssText = 'font-size:0.6rem;width:0.75em;height:0.75em;margin-left:4px;';
+            closeBtn.setAttribute('aria-label', 'Remove ' + s.name);
+            closeBtn.addEventListener('click', function() {
+              selected = selected.filter(function(x) { return x.code !== s.code; });
+              renderChips();
+              updateInputs();
+              updateSelectState();
+            });
+            chip.appendChild(text);
+            chip.appendChild(closeBtn);
+            chipsEl.appendChild(chip);
+          });
+        }
+
+        // Auto-add on selection change
+        picker.addEventListener('change', function() {
+          var code = picker.value;
+          if (!code) return;
+          var opt  = picker.options[picker.selectedIndex];
+          var name = opt ? opt.getAttribute('data-name') : code;
+          if (!name) return;
+          if (!selected.find(function(s) { return s.code === code; })) {
+            selected.push({ code: code, name: name });
+            renderChips();
+            updateInputs();
+          }
+          picker.value = '';
+          picker.dataset.touched = 'true';
+          updateSelectState();
+        });
+
+        picker.addEventListener('blur', function() {
+          picker.dataset.touched = 'true';
+          updateSelectState();
+        });
+
+        // Expose global validation helpers (same API as floating-select)
+        window['validateSelect_' + locId + '_picker'] = function() {
+          picker.dataset.touched = 'true';
+          updateSelectState();
+          return selected.length > 0 || picker.dataset.required !== 'true';
+        };
+
+        window['setSelectError_' + locId + '_picker'] = function(message) {
+          picker.classList.remove('valid');
+          picker.classList.add('error');
+          if (errorMsg) {
+            errorMsg.textContent = message || '#{label} is required';
+            errorMsg.classList.add('show');
+          }
+          return false;
+        };
+
+        window['clearSelectError_' + locId + '_picker'] = function() {
+          picker.classList.remove('error');
+          if (errorMsg) errorMsg.classList.remove('show');
+          if (selected.length > 0) picker.classList.add('valid');
+        };
+
+        // Initialize from existing codes (edit mode)
+        if (initCodes && initCodes.trim()) {
+          initCodes.split(',').map(function(c) { return c.trim(); }).filter(Boolean).forEach(function(code) {
+            var opt = picker.querySelector('option[value="' + code + '"]');
+            if (opt && !selected.find(function(s) { return s.code === code; })) {
+              selected.push({ code: code, name: opt.getAttribute('data-name') || code });
+            }
+          });
+          if (selected.length) {
+            renderChips();
+            updateInputs();
+            updateSelectState();
+          }
+        }
+      });
+    })();

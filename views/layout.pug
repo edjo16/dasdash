@@ -1,0 +1,634 @@
+block variables
+doctype html
+html(data-theme=userProfile.DarkMode == 1 ? "dark" : "light")
+  head
+    script.
+      (function(){var t=localStorage.getItem('theme');if(t)document.documentElement.setAttribute('data-theme',t);})();
+    //- meta(charset="UTF-8")
+    meta(http-equiv="Content-Type" content="text/html;charset=UTF-8")
+    link(rel="shortcut icon", href="/favicon.ico")
+    meta(name="viewport", content="width=device-width, initial-scale=1, shrink-to-fit=no")
+    meta(name="theme-color", content="#000000")
+    title #{title} | Active Re
+    link(rel='stylesheet' href='https://code.jquery.com/ui/1.12.1/themes/base/jquery-ui.css')
+    link(href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-datepicker/1.5.0/css/bootstrap-datepicker.css" rel="stylesheet")
+    link(rel="stylesheet" href="/style.css")
+    if(title=='Approval Details')
+      link(rel="stylesheet" href="/approvals-detalle-print.css")
+      link(rel="stylesheet" href="/css/pdf-viewer.css")
+    if(title=='Performance Review Details')
+      link(rel="stylesheet" href="/approvals-detalle-print.css")
+    //- link(rel="stylesheet" href="/jsdelivr.css")
+    //- script(src='/FontAwesomeFree5.15.3.js')
+    script(src='/js/FontAwesomeFree5.15.4.js')
+    link(rel="stylesheet" href="/css/modalMixin.css")
+    link(rel="stylesheet" href="/css/filter-bar.css")
+    script(src='/js/modalMixin.js')
+    script(src='/date.format.js')
+    script(src='/jquery-3.7.1.min.js')
+    script(src='/js/multifilter.min.js' type="text/javascript" )
+    script(src='/js/xlsx.core.min.js' type="text/javascript" )
+    script(src='/js/FileSaver.min.js' type="text/javascript" )
+    script(src='/js/ejs.min.js' type="text/javascript" )
+    if(title.includes('CRM'))
+      link(rel="stylesheet" href='/css/crm.css')
+    if(title.includes('Form'))
+      script(src='/js/fn-forms.js')
+      link(rel="stylesheet" href='/css/forms.css')
+    if(title.includes('Settings'))
+      script(src='/js/fn-forms.js')
+      link(rel="stylesheet" href='/css/forms.css')
+    //- if(title.includes('BADACO'))
+    //-   script(src='/js/cdn.jsdelivr.net_npm_bootstrap@5.2.3_dist_js_bootstrap.bundle.min.js')
+    //-   link(rel="stylesheet" href='/css/cdn.jsdelivr.net_npm_bootstrap@5.2.3_dist_css_bootstrap.min.css')
+    if(title=='Dashboard')
+      script(src='https://cdn.amcharts.com/lib/5/index.js')
+      script(src='https://cdn.amcharts.com/lib/5/xy.js')
+      script(src='https://cdn.amcharts.com/lib/5/themes/Animated.js')
+      script(src='https://cdn.anychart.com/releases/8.10.0/js/anychart-base.min.js?hcode=a0c21fc77e1449cc86299c5faa067dc4')
+      script(src='https://cdn.anychart.com/releases/8.10.0/js/anychart-mekko.min.js?hcode=a0c21fc77e1449cc86299c5faa067dc4')
+      script(src='https://cdn.anychart.com/releases/8.10.0/js/anychart-exports.min.js?hcode=a0c21fc77e1449cc86299c5faa067dc4')
+      script(src='https://cdn.anychart.com/releases/8.10.0/js/anychart-ui.min.js?hcode=a0c21fc77e1449cc86299c5faa067dc4')
+      script(src='js/index-graph.js')
+      script(src='/js/jquery.inputmask.js')
+  body.sb-nav-fixed
+    nav(class="sb-topnav navbar navbar-expand navbar-dark bg-dark")
+      //- <!-- Navbar Brand-->
+      a#home(href="#" onclick="url_usuario(this.id)" class="navbar-brand")
+        //- img(src="\ACRE_LOGO-02_Sin nombre_200px.png" style="width:100%;padding:0px 20px;")
+        img(src="\\"+userMenu.logo style="width:100%;padding:0px 10px;")
+      //- <!-- Sidebar Toggle-->
+      button(class="btn btn-link btn-sm order-1 order-lg-0 me-4 me-lg-0" id="sidebarToggle" href="#!")
+        i.fas.fa-bars
+      <!-- Navbar-->
+      ul(class="navbar-nav ms-auto ms-md-0 me-3 me-lg-4" style="justify-content: flex-end;width:100%;align-items: center;")
+        li(class="nav-item")
+          a(href="#" style="text-decoration: none;" onclick="global_search_toggle()").nav-link
+            i.fas.fa-search
+        li
+          input#global_search(type="text" onkeyup="search();" placeholder="Search in processes or details. Minimum 3 characters.").form-control.Not
+          div.seachresults#seachresults.Not
+
+        li(class="nav-item dropdown")
+            a.nav-link.user-chip-link(id="navbarDropdown" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false")
+              div.user-chip-nav
+                img.user-chip-avatar(src="/pic/"+userProfile.UsuarioID+".png" onerror="this.onerror=null;this.src='/pic/default.png';")
+                i.fas.fa-chevron-down.user-chip-caret
+            ul(class="dropdown-menu dropdown-menu-end user-dropdown" aria-labelledby="navbarDropdown")
+                li.user-dropdown-header
+                  img.user-dropdown-avatar(src="/pic/"+userProfile.UsuarioID+".png" onerror="this.onerror=null;this.src='/pic/default.png';")
+                  div.user-dropdown-info
+                    span.user-dropdown-name= userProfile.UserName
+                    span.user-dropdown-email= userProfile.UserEmail || ''
+                li
+                  hr.dropdown-divider
+                li
+                  label.dropdown-item(for="userImageUpload")
+                    i.fas.fa-camera.me-2
+                    | Change Photo
+                    input#userImageUpload(type="file" accept="image/png" style="display:none;" onchange="uploadUserPhoto(this)")
+                li
+                  a.dropdown-item(href="#" onclick="openChangePasswordModal(); return false;")
+                    i.fas.fa-key.me-2
+                    | Change Password
+                li
+                  if(devteam)
+                    div.theme-toggle-dropdown
+                      button.th-toggle-btn(type="button" onclick="toggleDarkMode()" title="Toggle dark/light mode")
+                        i.fas.fa-sun.th-icon-sun
+                        i.fas.fa-moon.th-icon-moon
+                li
+                  hr.dropdown-divider
+                li
+                  a.dropdown-item.user-dropdown-logout(href="/logout")
+                    i.fas.fa-sign-out-alt.me-2
+                    | Logout
+                  include user.pug
+    div#layoutSidenav
+      div#layoutSidenav_nav
+        div#sidenavAccordion.sb-sidenav.accordion.sb-sidenav-dark
+          div.sb-sidenav-menu
+            div.nav
+              div.user-menu(style="display:block;")
+                div.user-img.sb-sidenav-menu-heading
+                  img(src="/pic/"+userProfile.UsuarioID+".png" onerror="this.onerror=null;this.src='pic/default.png';")
+                  div
+                    p Welcome
+                    div#NombreUser(name='NombreUser') #{userProfile.UserName}
+              a#home.nav-link(class="nav-link" href="/") 
+                div.sb-nav-link-icon
+                  i.fas.fa-tachometer-alt
+                span#home Home
+              div.sb-sidenav-menu-heading Modules
+              a.nav-link.collapsed(href="/approvals" data-bs-toggle="collapse" data-bs-target="#collapseLayouts" aria-expanded="false" aria-controls="collapseLayouts")
+                div.sb-nav-link-icon
+                  i.fas.fa-columns 
+                span Approvals              
+              div(class="collapse" id="collapseLayouts" aria-labelledby="headingOne" data-bs-parent="#sidenavAccordion")
+                nav(class="sb-sidenav-menu-nested nav")
+                  a#approvals-total(class="nav-link" href="/approvals-total?key=Ongoing" onclick="localStorage.removeItem('approvalFilters')") Ongoing
+                  a#approvals-total(class="nav-link" href="/approvals-total?key=Pending" onclick="localStorage.removeItem('approvalFilters')") Pending
+                  a#approvals-total(class="nav-link" href="/approvals-total?key=Closed" onclick="localStorage.removeItem('approvalFilters')") Closed
+                  a#approvals-total(class="nav-link" href="/approvals-total?key=Rejected" onclick="localStorage.removeItem('approvalFilters')") Rejected
+                  a#approvals-total(class="nav-link" href="/approvals-total?key=All" onclick="localStorage.removeItem('approvalFilters')") All
+                  a#beneficiary-list(class="view nav-link", href="#" onclick="url_usuario(this.id)") Beneficiaries
+              //- Approvals-END
+              if(userMenu.Modules.includes("Business Developer") || userMenu.Modules.includes("Marketing") || userMenu.Modules.includes("All"))
+                a.nav-link.collapsed(href="#" data-bs-toggle="collapse" data-bs-target="#collapseBADACO" aria-expanded="false" aria-controls="collapseBADACO")
+                  div.sb-nav-link-icon
+                    i.fas.fa-id-card-alt
+                  span BADACO              
+                div(class="collapse" id="collapseBADACO" aria-labelledby="headingOne" data-bs-parent="#sidenavAccordion")
+                  nav(class="sb-sidenav-menu-nested nav")
+                    if(userMenu.Modules.includes("Marketing") || userMenu.Modules.includes("All"))
+                      a#mercadeo_contactos(class="view nav-link", href="#" onclick="url_usuario(this.id)") Contacts
+                      a#badaco-contacts(class="view nav-link", href="#" onclick="url_usuario(this.id)") Contacts V2
+                    a#forms_marketing_events_list(class="view nav-link", href="#" onclick="url_usuario(this.id)") Events
+                    a#meetings_list(class="view nav-link", href="#" onclick="url_usuario(this.id)") Meetings
+              //- CRM
+              //- if(userMenu.M_CRM=="View")
+              a.nav-link.collapsed(href="#" data-bs-toggle="collapse" data-bs-target="#collapseCRM" aria-expanded="false" aria-controls="collapseCRM")
+                div.sb-nav-link-icon
+                  i.fas.fa-sitemap
+                span CRM              
+              div(class="collapse" id="collapseCRM" aria-labelledby="headingOne" data-bs-parent="#sidenavAccordion")
+                nav(class="sb-sidenav-menu-nested nav")
+                  a#crm_main(class="nav-link" href="#" onclick="url_usuario(this.id)") Main
+                  a#crm_assigned_to_me(class="nav-link" href="/crm_main?key=Pending") Assigned to me
+                  if(devteam)
+                    a#crm_main_cases_type(class="nav-link" href="#" onclick="url_usuario(this.id)") Cases Types
+                    a#crm_tools(class="nav-link" href="#" onclick="url_usuario(this.id)") Tools 
+
+              //- CRM-END    
+              div.sb-sidenav-menu-heading Forms
+              //- Admin
+              if(userMenu.Modules.includes("Administration") || userMenu.Modules.includes("All"))
+                a.nav-link.collapsed(href="#" data-bs-toggle="collapse" data-bs-target="#collapseAdmin" aria-expanded="false" aria-controls="collapseAdmin")
+                  div.sb-nav-link-icon
+                    i.fas.fa-tasks 
+                  span Admin              
+                div(class="collapse" id="collapseAdmin" aria-labelledby="headingOne" data-bs-parent="#sidenavAccordion")
+                  nav(class="sb-sidenav-menu-nested nav")
+                    if(devteam)
+                      a#forms_admin(class="nav-link", href="#" onclick="url_usuario(this.id)") Courier
+                    //- if(userMenu.F_Admin=='View')
+                    a#forms_interdepartmental_request(class="view nav-link " href="/forms_interdepartmental_request") Request Form
+              //- Accounting
+              if(userMenu.Modules.includes("Accounting") || userMenu.Modules.includes("All"))
+                a.nav-link.collapsed(href="#" data-bs-toggle="collapse" data-bs-target="#collapseAccounting" aria-expanded="false" aria-controls="collapseAccounting")
+                  div.sb-nav-link-icon
+                    i.fas.fa-book
+                  span Accounting              
+                div(class="collapse" id="collapseAccounting" aria-labelledby="headingOne" data-bs-parent="#sidenavAccordion")
+                  nav(class="sb-sidenav-menu-nested nav")
+                    if(userMenu.F_Conta=='View')
+                      a#forms_interdepartmental_request(class="" + userMenu.F_Conta +" nav-link " href="/forms_interdepartmental_request") Request Form
+              //- Business Developer              
+              if(userMenu.Modules.includes("Business Developer") || userMenu.Modules.includes("All"))
+                a.nav-link.collapsed(href="#" data-bs-toggle="collapse" data-bs-target="#collapseBusinessDeveloper" aria-expanded="false" aria-controls="collapseBusinessDeveloper")
+                  div.sb-nav-link-icon
+                    i.fas.fa-briefcase
+                  span Business Developer              
+                div(class="collapse" id="collapseBusinessDeveloper" aria-labelledby="headingOne" data-bs-parent="#sidenavAccordion")
+                  nav(class="sb-sidenav-menu-nested nav")
+                      a#forms_interdepartmental_request(class="nav-link " href="/forms_interdepartmental_request") Request Form 
+    
+              //- claims
+              if(userMenu.Modules.includes("Claims") || userMenu.Modules.includes("All"))
+                a.nav-link.collapsed(href="#" data-bs-toggle="collapse" data-bs-target="#collapseClaims" aria-expanded="false" aria-controls="collapseClaims")
+                  div.sb-nav-link-icon
+                    i.fas.fa-exclamation-triangle
+                  span Claims              
+                div(class="collapse" id="collapseClaims" aria-labelledby="headingOne" data-bs-parent="#sidenavAccordion")
+                  nav(class="sb-sidenav-menu-nested nav")
+                    a#forms_interdepartmental_request(class="nav-link" href="/forms_interdepartmental_request") Request Form 
+              if(userMenu.Modules.includes("Collections") || userMenu.Modules.includes("All"))
+                a.nav-link.collapsed(href="#" data-bs-toggle="collapse" data-bs-target="#collapseCollections" aria-expanded="false" aria-controls="collapseCollections")
+                  div.sb-nav-link-icon
+                    i.fas.fa-money-check-alt
+                  span Collections 
+                div(class="collapse" id="collapseCollections" aria-labelledby="headingOne" data-bs-parent="#sidenavAccordion")
+                  nav(class="sb-sidenav-menu-nested nav")
+                    a#forms_interdepartmental_request(class="nav-link " href="/forms_interdepartmental_request") Request Form 
+
+              if(userMenu.Modules.includes("Credit & Surety Underwriting") || userMenu.Modules.includes("All"))
+                a.nav-link.collapsed(href="#" data-bs-toggle="collapse" data-bs-target="#collapseCreditSurety" aria-expanded="false" aria-controls="collapseCreditSurety")
+                  div.sb-nav-link-icon
+                    i.fas.fa-file-invoice-dollar
+                  span Credit & Surety 
+                div(class="collapse" id="collapseCreditSurety" aria-labelledby="headingOne" data-bs-parent="#sidenavAccordion")
+                  nav(class="sb-sidenav-menu-nested nav")
+                    a#forms_interdepartmental_request(class="nav-link " href="/forms_interdepartmental_request") Request Form 
+              //- Contabilidad
+              if(userMenu.dep.includes("11;") || userMenu.dep.includes("12;") || userMenu.dep.includes("13;") || userMenu.dep.includes("14;"))
+                a.nav-link.collapsed(href="#" data-bs-toggle="collapse" data-bs-target="#collapseContabilidad" aria-expanded="false" aria-controls="collapseContabilidad")
+                  div.sb-nav-link-icon
+                    i.fas.fa-book
+                  span Contabilidad              
+                div(class="collapse" id="collapseContabilidad" aria-labelledby="headingOne" data-bs-parent="#sidenavAccordion")
+                  nav(class="sb-sidenav-menu-nested nav")
+                    a#forms_interdepartmental_request(class="view nav-link " href="#" onclick="url_usuario(this.id)") Request Form
+              //- Compliance              
+              if(userMenu.Modules.includes("Compliance") || userMenu.Modules.includes("All"))
+                a.nav-link.collapsed(href="#" data-bs-toggle="collapse" data-bs-target="#collapseCompliance" aria-expanded="false" aria-controls="collapseCompliance")
+                  div.sb-nav-link-icon
+                    i.fas.fa-gavel
+                  span Compliance              
+                div(class="collapse" id="collapseCompliance" aria-labelledby="headingOne" data-bs-parent="#sidenavAccordion")
+                  nav(class="sb-sidenav-menu-nested nav")
+                    a#forms_interdepartmental_request(class="view nav-link " href="/forms_interdepartmental_request") Request Form
+              //- DUA
+              if(userMenu.dep.includes("49;")  || userMenu.Modules.includes("DUA")  || userMenu.Modules.includes("All"))
+                a.nav-link.collapsed(href="#" data-bs-toggle="collapse" data-bs-target="#collapseDUA" aria-expanded="false" aria-controls="collapseDUA")
+                  div.sb-nav-link-icon
+                    i.fas.fa-book
+                  span DUA             
+                div(class="collapse" id="collapseDUA" aria-labelledby="headingOne" data-bs-parent="#sidenavAccordion")
+                  nav(class="sb-sidenav-menu-nested nav")
+                    a#forms_interdepartmental_request(class="view nav-link " href="/forms_interdepartmental_request") Request Form
+              //- Finance              
+              if(userMenu.Modules.includes("Finance") || userMenu.Modules.includes("All"))
+                a.nav-link.collapsed(href="#" data-bs-toggle="collapse" data-bs-target="#collapseFinance" aria-expanded="false" aria-controls="collapseFinance")
+                  div.sb-nav-link-icon
+                    i.fas.fa-chart-pie
+                  span Finance              
+                div(class="collapse" id="collapseFinance" aria-labelledby="headingOne" data-bs-parent="#sidenavAccordion")
+                  nav(class="sb-sidenav-menu-nested nav")
+                    if(userMenu.F_Finanzas=='View')
+                      //- a#forms_finance(class="" + userMenu.F_Finanzas + " nav-link", href="#" onclick="url_usuario(this.id)") Signature Approval
+                      a#forms_interdepartmental_request(class="" + userMenu.F_Finanzas +" nav-link " href="#" onclick="url_usuario(this.id)") Request Form
+              //- Governance     
+              if(userMenu.Modules.includes("Governance") || userMenu.Modules.includes("All"))         
+                a.nav-link.collapsed(href="#" data-bs-toggle="collapse" data-bs-target="#collapseGovernance" aria-expanded="false" aria-controls="collapseGovernance")
+                  div.sb-nav-link-icon
+                    i.fas.fa-gavel 
+                  span Governance
+                div(class="collapse" id="collapseGovernance" aria-labelledby="headingOne" data-bs-parent="#sidenavAccordion")
+                  nav(class="sb-sidenav-menu-nested nav")
+                    if(userMenu.F_Governance == 'View' || userMenu.Modules.includes("All"))
+                      //- a#forms_Governance(class="" + userMenu.F_Governance +" nav-link " href="#" onclick="url_usuario(this.id)") Signature Approval
+                    a#forms_interdepartmental_request(class="nav-link " href="/forms_interdepartmental_request") Request Form 
+
+              a.nav-link.collapsed(href="#" data-bs-toggle="collapse" data-bs-target="#collapseHR" aria-expanded="false" aria-controls="collapseHR")
+                  div.sb-nav-link-icon
+                    i.fas.fa-users 
+                  span HR
+              div(class="collapse" id="collapseHR" aria-labelledby="headingOne" data-bs-parent="#sidenavAccordion")
+                  nav(class="sb-sidenav-menu-nested nav")
+                    if(userMenu.Modules.includes("RRHH") || userMenu.Modules.includes("All"))         
+                      a#forms_interdepartmental_request(class="nav-link " href="/forms_interdepartmental_request") Request Form
+                    if(userMenu.compania.includes(1))
+                      a#form_hr_personnel_requisition(class="nav-link", href="#" onclick="url_usuario(this.id)") Personnel Requisition Form
+                      a#forms_hr_performance_review(class="nav-link", href="/forms_interdepartmental_request") Performance review
+                    a#form_hr_personal_time_off(class="nav-link", href="/form_hr_personal_time_off") Personal Time Off
+
+              //- Marketing              
+              if(userMenu.Modules.includes("Marketing") || userMenu.Modules.includes("All"))
+                a.nav-link.collapsed(href="#" data-bs-toggle="collapse" data-bs-target="#collapseMarketing" aria-expanded="false" aria-controls="collapseMarketing")
+                  div.sb-nav-link-icon
+                    i.fas.fa-bullhorn
+                  span Marketing              
+                div(class="collapse" id="collapseMarketing" aria-labelledby="headingOne" data-bs-parent="#sidenavAccordion")
+                  nav(class="sb-sidenav-menu-nested nav")
+                    a#forms_mercadeo_nuevo_contacto(class="view nav-link", href="#" onclick="url_usuario(this.id)") New Contact
+                    a#forms_interdepartmental_request(class="nav-link " href="/forms_interdepartmental_request") Request Form 
+
+              //- IT
+              a.nav-link.collapsed(href="#" data-bs-toggle="collapse" data-bs-target="#collapseIT" aria-expanded="false" aria-controls="collapseIT")
+                div.sb-nav-link-icon
+                  i.fas.fa-laptop-code
+                span IT               
+              div(class="collapse" id="collapseIT" aria-labelledby="headingOne" data-bs-parent="#sidenavAccordion")
+                nav(class="sb-sidenav-menu-nested nav")
+                  if(devteam)
+                    a#users(class="nav-link " href="#" onclick="url_usuario(this.id)") Admin
+                  a#forms_ITequipment(class="nav-link", href="#" onclick="url_usuario(this.id)") Equipment Checkout
+                  if(userMenu.dep.includes("9;"))
+                    a#forms_interdepartmental_request(class="nav-link " href="/forms_interdepartmental_request") Request Form 
+                  a#forms_it_external_emails_request(class="nav-link", href="#" onclick="url_usuario(this.id)") External Emails Request
+                  a#forms_it_software_change_request_view(class="nav-link", href="#" onclick="url_usuario(this.id)") Software Change Request
+                  a#temporary_change_locations(class="nav-link", href="#" onclick="url_usuario(this.id)") Temporary Change Location
+                  if(devteam)
+                    a#forms_it_log_errors(class="view nav-link", href="#" onclick="url_usuario(this.id)") System Logs             
+              if(userMenu.Modules.includes("Operations") || userMenu.Modules.includes("All"))
+                a.nav-link.collapsed(href="#" data-bs-toggle="collapse" data-bs-target="#collapseOperations" aria-expanded="false" aria-controls="collapseOperations")
+                  div.sb-nav-link-icon
+                    i.fas.fa-hammer
+                  span Operations              
+                div(class="collapse" id="collapseOperations" aria-labelledby="headingOne" data-bs-parent="#sidenavAccordion")
+                  nav(class="sb-sidenav-menu-nested nav")
+                    a#forms_interdepartmental_request(class="nav-link " href="/forms_interdepartmental_request") Request Form 
+
+              //- Retrocession
+              if(userMenu.Modules.includes("Retrocession") || userMenu.Modules.includes("All"))
+                a.nav-link.collapsed(href="#" data-bs-toggle="collapse" data-bs-target="#collapseRetrocession" aria-expanded="false" aria-controls="collapseRetrocession")
+                  div.sb-nav-link-icon
+                    i.fas.fa-people-arrows
+                  span Retrocession
+                div(class="collapse" id="collapseRetrocession" aria-labelledby="headingOne" data-bs-parent="#sidenavAccordion")
+                  nav(class="sb-sidenav-menu-nested nav")
+                    a#forms_interdepartmental_request(class="nav-link " href="/forms_interdepartmental_request") Request Form 
+
+              if(userMenu.Modules.includes("Underwriting") || userMenu.Modules.includes("All"))
+                a.nav-link.collapsed(href="#" data-bs-toggle="collapse" data-bs-target="#collapseUnderwriting" aria-expanded="false" aria-controls="collapseUnderwriting")
+                  div.sb-nav-link-icon
+                    i.fas.fa-file-signature
+                  span Underwriting
+                div(class="collapse" id="collapseUnderwriting" aria-labelledby="headingOne" data-bs-parent="#sidenavAccordion")
+                  nav(class="sb-sidenav-menu-nested nav")
+                    a#forms_interdepartmental_request(class="nav-link " href="/forms_interdepartmental_request") Request Form
+
+
+          if(devteam)
+            div.dev-menu.nav
+              a.nav-link.collapsed(data-bs-toggle="collapse" data-bs-target="#collapseDevMenu" aria-expanded="false" aria-controls="collapseDevMenu" style="color:rgba(255, 255, 255, 0.5);display:flex;" href="#")
+                div.sb-nav-link-icon
+                  i.fas.fa-code 
+                span Dev Menu
+              div#collapseDevMenu.collapse(style="padding: 0 1.25rem 0 1rem;width: 100%")
+                div.dev-user.row(style="gap:.5rem;")
+                  select#dev-user.form-control(name="dev-user" onchange="devteamuser(this)")
+                    option(value=userProfile.UsuarioID selected)= userProfile.UserName
+                    each nombres in usuarios
+                      if nombres[0] !== userProfile.UsuarioID
+                        option(value=nombres[0])= nombres[1]
+
+                  button#restore-dev-user.btn.btn-outline-light.mt-1(type="button" onclick="restoreDevUser()")
+                    i.fas.fa-undo(style="margin-right:.35rem;")
+                    | My user
+
+                div.dev-data.row
+                  select#dev-data.form-control(name="dev-data" onchange="devteamdb(this)")
+      //- Server availability warning notification
+      if(serverWarning)
+        div#serverWarningNotification.alert.alert-warning.alert-dismissible.fade.show(role="alert" style="margin: 1rem; position: absolute; bottom: 20px; right: 20px; z-index: 1050; max-width: 400px;")
+          strong= serverWarning.title + ':'
+          span= ' ' + serverWarning.message
+          button.btn-close(type="button" data-bs-dismiss="alert" aria-label="Close")
+      style.
+        .search-section-title {
+          padding: 6px 12px;
+          font-size: 0.75rem;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 0.04em;
+          color: #00586f;
+          background: #f0f4f5;
+          border-bottom: 1px solid #dee2e6;
+        }
+        .search-result-item {
+          display: block;
+          padding: 8px 12px;
+          font-size: 0.82rem;
+          color: #212529;
+          text-decoration: none;
+          border-bottom: 1px solid #f0f0f0;
+          transition: background 0.12s ease;
+        }
+        .search-result-item:hover {
+          background: #e8f4fb;
+          color: #00586f;
+        }
+        .search-status {
+          display: inline-block;
+          padding: 1px 6px;
+          border-radius: 4px;
+          font-size: 0.7rem;
+          font-weight: 600;
+          background: #e9ecef;
+          color: #495057;
+        }
+        .search-meta {
+          display: inline-block;
+          margin-left: 4px;
+          font-size: 0.75rem;
+          color: #6c757d;
+        }
+        .search-prio-urgent,
+        .search-prio-important {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 16px;
+          height: 16px;
+          border-radius: 50%;
+          font-size: 0.6rem;
+          font-weight: 700;
+          color: #fff;
+          line-height: 1;
+        }
+        .search-prio-urgent { background: #dc3545; }
+        .search-prio-important { background: #fd7e14; }
+        .search-empty {
+          padding: 20px 12px;
+          text-align: center;
+          color: #6c757d;
+          font-size: 0.85rem;
+        }
+        #NombreUser {
+          display: inline-block;
+          max-width: 17ch; 
+          white-space: pre-wrap; 
+          word-wrap: break-word;
+        }
+
+        #NombreUser::after {
+          content: attr(data-fullname);
+          display: block;
+          white-space: pre-wrap;
+          word-wrap: break-word;
+          visibility: hidden;
+          height: 0;
+        }
+      script.
+        function clearUserLocalStorage() {
+          ['approvalFilters', 'crm_main_filters', 'backpage', 'new_item', 'error'].forEach(function(k) {
+            localStorage.removeItem(k);
+          });
+        }
+        async function devteamuser(object) {
+          try {
+            clearUserLocalStorage();
+            const response = await fetch('/devteam/switch-user', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({
+                targetUserID: object.value
+              })
+            });
+
+            const data = await response.json();
+
+            if (!data.ok) {
+              alert(data.message || 'Is not possible to change of user');
+              return;
+            }
+            window.location.href = '/';
+          } catch (error) {
+            console.error(error);
+            alert('Error changing user');
+          }
+        }
+        async function restoreDevUser() {
+          try {
+            clearUserLocalStorage();
+            const response = await fetch('/devteam/restore-user', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json'
+              }
+            });
+
+            const data = await response.json();
+
+            if (!data.ok) {
+              alert(data.message || 'No fue posible restaurar el usuario');
+              return;
+            }
+
+            window.location.href = '/';
+          } catch (error) {
+            console.error(error);
+            alert('Error al restaurar el usuario');
+          }
+        }
+        function devteamdb(object) {
+          var url_string = window.location.href;
+          var url = new URL(url_string);
+
+          if (url.searchParams.has('dbdevteam')) {
+            url.searchParams.delete('dbdevteam');
+          }
+
+          if (object.value == 'live') {
+            url.host = "vps-file01";
+          } else if (object.value == 'dv') {
+            url.host = "vps-desa01";
+          }
+
+          url.searchParams.set('dbdevteam', object.value);
+
+          window.location.href = url.toString();
+        }
+
+        var url_string = window.location.href;
+        var url = new URL(url_string);
+        var db = url.searchParams.get("dbdevteam");
+        var s = document.getElementById("dev-data");
+        var OPT1 = document.createElement('OPTION');
+        OPT1.setAttribute('value', "live");
+        var OPT2 = document.createElement('OPTION');
+        OPT2.setAttribute('value', "dv");
+
+        var hostname = window.location.hostname;
+        var environment = (hostname === 'localhost' || hostname === 'vps-desa01') ? 'dv' : 'live';
+
+        var currentEnv = db || environment;
+
+        if (db) {
+            if (db === "live") {
+                OPT1.setAttribute('selected', 'selected');
+            } else {
+                OPT2.setAttribute('selected', 'selected');
+            }
+        } else {
+            if (environment === 'live') {
+                OPT1.setAttribute('selected', 'selected');
+            } else {
+                OPT2.setAttribute('selected', 'selected');
+            }
+        }
+
+        OPT1.appendChild(document.createTextNode('Live'));
+        OPT2.appendChild(document.createTextNode('Development'));
+        s.appendChild(OPT1);
+        s.appendChild(OPT2);
+
+        s.classList.remove('env-select-live', 'env-select-dev');
+        if (currentEnv === 'live') {
+          s.classList.add('env-select-live');
+        } else {
+          s.classList.add('env-select-dev');
+        }
+
+      script.
+        function toggleDarkMode() {
+          var html = document.documentElement;
+          var current = html.getAttribute('data-theme');
+          var next = current === 'dark' ? 'light' : 'dark';
+          html.setAttribute('data-theme', next);
+          localStorage.setItem('theme', next);
+          var darkVal = next === 'dark' ? 1 : 0;
+          fetch('/api/users/darkmode', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ DarkMode: darkVal })
+          }).catch(function(err) { console.error('Error saving dark mode:', err); });
+        }
+        window.addEventListener('storage', function(e) {
+          if (e.key === 'theme' && e.newValue) {
+            document.documentElement.setAttribute('data-theme', e.newValue);
+          }
+        });
+        function uploadUserPhoto(input) {
+          if (!input.files || !input.files[0]) return;
+          var file = input.files[0];
+          if (file.type !== 'image/png') {
+            launch_toast('Only PNG images are allowed', 2);
+            return;
+          }
+          var formData = new FormData();
+          formData.append('userImage', file);
+          formData.append('userID', document.getElementById('UsuarioID').value);
+          var userId = document.getElementById('UsuarioID').value;
+          fetch('/api/users/' + userId + '/image', {
+            method: 'POST',
+            body: formData
+          }).then(function(r) { return r.json(); })
+            .then(function(data) {
+              if (data.result === 1) {
+                launch_toast('Photo updated', 1);
+                setTimeout(function() { window.location.reload(); }, 1000);
+              } else {
+                launch_toast(data.message || 'Error uploading', 2);
+              }
+            }).catch(function(err) {
+              console.error(err);
+              launch_toast('Error uploading photo', 2);
+            });
+        }
+
+      block layout-content
+      //- div 
+      //-   each data in userMenu
+      //-     p=data
+      div#toast
+        div#notificacion_img
+        div#notificacion_texto
+    
+    script(src='/bootstrap.bundle.min.js')
+    script(src='/scripts.js')
+    if(title.includes('CRM'))
+      script(src='/js/ai-core/ai-assistant-core.js')
+      script(src='/js/scripts_crm.js')
+      script(src='/js/ai-core/crm-ai-assistant.js')
+    if(title.includes('BADACO - '))
+      script(src='/js/scripts_mercadeo.js')
+    script(src='https://cdn.jsdelivr.net/npm/simple-datatables@latest')
+    script(src='/datatables-simple-demo.js')
+    script(src='https://code.jquery.com/jquery-3.7.1.min.js') 
+    script(src='https://code.jquery.com/ui/1.12.1/jquery-ui.min.js')
+    script(src='/js/session-timeout.js')
+    script(src='/js/password-expiry-notice.js')
+    if(title=='Approval Details')
+      script(src='/js/ai-core/ai-assistant-core.js')
+      script(src='/js/ai-core/approval-ai-assistant.js')
+      script(src='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js')
+      script.
+        if (window.pdfjsLib) {
+          pdfjsLib.GlobalWorkerOptions.workerSrc ='/js/pdf.worker.min.js';
+        }
+    if(title=='Approval Details')
+      script(src='/js/pdf-viewer-sign.js')

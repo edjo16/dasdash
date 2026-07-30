@@ -1,0 +1,171 @@
+//- ── Categorization Items Modal ─────────────────────────────────────────
+//- Usage:
+//-   +categorization-items-modal(approvalItems, detalle)
+//-
+//- Parameters:
+//-   items  - array of approval items (cost_code_name, name, amount)
+//-   info   - detalle object from approval controller
+//-            (RowID, proceso, solicitante, solicitante_fecha)
+
+mixin categorization-items-modal(items, info)
+  if items && items.length > 0
+    div#categorizationItemsModal.app-modal
+      div.app-modal-dialog(style="max-width:650px;")
+        div.app-modal-header
+          h5.app-modal-title
+            i.fas.fa-coins(style="margin-right:8px;")
+            | Categorization Items
+          div(style="display:flex;align-items:center;gap:8px;")
+            button.btn.btn-sm.btn-outline-secondary(
+              type="button"
+              onclick="downloadCategorizationItemsExcel()"
+              title="Download Excel"
+              style="padding:2px 8px;font-size:.80rem;"
+            )
+              i.fas.fa-file-excel(style="margin-right:4px;color:#1d6f42;")
+              | Excel
+            button.app-modal-close(type="button" onclick="closeCategorizationItemsModal()" aria-label="Close") ×
+        div.app-modal-body
+          div.cost-report-block
+            div.table-responsive
+              table#categorizationItemsTable.cost-actions-table.cat-items-table
+                thead.cat-items-thead
+                  tr
+                    th(style="width:8%;") #
+                    th(style="width:25%;") Account ID
+                    th(style="width:30%;") Cost Category
+                    th(style="width:32%;") Description
+                    th(style="width:30%;text-align:right;") Amount (#{info.moneda || '-'})
+                tbody.cat-items-tbody
+                  each item, idx in items
+                    tr
+                      td(style="font-weight:500;text-align:center;")= idx + 1
+                      td= item.account_id || '-'
+                      td= item.cost_code_name || '-'
+                      td= item.name || '-'
+                      td(style="text-align:right;")= item.amount != null ? Number(item.amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'
+                tfoot.cat-items-tfoot
+                  - var itemsTotal = items.reduce(function(sum, i) { return sum + (Number(i.amount) || 0); }, 0);
+                  tr.cost-total-row
+                    td(colspan="4" style="text-align:right;font-weight:700;") Total:
+                    td(style="font-weight:700;color:#00586f;text-align:right;")= itemsTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+        div.app-modal-footer
+          button.btn.btn-secondary(type="button" onclick="closeCategorizationItemsModal()") Close
+
+    style.
+      .cat-items-table {
+        background: #ffffff;
+      }
+      .cat-items-thead {
+        background: #00586f !important;
+        color: white;
+      }
+      .cat-items-thead th {
+        color: white;
+        font-weight: 700;
+        padding: 10px 8px;
+        text-transform: uppercase;
+        font-size: 0.75rem;
+        letter-spacing: 0.05em;
+      }
+      .cat-items-tbody tr {
+        background: #f8fbfc;
+        border-bottom: 1px solid #e9ecef;
+      }
+      .cat-items-tbody tr:hover {
+        background: #f0f7fa;
+      }
+      .cat-items-tfoot {
+        background: #e9f1f5;
+      }
+      .cat-items-table .cost-total-row {
+        background: #e9f1f5 !important;
+        font-weight: 600;
+        border-top: 2px solid #00586f;
+      }
+
+    //- Serialize server data for client-side Excel generation
+    script.
+      (function () {
+        var _catItems = !{JSON.stringify(items)};
+        var _catInfo  = {
+          rowId    : !{JSON.stringify(info.RowID)},
+          proceso  : !{JSON.stringify(info.proceso)},
+          solicitante       : !{JSON.stringify(info.solicitante)},
+          solicitante_fecha : !{JSON.stringify(info.solicitante_fecha)},
+          moneda            : !{JSON.stringify(info.moneda || '')}
+        };
+
+        function openCategorizationItemsModal() {
+          var modal = document.getElementById('categorizationItemsModal');
+          if (modal) modal.classList.add('open');
+        }
+        function closeCategorizationItemsModal() {
+          var modal = document.getElementById('categorizationItemsModal');
+          if (modal) modal.classList.remove('open');
+        }
+
+        function downloadCategorizationItemsExcel() {
+          if (typeof XLSX === 'undefined') {
+            alert('Excel library not loaded. Please refresh the page and try again.');
+            return;
+          }
+
+          var wb = XLSX.utils.book_new();
+
+          // ── Info rows ──────────────────────────────────────────────────
+          var infoRows = [
+            ['Approval #',  _catInfo.rowId],
+            ['Process',     _catInfo.proceso],
+            ['Requestor',   _catInfo.solicitante],
+            ['Date',        _catInfo.solicitante_fecha || ''],
+            ['Currency',    _catInfo.moneda || '-'],
+            [],
+            ['#', 'Cost Category', 'Description', 'Amount (' + (_catInfo.moneda || '-') + ')']
+          ];
+
+          // ── Data rows ──────────────────────────────────────────────────
+          var dataRows = _catItems.map(function (item, idx) {
+            return [
+              idx + 1,
+              item.cost_code_name || '-',
+              item.name           || '-',
+              item.amount != null ? Number(item.amount) : 0
+            ];
+          });
+
+          // ── Total row ──────────────────────────────────────────────────
+          var total = _catItems.reduce(function (sum, i) {
+            return sum + (Number(i.amount) || 0);
+          }, 0);
+          var totalRow = ['', '', 'Total', total];
+
+          var allRows = infoRows.concat(dataRows).concat([totalRow]);
+
+          var ws = XLSX.utils.aoa_to_sheet(allRows);
+
+          // ── Apply thousands + 2-decimal number format to Amount column ──
+          var amountColIndex = 3; // 0-based, column D (now includes index column)
+          var dataStartRow   = infoRows.length; // 0-based row where data begins
+          var totalRowIndex  = dataStartRow + dataRows.length;
+          for (var r = dataStartRow; r <= totalRowIndex; r++) {
+            var cellAddr = XLSX.utils.encode_cell({ r: r, c: amountColIndex });
+            if (ws[cellAddr] && ws[cellAddr].t === 'n') {
+              ws[cellAddr].z = '#,##0.00';
+            }
+          }
+
+          // ── Column widths ──────────────────────────────────────────────
+          ws['!cols'] = [{ wch: 5 }, { wch: 30 }, { wch: 35 }, { wch: 18 }];
+
+          XLSX.utils.book_append_sheet(wb, ws, 'Categorization Items');
+
+          var fileName = 'categorization_items_approval_' + _catInfo.rowId + '.xlsx';
+          XLSX.writeFile(wb, fileName);
+        }
+
+        // Expose to global scope so inline onclick attributes work
+        window.openCategorizationItemsModal  = openCategorizationItemsModal;
+        window.closeCategorizationItemsModal = closeCategorizationItemsModal;
+        window.downloadCategorizationItemsExcel = downloadCategorizationItemsExcel;
+      })();

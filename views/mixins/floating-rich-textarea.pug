@@ -1,0 +1,629 @@
+mixin floating-rich-textarea(label, name, required=false, placeholder='', className='', containerClass='', attrs={}, rows=5, value='', maxlength=0, allowPasteTables=true)
+  div.floating-input-container.floating-rich-container(class=containerClass)
+    div.floating-input-wrapper
+      div.floating-rich-editor(data-name=name)
+        div.floating-rich-toolbar
+          button.frt-btn.frt-bold(type="button" title="Bold (Ctrl+B)")
+            i.fas.fa-bold
+          button.frt-btn.frt-underline(type="button" title="Underline (Ctrl+U)")
+            i.fas.fa-underline
+          span.frt-separator
+          span.frt-color-group
+            button.frt-btn.frt-color-btn(type="button" title="Text Color")
+              i.fas.fa-font
+              span.frt-color-indicator(style="background:#000000;")
+            div.frt-color-palette
+              each c in ['#000000','#dc3545','#e67700','#c09300','#198754','#00586f','#0d6efd','#6f42c1','#d63384','#6c757d']
+                button.frt-color-swatch(type="button" data-color=c style=`background:${c};` title=c)
+          span.frt-separator
+          button.frt-btn.frt-table-btn(type="button" title="Insert Table")
+            i.fas.fa-table
+          div.frt-table-picker
+            div.frt-table-picker-label Select size
+            div.frt-table-grid
+        div.frt-content(
+          id=name
+          contenteditable='true'
+          data-placeholder=placeholder
+          data-required=required
+          rows=rows
+          class=className
+          maxlength=maxlength
+        )&attributes(attrs)= value
+        if !value
+          span.frt-placeholder= placeholder
+      label.floating-label(for=name)= label + (required ? ' *' : '')
+      include ./validation-icons.pug
+      +successIcon()
+      +errorIcon()
+      input(type="hidden" id=`${name}_html` name=name value=value)
+    span.error-message(data-error-for=name)
+  style.
+    .floating-rich-container .floating-input-wrapper { position: relative; }
+    .floating-rich-editor {
+      border: 1px solid var(--form-border);
+      border-radius: 0.375rem;
+      background: var(--surface-2);
+      color: var(--form-text);
+      overflow: hidden;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    .floating-rich-editor:focus-within {
+      border-color: var(--form-focus);
+      box-shadow: 0 0 0 3px var(--form-focus-shadow);
+    }
+    .floating-rich-container .floating-input-container.valid .floating-rich-editor,
+    .floating-rich-editor.valid {
+      border-color: var(--icon-success);
+    }
+    .floating-rich-container .floating-input-container.valid .floating-rich-editor:focus-within,
+    .floating-rich-editor.valid:focus-within {
+      border-color: var(--icon-success);
+      box-shadow: 0 0 0 3px rgba(16,185,129,0.1);
+    }
+    .floating-rich-container .floating-input-container.error .floating-rich-editor,
+    .floating-rich-editor.error {
+      border-color: var(--icon-error);
+    }
+    .floating-rich-container .floating-input-container.error .floating-rich-editor:focus-within,
+    .floating-rich-editor.error:focus-within {
+      border-color: var(--icon-error);
+      box-shadow: 0 0 0 3px rgba(239,68,68,0.1);
+    }
+    .floating-rich-toolbar {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      padding: 4px 6px;
+      border-bottom: 1px solid var(--form-border);
+      background: color-mix(in srgb, var(--surface-2) 92%, var(--form-border));
+      flex-wrap: wrap;
+    }
+    .frt-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      height: 28px;
+      border: 1px solid transparent;
+      border-radius: 4px;
+      background: transparent;
+      color: var(--form-text);
+      cursor: pointer;
+      font-size: 12px;
+      transition: background 0.15s, color 0.15s, border-color 0.15s;
+      position: relative;
+    }
+    .frt-btn:hover { background: var(--form-focus-shadow); color: var(--form-focus); }
+    .frt-btn.active { background: var(--form-focus); color: #fff; border-color: var(--form-focus); }
+    .frt-separator {
+      width: 1px;
+      height: 18px;
+      background: var(--form-border);
+      margin: 0 4px;
+      flex-shrink: 0;
+    }
+    .frt-color-group { position: relative; }
+    .frt-color-indicator {
+      display: block;
+      width: 14px;
+      height: 3px;
+      border-radius: 1px;
+      margin-top: 1px;
+    }
+    .frt-color-btn { width: auto; padding: 0 4px; flex-direction: column; gap: 0; }
+    .frt-color-palette {
+      display: none;
+      position: absolute;
+      top: 100%;
+      left: 0;
+      margin-top: 4px;
+      background: var(--surface-2);
+      border: 1px solid var(--form-border);
+      border-radius: 6px;
+      padding: 6px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+      z-index: 100;
+      flex-wrap: wrap;
+      gap: 4px;
+      width: 120px;
+    }
+    .frt-color-palette.open { display: flex; }
+    .frt-color-swatch {
+      width: 20px;
+      height: 20px;
+      border-radius: 3px;
+      border: 2px solid transparent;
+      cursor: pointer;
+      transition: border-color 0.15s, transform 0.1s;
+    }
+    .frt-color-swatch:hover { transform: scale(1.15); border-color: var(--form-focus); }
+    .frt-color-swatch.active { border-color: var(--form-focus); box-shadow: 0 0 0 1px var(--form-focus); }
+    .frt-table-btn { width: auto; padding: 0 6px; gap: 4px; font-size: 11px; }
+    .frt-table-picker {
+      display: none;
+      position: absolute;
+      top: 100%;
+      left: 0;
+      margin-top: 4px;
+      background: var(--surface-2);
+      border: 1px solid var(--form-border);
+      border-radius: 6px;
+      padding: 8px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+      z-index: 100;
+    }
+    .frt-table-picker.open { display: block; }
+    .frt-table-picker-label {
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--form-text);
+      opacity: 0.6;
+      margin-bottom: 4px;
+    }
+    .frt-table-grid {
+      display: grid;
+      grid-template-columns: repeat(6, 1fr);
+      gap: 2px;
+    }
+    .frt-table-grid .frt-cell {
+      width: 18px;
+      height: 18px;
+      border: 1px solid var(--form-border);
+      border-radius: 2px;
+      background: transparent;
+      cursor: pointer;
+      transition: background 0.1s, border-color 0.1s;
+    }
+    .frt-table-grid .frt-cell:hover,
+    .frt-table-grid .frt-cell.highlight {
+      background: var(--form-focus);
+      border-color: var(--form-focus);
+    }
+    .frt-content {
+      min-height: calc(1.2em + 16px);
+      max-height: 300px;
+      overflow-y: auto;
+      padding: 0.75rem 1rem;
+      font-size: 0.875rem;
+      line-height: 1.5;
+      outline: none;
+      position: relative;
+      word-wrap: break-word;
+      overflow-wrap: break-word;
+    }
+    .frt-content:empty::before {
+      content: attr(data-placeholder);
+      color: var(--form-text);
+      opacity: 0.4;
+      pointer-events: none;
+      font-style: italic;
+    }
+    .frt-placeholder {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      padding: 0.75rem 1rem;
+      font-size: 0.875rem;
+      color: var(--form-text);
+      opacity: 0.4;
+      pointer-events: none;
+      font-style: italic;
+    }
+    .frt-content:empty + .frt-placeholder,
+    .frt-content:focus + .frt-placeholder { display: none; }
+    .frt-content table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 4px 0;
+    }
+    .frt-content table td,
+    .frt-content table th {
+      border: 1px solid var(--form-border);
+      padding: 4px 8px;
+      font-size: 0.85rem;
+      min-width: 60px;
+    }
+    .frt-content table th {
+      background: color-mix(in srgb, var(--surface-2) 80%, var(--form-border));
+      font-weight: 600;
+    }
+    .floating-rich-editor .floating-label {
+      pointer-events: none;
+    }
+    .frt-content:focus ~ .floating-label,
+    .frt-content.has-value ~ .floating-label {
+      color: var(--form-focus);
+      transform: translateY(-1.4rem) scale(0.8);
+    }
+    .floating-input-container.valid .frt-content:focus ~ .floating-label,
+    .floating-input-container.valid .frt-content.has-value ~ .floating-label {
+      color: var(--icon-success);
+    }
+    .floating-input-container.error .frt-content:focus ~ .floating-label,
+    .floating-input-container.error .frt-content.has-value ~ .floating-label {
+      color: var(--icon-error);
+    }
+    .floating-rich-editor .validation-icon {
+      position: absolute;
+      right: 0.75rem;
+      font-size: 0.85rem;
+      display: none;
+      pointer-events: none;
+      z-index: 2;
+    }
+    .floating-input-container.valid .success-icon { display: block; top: 8px; }
+    .floating-input-container.error .error-icon   { display: block; top: 8px; }
+    .frt-charcounter {
+      position: absolute;
+      right: 0.75rem;
+      bottom: 0.35rem;
+      font-size: 0.7rem;
+      color: var(--text-muted);
+      pointer-events: none;
+      z-index: 2;
+    }
+    [data-theme="dark"] .frt-content table th {
+      background: color-mix(in srgb, var(--surface-2) 70%, var(--form-border));
+    }
+    @media (max-width: 576px) {
+      .frt-table-picker { left: auto; right: 0; }
+      .frt-color-palette { left: auto; right: 0; }
+    }
+  script.
+    (function() {
+      var name = '#{name}';
+      var editor = document.getElementById(name);
+      if (!editor) return;
+      var wrapper = editor.closest('.floating-rich-editor');
+      var hiddenInput = document.getElementById(name + '_html');
+      var errorMsg = document.querySelector('[data-error-for="#{name}"]');
+      var maxLen = parseInt(editor.getAttribute('maxlength')) || 0;
+      var lastValidHTML = editor.innerHTML;
+
+      function syncHidden() {
+        if (hiddenInput) hiddenInput.value = editor.innerHTML;
+      }
+
+      function updateHasValue() {
+        var text = editor.textContent.trim();
+        if (text) {
+          editor.classList.add('has-value');
+        } else {
+          editor.classList.remove('has-value');
+        }
+      }
+
+      var charCounter = null;
+
+      function createCharCounter() {
+        var container = wrapper.querySelector('.floating-input-wrapper');
+        if (!container) return;
+        charCounter = document.createElement('small');
+        charCounter.className = 'frt-charcounter';
+        container.appendChild(charCounter);
+      }
+      createCharCounter();
+
+      function updateCharCounter() {
+        if (!charCounter || !maxLen) return;
+        var cnt = editor.textContent.length;
+        charCounter.textContent = cnt + '/' + maxLen;
+        charCounter.style.color = cnt > maxLen ? '#dc3545' : (cnt > maxLen * 0.9 ? '#e67700' : '');
+      }
+
+      function restoreLastValid() {
+        var sel = window.getSelection();
+        var charIndex = 0;
+        if (sel.rangeCount) {
+          var range = sel.getRangeAt(0);
+          var preCaretRange = range.cloneRange();
+          preCaretRange.selectNodeContents(editor);
+          preCaretRange.setEnd(range.endContainer, range.endOffset);
+          charIndex = preCaretRange.toString().length;
+        }
+        editor.innerHTML = lastValidHTML;
+        try {
+          var newRange = document.createRange();
+          var newSel = window.getSelection();
+          var textNode = editor.firstChild || editor;
+          var offset = Math.min(charIndex, lastValidHTML.length);
+          if (textNode && textNode.nodeType === 3) {
+            newRange.setStart(textNode, offset);
+            newRange.collapse(true);
+          } else {
+            newRange.selectNodeContents(editor);
+            newRange.collapse(false);
+          }
+          newSel.removeAllRanges();
+          newSel.addRange(newRange);
+        } catch(e) {}
+      }
+
+      editor.addEventListener('input', function() {
+        if (maxLen && editor.textContent.length > maxLen) {
+          restoreLastValid();
+        } else {
+          lastValidHTML = editor.innerHTML;
+        }
+        syncHidden();
+        updateCharCounter();
+        updateHasValue();
+      });
+
+      var DANGEROUS_TAGS = { script:1, iframe:1, object:1, embed:1, form:1, input:1, textarea:1, select:1, button:1, link:1, meta:1, style:1, base:1, applet:1, noscript:1, noembed:1, svg:1, math:1, video:1, audio:1, source:1, img:1, a:1, frame:1, frameset:1, portal:1 };
+      var allowPasteTables = '#{allowPasteTables}' === 'true';
+      function sanitizePasteHTML(html) {
+        if (!html) return '';
+        try {
+          var allowed = { b:1, strong:1, u:1, i:1, em:1, p:1, br:1, span:1, div:1, ul:1, ol:1, li:1, h1:1, h2:1, h3:1, h4:1, h5:1, h6:1, font:1, sub:1, sup:1, strike:1, hr:1 };
+          if (allowPasteTables) {
+            allowed.table = 1; allowed.thead = 1; allowed.tbody = 1; allowed.tfoot = 1;
+            allowed.tr = 1; allowed.th = 1; allowed.td = 1;
+          }
+          var doc = new DOMParser().parseFromString(html, 'text/html');
+          if (!doc || !doc.body) return html.replace(/<[^>]*>/g, '');
+          (function cleanNode(node) {
+            if (node.nodeType === 3) return;
+            if (node.nodeType !== 1) { node.remove(); return; }
+            var tag = node.tagName.toLowerCase();
+            if (DANGEROUS_TAGS[tag]) { node.remove(); return; }
+            if (!allowed[tag]) { node.remove(); return; }
+            var attrs = node.attributes;
+            for (var i = attrs.length - 1; i >= 0; i--) {
+              var attrName = attrs[i].name.toLowerCase();
+              if (attrName === 'style') {
+                var safe = '';
+                var props = attrs[i].value.split(';');
+                for (var p = 0; p < props.length; p++) {
+                  var parts = props[p].split(':');
+                  if (parts.length === 2) {
+                    var name = parts[0].trim().toLowerCase();
+                    var val = parts[1].trim();
+                    if (/^(color|background-color|font-weight|font-style|text-decoration|text-align|border|border-collapse|padding|margin|width|height|vertical-align|background)$/.test(name) && !/expression|javascript:|url\(/i.test(val)) {
+                      safe += name + ': ' + val + ';';
+                    }
+                  }
+                }
+                if (safe) attrs[i].value = safe;
+                else node.removeAttribute(attrs[i].name);
+              } else if (attrName.startsWith('on') || /^(id|class|data-|src|href|target|rel|action|method)$/.test(attrName)) {
+                node.removeAttribute(attrs[i].name);
+              }
+            }
+            for (var child = node.firstChild; child; child = child.nextSibling) cleanNode(child);
+          })(doc.body);
+          return doc.body.innerHTML;
+        } catch(e) {
+          return html.replace(/<[^>]*>/g, '');
+        }
+      }
+
+      editor.addEventListener('paste', function(e) {
+        if (!maxLen) return;
+        e.preventDefault();
+        var cd = e.clipboardData || window.clipboardData;
+        var html = cd ? (cd.getData('text/html') || '') : '';
+        var text = cd ? (cd.getData('text/plain') || cd.getData('Text') || '') : '';
+        var remaining = maxLen - editor.textContent.length;
+        if (remaining <= 0) return;
+        if (html) {
+          html = sanitizePasteHTML(html);
+          var tempDiv = document.createElement('div');
+          tempDiv.innerHTML = html;
+          var textLen = tempDiv.textContent.length;
+          if (textLen > remaining) {
+            tempDiv.textContent = tempDiv.textContent.substring(0, remaining);
+            html = tempDiv.innerHTML;
+          }
+          if (html) document.execCommand('insertHTML', false, html);
+        } else if (text) {
+          if (text.length > remaining) text = text.substring(0, remaining);
+          document.execCommand('insertText', false, text);
+        }
+      });
+
+      editor.addEventListener('focus', function() {
+        var ph = wrapper.querySelector('.frt-placeholder');
+        if (ph) ph.style.display = 'none';
+      });
+
+      editor.addEventListener('blur', function() {
+        wrapper.dataset.touched = 'true';
+        updateHasValue();
+        if (!editor.textContent.trim()) {
+          var ph = wrapper.querySelector('.frt-placeholder');
+          if (ph) ph.style.display = '';
+        }
+        validateRich();
+      });
+
+      function validateRich() {
+        var val = editor.textContent.trim();
+        var isReq = editor.dataset.required === 'true';
+        wrapper.classList.remove('valid', 'error');
+        if (errorMsg) errorMsg.classList.remove('show');
+        if (isReq && !val) {
+          if (wrapper.dataset.touched === 'true') {
+            wrapper.classList.add('error');
+            if (errorMsg) {
+              errorMsg.textContent = '#{label} is required';
+              errorMsg.classList.add('show');
+            }
+          }
+          return false;
+        } else if (val) {
+          var maxLen = parseInt(editor.getAttribute('maxlength')) || 0;
+          if (maxLen && val.length > maxLen) {
+            wrapper.classList.add('error');
+            if (errorMsg) {
+              errorMsg.textContent = 'Maximum ' + maxLen + ' characters allowed (' + val.length + '/' + maxLen + ')';
+              errorMsg.classList.add('show');
+            }
+            return false;
+          }
+          wrapper.classList.add('valid');
+          return true;
+        }
+        return true;
+      }
+
+      window['validateInput_' + name] = function() {
+        wrapper.dataset.touched = 'true';
+        return validateRich();
+      };
+      window['setInputError_' + name] = function(message) {
+        wrapper.classList.remove('valid');
+        wrapper.classList.add('error');
+        if (errorMsg) {
+          errorMsg.textContent = message || '#{label} is required';
+          errorMsg.classList.add('show');
+        }
+        return false;
+      };
+      window['clearInputError_' + name] = function() {
+        wrapper.classList.remove('error');
+        if (errorMsg) errorMsg.classList.remove('show');
+        if (editor.textContent.trim()) wrapper.classList.add('valid');
+      };
+
+      var boldBtn = wrapper.querySelector('.frt-bold');
+      var underlineBtn = wrapper.querySelector('.frt-underline');
+      var colorBtn = wrapper.querySelector('.frt-color-btn');
+      var colorPalette = wrapper.querySelector('.frt-color-palette');
+      var tableBtn = wrapper.querySelector('.frt-table-btn');
+      var tablePicker = wrapper.querySelector('.frt-table-picker');
+
+      boldBtn.addEventListener('click', function() {
+        document.execCommand('bold', false, null);
+        boldBtn.classList.toggle('active', document.queryCommandState('bold'));
+        editor.focus();
+      });
+
+      underlineBtn.addEventListener('click', function() {
+        document.execCommand('underline', false, null);
+        underlineBtn.classList.toggle('active', document.queryCommandState('underline'));
+        editor.focus();
+      });
+
+      colorBtn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        colorPalette.classList.toggle('open');
+        tablePicker.classList.remove('open');
+      });
+
+      wrapper.querySelectorAll('.frt-color-swatch').forEach(function(swatch) {
+        swatch.addEventListener('click', function(e) {
+          e.stopPropagation();
+          var color = swatch.dataset.color;
+          document.execCommand('foreColor', false, color);
+          colorBtn.querySelector('.frt-color-indicator').style.background = color;
+          wrapper.querySelectorAll('.frt-color-swatch').forEach(function(s) { s.classList.remove('active'); });
+          swatch.classList.add('active');
+          colorPalette.classList.remove('open');
+          editor.focus();
+        });
+      });
+
+      tableBtn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        tablePicker.classList.toggle('open');
+        colorPalette.classList.remove('open');
+      });
+
+      var grid = wrapper.querySelector('.frt-table-grid');
+      var maxR = 6, maxC = 6;
+      for (var r = 0; r < maxR; r++) {
+        for (var c = 0; c < maxC; c++) {
+          var cell = document.createElement('button');
+          cell.type = 'button';
+          cell.className = 'frt-cell';
+          cell.dataset.row = r + 1;
+          cell.dataset.col = c + 1;
+          grid.appendChild(cell);
+        }
+      }
+
+      function highlightGrid(hR, hC) {
+        grid.querySelectorAll('.frt-cell').forEach(function(cell) {
+          var cr = parseInt(cell.dataset.row);
+          var cc = parseInt(cell.dataset.col);
+          cell.classList.toggle('highlight', cr <= hR && cc <= hC);
+        });
+      }
+
+      grid.addEventListener('mouseover', function(e) {
+        var cell = e.target.closest('.frt-cell');
+        if (cell) highlightGrid(parseInt(cell.dataset.row), parseInt(cell.dataset.col));
+      });
+
+      grid.addEventListener('mouseleave', function() {
+        grid.querySelectorAll('.frt-cell').forEach(function(c) { c.classList.remove('highlight'); });
+      });
+
+      grid.addEventListener('click', function(e) {
+        var cell = e.target.closest('.frt-cell');
+        if (!cell) return;
+        var rows = parseInt(cell.dataset.row);
+        var cols = parseInt(cell.dataset.col);
+        var html = '<table>';
+        html += '<tr>';
+        for (var c = 0; c < cols; c++) html += '<th>Header</th>';
+        html += '</tr>';
+        for (var r = 1; r < rows; r++) {
+          html += '<tr>';
+          for (var c2 = 0; c2 < cols; c2++) html += '<td>&nbsp;</td>';
+          html += '</tr>';
+        }
+        html += '</table><p></p>';
+        if (maxLen) {
+          var testContent = editor.textContent + 'Text';
+          if (testContent.length > maxLen) return;
+        }
+        editor.focus();
+        document.execCommand('insertHTML', false, html);
+        tablePicker.classList.remove('open');
+        syncHidden();
+        updateCharCounter();
+        updateHasValue();
+      });
+
+      document.addEventListener('click', function(e) {
+        if (!colorPalette.contains(e.target) && e.target !== colorBtn) {
+          colorPalette.classList.remove('open');
+        }
+        if (!tablePicker.contains(e.target) && e.target !== tableBtn) {
+          tablePicker.classList.remove('open');
+        }
+      });
+
+      editor.addEventListener('keydown', function(e) {
+        if (e.ctrlKey || e.metaKey) {
+          if (e.key === 'b' || e.key === 'B') {
+            e.preventDefault();
+            document.execCommand('bold', false, null);
+            boldBtn.classList.toggle('active', document.queryCommandState('bold'));
+          } else if (e.key === 'u' || e.key === 'U') {
+            e.preventDefault();
+            document.execCommand('underline', false, null);
+            underlineBtn.classList.toggle('active', document.queryCommandState('underline'));
+          }
+        }
+      });
+
+      editor.addEventListener('keyup', function() {
+        boldBtn.classList.toggle('active', document.queryCommandState('bold'));
+        underlineBtn.classList.toggle('active', document.queryCommandState('underline'));
+      });
+
+      if (editor.textContent.trim()) {
+        editor.classList.add('has-value');
+        validateRich();
+      }
+
+      updateCharCounter();
+      syncHidden();
+    })();

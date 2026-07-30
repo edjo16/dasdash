@@ -1,0 +1,34 @@
+extends ../layout
+
+block layout-content
+  link(rel="stylesheet" href="/css/personal-time-off.css")
+  div#layoutSidenav_content
+    main
+      div.container-fluid.px-4
+        a(href="#" onclick="goBack()" style="color:#212529")
+          i.fas.fa-chevron-left
+          span(style="padding-left: 0.5rem;") Back
+        h3.mt-4 Personal Time Off
+
+        div.pto-form-section(style="max-width:700px;")
+          h4 Request Details
+          table.pto-review-table
+            tr
+              th Request Type
+              - var typeLabels = { vacation: 'Vacation', medical_cert: 'Medical Certificate', no_medical_cert: 'Absence without Medical Certificate', partial_permit: 'Partial Permit', non_remunerated: 'Non-remunerated Time', license: 'License' }
+              td #{typeLabels[form.request_type] || form.request_type}
+            if form.request_type === 'partial_permit' && form.start_permit_hour
+              tr
+                th Hours
+                td #{form.start_permit_hour} - #{form.end_permit_hour}
+            tr
+              th Start Date
+              - var sd = form.start_date ? new Date(form.start_date) : null
+              td #{sd ? sd.toLocaleDateString('en-GB') : '-'}
+            tr
+              th End Date
+              - var ed = form.end_date ? new Date(form.end_date) : null
+              td #{ed ? ed.toLocaleDateString('en-GB') : '-'}
+            tr
+              th Notes
+              td #{form.notes || '-'}

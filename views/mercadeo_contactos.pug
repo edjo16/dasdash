@@ -1,0 +1,84 @@
+extends layout
+block layout-content
+  -var estilo2 = "width:2%;"
+  -var estilo8 = "width:8%;"
+  -var estilo10 = "width:10%;"
+  -var estilo12 = "width:12%;"
+  -var estilo12_5 = "width:12.5%;"
+  -var estilo15 = "width:15%;"
+  -var estilo20 = "width:20%;"
+  -var estilo22 = "width:22%;"
+  div#layoutSidenav_content
+    main
+      div.container-fluid.px-4
+        a(href="#" onclick="url_usuario('home')" style="color:#212529")
+            i.fas.fa-chevron-left
+            span(href="#" style="padding-left: 0.5rem;") Back
+        h1.mt-4 BADACO
+        div(style="display:flex;width:100%").breadcrumb.mb-4          
+          div(style="width:80%")
+            li.breadcrumb-item.active Collection of contacts from all company databases
+          div(style="width:20%")
+            div.icon(style="float: right;" onclick="ShowOptionsMenu()")
+              i.fas.fa-search(title="Search")
+            div.icon(style="float: right;" onclick="" )
+              span(href="#" onClick="mercadeo_exp_contact('MainTable')")
+                i.fas.fa-download(title="Export to Excel")
+            div.icon(style="float: right;" onclick="" )
+              span#delete_rows.Not(href="#")
+                i.fas.fa-trash-alt(title="Delete Rows")
+            //- div.icon(style="float: right;" onclick="" )
+            //-   span#restore_rows(href="#")
+            //-     i.fas.fa-trash-restore-alt(title="Restore Deleted")
+        div.optionsNone#OptionsMenu
+            .row(style="100%")
+                div(style=estilo12)
+                  input#SearchName(onkeyup="SearchTableByContacts();" placeholder="Name").form-control
+                div(style=estilo10)
+                  input#SearchEmail(onkeyup="SearchTableByContacts();" placeholder="Email").form-control
+                div(style=estilo20)
+                  input#SearchCompany(onkeyup="SearchTableByContacts();" placeholder="Company").form-control
+                div(style=estilo10)
+                  input#SearchType(onkeyup="SearchTableByContacts();" placeholder="Type").form-control
+                div(style=estilo8)
+                  input#SearchBusinessLine(onkeyup="SearchTableByContacts();" placeholder="Business Line").form-control
+                div(style=estilo10)
+                  input#SearchCountry(onkeyup="SearchTableByContacts();" placeholder="Country").form-control
+                div(style=estilo10)
+                  input#SearchRegions(onkeyup="SearchTableByContacts();" placeholder="Regions").form-control
+                div(style=estilo10)
+                  input#SearchPosition(onkeyup="SearchTableByContacts();" placeholder="Position").form-control
+                div(style=estilo8)
+                  input#SearchLocation(onkeyup="SearchTableByContacts();" placeholder="Location").form-control
+        div.card.mb-4(style="border:none;")
+          div.table-container
+            table.fixed_headers#MainTable
+              thead
+                tr#header
+                  th(style=estilo2)
+                  th(style=estilo10) Name
+                  th(style=estilo10) Email
+                  th(style=estilo20) Company
+                  th(style=estilo10) Relationship
+                  th(style=estilo8) Business Line
+                  th(style=estilo10) Country
+                  th(style=estilo10) Regions
+                  th(style=estilo10) Position
+                  th(style=estilo8) Location
+              tbody 
+                  each valtr, i in contactos
+                    tr
+                      each valtd, index in valtr       
+                        if(index==0)         
+                          td(id="tdcheckbox"+index)
+                            if(ubicacion[i]=="MER")
+                              input(type="checkbox" id=id[i])
+                          td(id="td"+index)
+                            if(ubicacion[i]=="MER")
+                              a(href="#" onclick="mercadeo_contacto_update("+id[i]+");" style="color: #212529;")= valtd
+                            else 
+                              p(style="color: #212529;")= valtd
+                        else
+                          td(id="td"+index)= valtd  
+  script.
+    localStorage.setItem('backpage', 'index');

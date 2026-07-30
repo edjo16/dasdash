@@ -1,0 +1,1268 @@
+extends ../layout
+
+include ../mixins/floating-users
+include ../mixins/floating-select
+include ../mixins/floating-textarea
+include ../mixins/floating-file
+include ../ui/button-submit
+include ../mixins/categorization-items-modal
+include ../mixins/breadcrumb
+include ../mixins/ai-chat-modal
+include ../mixins/add-reference
+block layout-content
+  div#layoutSidenav_content
+    main
+      div.container-fluid.px-4
+        input#username(type="hidden" value=userProfile.UsuarioID)
+        input#compania_val(type="hidden" value=ccompania)
+        input#approval_id_ai(type="hidden" value=detalle.RowID)
+        div.row(style="display:flex; margin-top: 0;")
+            div.col-md-9(style="flex: 1")
+                +app-breadcrumb({
+                  homeHref: '/',
+                  items: [
+                    { label: 'Approvals', href: '/approvals-total' },
+                    { label: `Approval # ${detalle.RowID}`, active: true }]
+                })
+                button#openApprovalAiModal.btn.btn-sm(type='button' title='AI Assistant' style='margin-left:8px;background-color:#ffffff;border:1px solid #dee2e6;color:#495057;display:inline-flex;align-items:center;gap:6px;')
+                  img(src='/icono-ia.png' width='18' height='18' style='object-fit:contain;' onerror="this.style.display='none';this.nextSibling.style.display='inline-block'")
+                  span(style='font-size:0.78rem;') AI Assistant  
+                if devteam === true
+                  button(type="button" class="btn btn-sm approval-ai-btn" data-bs-toggle="modal" data-bs-target="#exampleModal")
+                    i.detail-icon.fas.fa-info
+                  div.modal.fade(tabindex="-1" id="exampleModal" aria-labelledby="exampleModalLabel" aria-hidden="true")
+                    div.modal-dialog
+                      div.modal-content
+                        div.modal-header
+                          h5.modal-title(id="exampleModalLabel") Info Log
+                          button(type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close")
+                        div.modal-body(style="font-size: 1.1rem;")
+                          p Flow: #{infoLog.cflow}
+                          p form_id: #{infoLog.form_id}
+                          p mform: #{infoLog.mform}
+                          p UserID: #{infoLog.UserID}
+                          p department: #{infoLog.cdepartamento}
+                          p id_original: #{infoLog.id_original}
+                          p id_nuevo: #{infoLog.id_nuevo}
+            div.col-md-3(style="flex: 0 0 300px; padding-top: 12px;")
+              span.actualStatus Approval status:  
+              if detalle.cierre_fecha || detalle.estado === 'Rejected' || detalle.estado === 'Cancelled'
+                span.status(style=`background-color:gray; margin-right: 2px;`) Closed
+              else
+                span.status(style=`background-color:#ffc107; margin-right: 2px;`) Open
+              span.status(style=`background-color: ${
+                detalle.estado === 'Verify' || detalle.estado === 'Verified' ? '#00ACA0' :
+                detalle.estado === 'Signature' || detalle.estado === 'Signed' ? '#7FC0F5' :
+                detalle.estado === 'Approve' || detalle.estado === 'Approved' ? '#85C8D5' :
+                detalle.estado === 'Execute' || detalle.estado === 'Executed' ? '#00586f' :
+                detalle.estado === 'canceled' ? 'gray' :
+                detalle.estado === 'expired' || detalle.estado === 'Rejected' ? 'red' :
+                detalle.estado === 'Apply' ? '#3660AC' : 'gray'
+              }`) #{detalle.estado}
+              div.col-md-11(style="display: flex;align-items: flex-end;justify-content: space-between;padding: 5px 10px ") 
+                  if(detalle.accion)
+                    span Action:
+                      if(detalle.ctipo_flujo==2 || detalle.ctipo_flujo==3)
+                        //- Si el flujo es de una orden de pago y ya esta asignado
+                        if(detalle.accion=='asignado')
+                          if(detalle.estado1=='Rejected' || detalle.estado1=='Cancelled')
+                            a.actions(href="#" onclick='ApprovalCreate("'+detalle.RowID+'")')
+                              i.fas.fa-plus
+                          if(detalle.estado1==null)
+                            a.actions(href="#" onclick='ApprovalCreate("'+detalle.RowID+'")')
+                              i.fas.fa-plus
+                        else
+                          if(detalle.estado=='Execute')
+                            - var list=['Cancelled', 'Rejected']
+                            if(!fatherLog || list.includes(fatherLog.estado))
+                              span#asignacionusuarios.actions(href="#").clic
+                                i.fas.fa-users
+                            if(fatherLog && fatherLog.estado=='Executed')
+                              a.actions(href="#" onclick='ActionApproval("'+detalle.accion+'","'+detalle.accion+'")')
+                                i.fas.fa-check
+                            a.actions(href="#" onclick='openRejectConfirm("'+detalle.accion+'")')
+                              i.fas.fa-ban
+                          if(detalle.estado!='Executed')
+                            if(detalle.estado!='Execute')
+                              a.actions(href="#" onclick='ActionApproval("'+detalle.accion+'","'+detalle.accion+'")')
+                                i.fas.fa-check
+                              a.actions(href="#" onclick='openRejectConfirm("'+detalle.accion+'")')
+                                i.fas.fa-ban
+                      else
+                        a.actions(href="#" onclick='ActionApproval("'+detalle.accion+'","'+detalle.accion+'")')
+                          i.fas.fa-check
+                        a.actions(href="#" onclick='openRejectConfirm("'+detalle.accion+'")')
+                          i.fas.fa-ban
+                      //- if(detalle.mform === 4 && !hasCrmRelation && detalle.estado !== 'Cancelled' && detalle.estado !== 'Rejected')
+                      //-   a.actions(href="#" onclick='openCreateCrmModal()' title='Create CRM from Change Request')
+                      //-     i.fas.fa-user-plus
+                  else
+                      if(detalle.estado=='Executed')
+                        if(detalle.proceso=='RRHH Ausencias y Vacaciones' && userMenu.Modules.includes("RRHH"))
+                          a.actions(href="#" onclick="ActionApproval('Execute','Execute')")
+                            i.fas.fa-check
+                          a.actions(href="#" onclick="openRejectConfirm('Rejected')")
+                              i.fas.fa-ban
+                  if (userProfile.permisionToCancel === true && detalle.estado !== 'Cancelled' && detalle.estado !== 'Rejected' && !detalle.cierre_fecha)
+                    if(isOriginal === true)
+                      form#cancelApprovalForm(method="POST" action="/cancel_approval" style="display:none;")
+                        input(type="hidden" name="id" value=detalle.RowID)
+                      button(type="button" class="btn btn-secondary" style="margin-left: 5px; margin-right: 5px;" onclick="cancelApprovalForm(event)")
+                        i.detail-icon.fas.fa-ban(style="fontzise: .1rem;")
+                        span(style="padding-left: 0.2rem;") Cancel
+                    if(isOriginal === false && fatherLog)
+                      if (fatherLog.estado == 'Cancelled'|| fatherLog.estado == 'Rejected')
+                        form#cancelApprovalForm(method="POST" action="/cancel_approval" style="display:none;")
+                          input(type="hidden" name="id" value=detalle.RowID)
+                        button(type="button" class="btn btn-secondary" style="margin-left: 5px; margin-right: 5px;" onclick="cancelApprovalForm(event)")
+                          i.detail-icon.fas.fa-ban(style="fontzise: .1rem;")
+                          span(style="padding-left: 0.2rem;") Cancel
+                    if(isOriginal === false && (fatherLog === null))
+                        form#cancelApprovalForm(method="POST" action="/cancel_approval" style="display:none;")
+                          input(type="hidden" name="id" value=detalle.RowID)
+                        button(type="button" class="btn btn-secondary" style="margin-left: 5px; margin-right: 5px;" onclick="cancelApprovalForm(event)")
+                          i.detail-icon.fas.fa-ban(style="fontzise: .1rem;")
+                          span(style="padding-left: 0.2rem;") Cancel
+        if (fatherLog && (validateSeeSupport || validateSupportViewApproval))
+            div.containerDetails-top.col-md-12(style="margin-bottom: 10px;")
+              .d-flex.align-items-center
+                h6.m-0
+                  if(isOriginal === true)
+                    | Initial Approval # #{fatherLog.id}
+                  else
+                    | Support Approval # #{fatherLog.id}
+                if(validateSeeSupport)
+                  i.detail.fas.fa-eye(id="seeApproval" onclick="approval_detalle_view("+fatherLog.id+")" style="cursor:pointer; margin-left: 10px;")
+                i.detail.fas.fa-chevron-down(id="toggleFatherApproval" onclick="toggleFatherApproval()" style="cursor:pointer; margin-left: 10px;")
+              div.row#ShowFather.hidden(style="margin-top: 1rem;")
+                p.titleDetail Description:
+                div.rich-detail-content!= fatherLog.detalle_proceso
+                if(fatherLog.solicitante!="N/A")
+                  div.col-md-3
+                    h6#requestor.title_persons Requestor
+                    img(src=`pic/${fatherIntegrants.solicitante}.png` class="icon" onerror="this.onerror=null;this.src='pic/default.png';")
+                    span=fatherLog.solicitante
+                    div.col-md-12
+                      span.titleDetail Date: 
+                      span=fatherLog.solicitante_fecha
+
+                if(fatherLog.verificador!="N/A")
+                  div.col-md-1(style="text-align: center")
+                    i.detail.fas.fa-arrow-right
+                  div.col-md-3
+                    h6#verifier.title_persons Verifier
+                      if(fatherLog.estado == "Verify")
+                        i#blinking.fas.fa-hourglass(style="color:#ffffff; margin-left: 5px;")
+                    img(src=`pic/${fatherIntegrants.verificador}.png` class="icon" onerror="this.onerror=null;this.src='pic/default.png';")
+                    span=fatherLog.verificador
+                    div.col-md-12
+                      span.titleDetail Dates: 
+                      span(style="margin-rigth: 10px")=fatherLog.v_fecha
+                      p.titleDetail Verifier Comments:
+                      if(!fatherLog.verificador_comentarios)
+                        i None
+                      else
+                        p=fatherLog.verificador_comentarios
+                if(fatherLog.aprobador!="N/A")
+                  div.col-md-1(style="text-align: center")
+                    i.detail.fas.fa-arrow-right
+                  div.col-md-3
+                    h6#approver.title_persons Approver
+                      if(fatherLog.estado == "Approve")
+                        i#blinking.fas.fa-hourglass(style="color:#ffffff; margin-left: 5px;")
+                    img(src=`pic/${fatherIntegrants.aprobador}.png`  class="icon" onerror="this.onerror=null;this.src='pic/default.png';")
+                    span=fatherLog.aprobador
+                    div.col-md-12
+                      span.titleDetail Date: 
+                      span=fatherLog.a_fecha
+                      p.titleDetail Approver Comments:
+                      if(!fatherLog.aprobador_comentarios || fatherLog.aprobador_comentarios == ' ')
+                        i None
+                      else
+                        p=fatherLog.aprobador_comentarios
+                if(fatherLog.firmante!="N/A")
+                  div.col-md-1(style="text-align: center")
+                    i.detail.fas.fa-arrow-right
+                  div.col-md-3
+                    h6#signer.title_persons Signer
+                      if(fatherLog.estado == "Signature")
+                        i#blinking.fas.fa-hourglass(style="color:#ffffff; margin-left: 5px;")
+                    img(src=`pic/${fatherIntegrants.firmante}.png` class="icon" onerror="this.onerror=null;this.src='pic/default.png';")
+                    span=fatherLog.firmante
+                    div.col-md-12
+                      span.titleDetail Date: 
+                      span=fatherLog.f_fecha
+                      p.titleDetail Signer Comments:
+                      if(!fatherLog.firmante_comentarios || fatherLog.aprobador_comentarios == ' ')
+                        i None
+                      else
+                        p=fatherLog.firmante_comentarios
+                if(fatherLog.operador!="N/A")
+                  div.col-md-1(style="text-align: center")
+                    i.detail.fas.fa-arrow-right
+                  div.col-md-3
+                    h6#operator.title_persons Operator:
+                      if(fatherLog.estado == "Apply")
+                        i#blinking.fas.fa-hourglass(style="color:#ffffff; margin-left: 5px;")
+                    img(src=`pic/${fatherIntegrants.operador}.png` class="icon" onerror="this.onerror=null;this.src='pic/default.png';")
+                    span=fatherLog.operador
+                    div.col-md-12
+                      span.titleDetail Date:
+                      span=fatherLog.o_fecha
+                      p.titleDetail Operator Comments:
+                      if(!fatherLog.operador_comentarios || fatherLog.aprobador_comentarios == ' ')
+                        i None
+                      else
+                        p=fatherLog.operador_comentarios
+                    hr
+                if(fatherLog.ejecutor!="N/A")
+                  div.col-md-1(style="text-align: center")
+                    i.detail.fas.fa-arrow-right
+                  div.col-md-3
+                    h6#executor.title_persons Executioner
+                      if(fatherLog.estado == "Execute")
+                        i#blinking.fas.fa-hourglass(style="color:#ffffff; margin-left: 5px;")
+                    img(src=`pic/${fatherIntegrants.ejecutor}.png` alt="PDF Icon" class="icon" onerror="this.onerror=null;this.src='pic/default.png';")
+                    span=fatherLog.ejecutor
+                    div.col-md-12
+                      span.titleDetail Date: 
+                      span=fatherLog.e_fecha
+                      p.titleDetail Executioner Comments:
+                      if(!fatherLog.ejecutor_comentarios || fatherLog.ejecutor_comentarios == ' ')
+                        i None
+                      else
+                        p=fatherLog.ejecutor_comentarios
+                if(fatherLog.asignado != 'N/A')
+                    div.col-md-1(style="text-align: center")
+                      i.detail.fas.fa-arrow-right
+                    div.col-md-3
+                      h6#asignado.title_persons Asignated to
+                      img(src=`pic/${fatherIntegrants.asignado}.png` alt="PDF Icon" class="icon" onerror="this.onerror=null;this.src='pic/default.png';")
+                      span=fatherLog.asignado
+                      div.col-md-12
+                        span.titleDetail Date:
+                        span=fatherLog.asignado_fecha
+              //- Approval Action Form
+        div#ApprovalAction.ApprovalActionNone
+          form#FormApprovalsDetalle(method="post" action="" enctype="multipart/form-data")
+            .modal-background(style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.21); display: flex; justify-content: center; align-items: center;")
+            div.row(style="max-width: 300px; z-index: 999999; position: fixed; top: 0; right: 0; height: 100%; padding: 15px 20px 10px; background-color: #ffff; border-radius: 0.25rem; overflow-y: auto; display: flex; flex-direction: column;")
+              div.row(style="padding-bottom: 0px;")
+                div.Not
+                  input#RowID(name='RowID' value=detalle.RowID)
+                  input#nombre(name='nombre' value=userProfile.UserName)
+                  input#departamento(name='departamento' value=detalle.departamento)
+                  input#estado(name='estado' value=detalle.estado)
+                  input#estado1(name='estado1' value=detalle.estado1)
+                div.row(style="padding-bottom: 0px;")
+                  div.col-md-12(style="position: relative;")
+                    a.actions(href="#" onclick='ActionApproval("'+detalle.accion+'","'+detalle.accion+'")')
+                      img.crm_icons(style="width: 20px; height: 20px; position: absolute; top: 0; right: 0; " src="/img/xmark-solid.svg" title="Close")
+                    +floating-select('Result', 'AccionFinal', [{label:`${detalle.accion}`, value: `${detalle.accion}`}, {label:'Rejected', value:'Rejected'}], true, 'Select action', '', '', {defaultValue: `${detalle.accion}`})
+                  div.col-md-12
+                    +floating-textarea('Comments', 'comentario', true, '', '', '', {maxlength: '400'}, 4)
+                  if(detalle.estado1 == 'Executed')
+                    +floating-file(detalle.proceso && detalle.proceso.includes('Posted Remittance') ? 'Journal Entry' : 'Proof of Payment', 'PaymentSupportfiles', true, true, false)
+                  div.col-md-12
+                    +submit-button('ApprovalActionbtn', 'Submit')
+                //- User Assignment Form
+        div#ApprovalAsignacion.Not
+          form#FormAsignacion(method="POST" action="" enctype="multipart/form-data")
+            .modal-background(style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.5); display: flex; justify-content: center; align-items: center;")
+            div.row(style=" z-index: 100; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); padding: 15px 25px 10px; background-color: #ffff; border-radius: 0.25rem;")
+                div.Not
+                  div
+                    input#nombre(name='nombre' value=userProfile.UserName)
+                    input#ID(name='ID' value=detalle.RowID)
+                    input#RowID(name='RowID' value=detalle.RowID)
+                    input#cdepatamento(name='cdepatamento' value=userProfile.cdepatamento)
+                    input#departamentoDestino(name='departamentoDestino' value=detalle.departamentoDestino)
+                    input#estado(name='estado' value=detalle.estado)
+                div.row
+                  div.col-md-12(style="position: relative;")
+                    a(href="#" onclick="hideApprovalAction()")
+                      img.crm_icons(style="width: 20px; height: 20px; position: absolute; top: 0; right: 0;" src="/img/xmark-solid.svg" title="Close")
+                  - const uasignarOptions = (userProfile.departamento_user == 3 || userProfile.departamento_user == 1) ? asignados.map(a => ({value: a.Name, label: a.Name})) : [{value: userProfile.UserName, label: userProfile.UserName}]
+                  div.col-md-12
+                    +floating-select('Assign collaborator', 'uasignar', uasignarOptions, true)
+                  div.col-md-12
+                    +floating-textarea('Comments', 'comentario_asignar', true, 'Write a comment here...', '', '', {maxlength: '400'}, 4)
+                div.row
+                  div.col-md-3
+                    +submit-button('Asignarbtn', 'Submit')
+
+        //- Reject confirmation modal
+        div.modal.fade#rejectConfirmModal(tabindex='-1' aria-labelledby='rejectConfirmLabel' aria-hidden='true')
+          div.modal-dialog
+            div.modal-content
+              div.modal-header
+                h5#rejectConfirmLabel.modal-title Confirm Rejection
+                button(type='button' class='btn-close' data-bs-dismiss='modal' aria-label='Close')
+              div.modal-body
+                | You really want to reject this approval?
+                input#rejectSelection(type='hidden')
+              div.modal-footer
+                button(type='button' class='btn btn-secondary' data-bs-dismiss='modal') Cancel
+                button(type='button' class='btn btn-danger' onclick='confirmRejectProceed()') Reject
+
+        //- Cancel approval confirmation modal
+        div.modal.fade#cancelConfirmModal(tabindex='-1' aria-labelledby='cancelConfirmLabel' aria-hidden='true')
+          div.modal-dialog
+            div.modal-content
+              div.modal-header
+                h5#cancelConfirmLabel.modal-title Confirm Cancellation
+                button(type='button' class='btn-close' data-bs-dismiss='modal' aria-label='Close')
+              div.modal-body
+                | You really want to cancel this approval?
+              div.modal-footer
+                button(type='button' class='btn btn-secondary' data-bs-dismiss='modal') Keep
+                button(type='button' class='btn btn-danger' onclick='confirmCancelProceed()') Cancel approval
+
+        //- Beneficiary modal (shared with beneficiary_list)
+        include ./beneficiary_modal
+
+        //- Change Request modal (view + create, shared with IT list)
+        include ../IT/forms_it_change_request_modal
+
+        div
+          div.row.Not
+            div.col-md-4
+                label okForm
+                input#okForm.form-control(type="text" name="okForm" value=okForm)
+            div.col-md-4
+                label Messaje
+                input#mensaje.form-control(type="text" name="mensaje" value=mensaje)
+            div.col-md-4
+                label RowID
+                input#ID(name='ID' value=detalle.RowID)
+          div.row
+              div.containerDetails.col-md-8
+                div.row
+                  div.col-md-4
+                    p.titleDetail Company:
+                    span 🌐 #{detalle.company}
+                  div.col-md-4
+                    p.titleDetail Department:
+                    span 🏛️ #{detalle.departamento}
+                  div.col-md-4
+                    if( detalle.solicitante !== detalle.csuscriptor)  
+                      p.titleDetail Requester:
+                    if(detalle.csuscriptor  && detalle.csuscriptor == detalle.solicitante)  
+                      p.titleDetail Requester / Underwriter:
+                    img(src=`pic/${userIntegrants.solicitante}.png` class="icon" onerror="this.onerror=null;this.src='pic/default.png';" )
+                    span=detalle.solicitante
+                div.row
+                  div.col-md-4
+                    p.titleDetail Process:
+                    span 📝 #{detalle.proceso}
+                  div.col-md-4
+                    p.titleDetail Requested Date:
+                    span 🗓️ #{detalle.solicitante_fecha}
+                  if(detalle.mmonto || detalle.monto) 
+                    div.col-md-4
+                        p.titleDetail Amount:
+                        i.detail.fas.fa-hand-holding-usd
+                        if(detalle.mmonto !==0 && detalle.mmonto !=='' && detalle.mmonto !==null)
+                          span  #{detalle.moneda} | #{Number(detalle.mmonto).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        else
+                          span  #{detalle.monto}
+                  if(detalle.remittance) 
+                    div.col-md-4
+                        p.titleDetail Remittance:
+                        i.detail.fas.fa-hand-holding-usd
+                        span  ##{detalle.remittance} | $#{Number(detalle.mmonto).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  if(detalle.sir_reference) 
+                    if(detalle.csuscriptor !== detalle.solicitante)  
+                        div.col-md-4
+                            p.titleDetail Underwriter:
+                            img(src=`pic/${userIntegrants.csuscriptor}.png` class="icon" onerror="this.onerror=null;this.src='pic/default.png';")
+                            span.details_date=detalle.csuscriptor
+                    div.col-md-12.mt-3
+                      span.titleDetail 🔗 SIR Reference:
+                      if(detalle.sir_reference && detalle.sir_reference.split(",").length > 3)
+                        i#showMoreBtn.detail.fas.fa-chevron-down(onclick="showMoreOptions()") 
+                      - let options = detalle.sir_reference.split(",")
+                      table( style="height: 40px; scroll-behavior: smooth; border-radius: 10px; overflow-y: scroll;")
+                        tbody#optionsTable
+                          each option, index in options
+                              tr(style="padding: 0px; margin: 0px;")
+                                if index <= 2  
+                                  td= option.trim()
+                                else
+                                  td.hidden= option.trim()
+                hr
+                div.row
+                  if detalle.banco && detalle.banco != 'N/A'
+                    div.col-md-4
+                      p.titleDetail Bank:  
+                      span  🏦 #{detalle.banco}
+                  if beneficiario
+                    div.col-md-4
+                      p.titleDetail Beneficiary:  
+                      span(style="cursor: pointer; color: #00586f; text-decoration: underline;" onclick=`openBeneficiaryModal(${beneficiario.beneficiario_id})`)  📄 #{beneficiario.cuenta_banco_beneficiario}
+                  if approvalItems && approvalItems.length > 0
+                    div.col-md-4
+                      p.titleDetail Categorization Items:
+                      span(style="cursor:pointer; color:#00586f; text-decoration:underline;" onclick="openCategorizationItemsModal()")  📋 Open Categorization Items
+                  div.col-md-10
+                    p.titleDetail Description:
+                    div.rich-detail-content!=detalle.detalle_proceso
+                  //- Cost Center Items
+                  if detalle.log_id && detalle.proceso == 'Performance Review Delivery'
+                    div.col-md-12
+                  if (detalle.log_id && detalle.proceso == 'Change Request')
+                    div.col-md-12
+                  if detalle.form_id && detalle.proceso == 'Personal Time Off'
+                    div.col-md-4
+                      p.titleDetail Personal Time Off:
+                      span(style="cursor:pointer; color:#00586f; text-decoration:underline;" onclick=`openPtoDetailModal(${detalle.form_id})`)  📋 Open Personal Time Off
+                  div.col-md-12
+                div.row
+                    p #{dbdevteam}
+                      if(dbdevteam || userProfile.UsuarioID == 'aguevara'|| userProfile.UsuarioID == 'gguelfi')
+                        if(detalle.estado=='Executed' || detalle.estado=='Signed' || detalle.estado=='Execute')
+                          div#CopiarArchivosAuditoria(style="display: inline;")
+                            i.fas.fa-file-import(style="cursor:pointer;" title="Copy files of audit")
+                        if(detalle.estado=='Verify')  
+                          div#DivAgregarArchivos(style="display: inline;")
+                            i.fas.fa-plus(style="cursor:pointer;" title="Add files of audit")
+                div.row         
+                  div#ArchivosApproval
+                    div#AgregarArchivos.Not
+                      div.row
+                        div.col-md-8
+                          select#SelectArchivosPendientes.form-control(name="SelectArchivosPendientes")
+                      div.row
+                        div.col-md-4
+                            button#ArchivosAddtbtn.form-control( style="background-color: #00586f;color: #e9ecef;") Submit      
+                        div.col-md-4
+                            button#ArchivosCancelbtn.form-control( style="background-color: #E42217;color: #e9ecef;") Cancel
+              div.col-lg-3.col-md-2(style="flex: 1;")
+                div.containerDetails-right(style="flex: 1;")
+                  if(detalle.verificador!="N/A")
+                    div.row
+                      div.col-md-12
+                        h6#verifier.title_persons Verifier 
+                          if(detalle.v_fecha!= null && (detalle.estado == "Rejected") && (lastUser && lastUser.userName == detalle.verificador))
+                            <svg xmlns="http://www.w3.org/2000/svg" height="16" width="14.25" viewBox="0 0 448 512"><!--!Font Awesome Free 6.7.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free Copyright 2025 Fonticons, Inc.--><path fill="#ff0000" d="M64 32C28.7 32 0 60.7 0 96L0 416c0 35.3 28.7 64 64 64l320 0c35.3 0 64-28.7 64-64l0-320c0-35.3-28.7-64-64-64L64 32zm79 143c9.4-9.4 24.6-9.4 33.9 0l47 47 47-47c9.4-9.4 24.6-9.4 33.9 0s9.4 24.6 0 33.9l-47 47 47 47c9.4 9.4 9.4 24.6 0 33.9s-24.6 9.4-33.9 0l-47-47-47 47c-9.4 9.4-24.6 9.4-33.9 0s-9.4-24.6 0-33.9l47-47-47-47c-9.4-9.4-9.4-24.6 0-33.9z"/></svg>                          
+                          if(detalle.v_fecha!= null && (lastUser && lastUser.userName !== detalle.verificador))
+                              i.fas.fa-check-square
+                          if(detalle.estado == "Verify")
+                              i#blinking.fas.fa-hourglass(style="color:#ffffff")
+                        img(src=`pic/${userIntegrants.verificador}.png` class="icon" style="margin-left: 10px;" onerror="this.onerror=null;this.src='pic/default.png';")
+                        span(style="margin-left: 10px;")=detalle.verificador
+                    if(detalle.v_fecha != null)
+                      div.col-md-12
+                        span.titleDetail(style="margin-left: 10px;") Date:
+                        span=detalle.v_fecha
+                      div.col-md-12
+                        p.titleDetail(style="margin-left: 10px;") Verifier Comments: 
+                        if(!detalle.verificador_comentarios)
+                          i  None
+                        else
+                          p(style="margin-left: 10px;")=detalle.verificador_comentarios
+                    else
+                      div.col-md-12
+                        if(detalle.estado == 'Rejected')
+                          span
+                        else
+                            span.titleDetail(style="margin-left: 10px;")  Status: 
+                            span Awaiting verification
+                  if(detalle.aprobador!="N/A")
+                    div.row
+                      div.col-md-12
+                        h6#approver.title_persons Approver 
+                          if(detalle.a_fecha!= null && (detalle.estado == "Rejected") && (lastUser && lastUser.userName === detalle.aprobador))
+                            <svg xmlns="http://www.w3.org/2000/svg" height="16" width="14.25" viewBox="0 0 448 512"><!--!Font Awesome Free 6.7.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free Copyright 2025 Fonticons, Inc.--><path fill="#ff0000" d="M64 32C28.7 32 0 60.7 0 96L0 416c0 35.3 28.7 64 64 64l320 0c35.3 0 64-28.7 64-64l0-320c0-35.3-28.7-64-64-64L64 32zm79 143c9.4-9.4 24.6-9.4 33.9 0l47 47 47-47c9.4-9.4 24.6-9.4 33.9 0s9.4 24.6 0 33.9l-47 47 47 47c9.4 9.4 9.4 24.6 0 33.9s-24.6 9.4-33.9 0l-47-47-47 47c-9.4 9.4-24.6 9.4-33.9 0s-9.4-24.6 0-33.9l47-47-47-47c-9.4-9.4-9.4-24.6 0-33.9z"/></svg>                          
+                          if(detalle.a_fecha!= null && (detalle.estado != "Rejected" || !(lastUser && lastUser.userName === detalle.aprobador)))
+                            i.fas.fa-check-square
+                          if(detalle.estado == "Approve")
+                            i#blinking.fas.fa-hourglass(style="color:#ffffff")
+                        img(src=`pic/${userIntegrants.aprobador}.png` class="icon" style="margin-left: 10px;" onerror="this.onerror=null;this.src='pic/default.png';")
+                        span=detalle.aprobador
+                    if(detalle.a_fecha != null)
+                      div.col-md-12
+                        span.titleDetail(style="margin-left: 10px;") Date:
+                        span=detalle.a_fecha
+                      div.col-md-12
+                        p.titleDetail(style="margin-left: 10px;")  Approver Comments: 
+                        if(!detalle.aprobador_comentarios)
+                          i  None
+                        else
+                          p(style="margin-left: 10px;")=detalle.aprobador_comentarios
+                    else
+                      div.col-md-12
+                        if(detalle.estado == 'Rejected')
+                          span
+                        else
+                            span.titleDetail(style="margin-left: 10px;")  Status: 
+                            span Awaiting approval
+                  if(detalle.firmante!="N/A" )
+                      div.row
+                        div.col-md-12
+                          h6#signer.title_persons Signer
+                            if(detalle.f_fecha!= null && (detalle.estado == "Rejected") && (lastUser && lastUser.userName === detalle.firmante))
+                              <svg xmlns="http://www.w3.org/2000/svg" height="16" width="14.25" viewBox="0 0 448 512"><!--!Font Awesome Free 6.7.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free Copyright 2025 Fonticons, Inc.--><path fill="#ff0000" d="M64 32C28.7 32 0 60.7 0 96L0 416c0 35.3 28.7 64 64 64l320 0c35.3 0 64-28.7 64-64l0-320c0-35.3-28.7-64-64-64L64 32zm79 143c9.4-9.4 24.6-9.4 33.9 0l47 47 47-47c9.4-9.4 24.6-9.4 33.9 0s9.4 24.6 0 33.9l-47 47 47 47c9.4 9.4 9.4 24.6 0 33.9s-24.6 9.4-33.9 0l-47-47-47 47c-9.4 9.4-24.6 9.4-33.9 0s-9.4-24.6 0-33.9l47-47-47-47c-9.4-9.4-9.4-24.6 0-33.9z"/></svg>                          
+                            if(detalle.f_fecha!= null && (detalle.estado != "Rejected" || !(lastUser && lastUser.userName === detalle.firmante)))
+                                i.fas.fa-check-square(style="margin-left: 10px;")
+                            if(detalle.estado == "Signature")
+                                i#blinking.fas.fa-hourglass(style="color:#ffffff")
+                          img(src=`pic/${userIntegrants.firmante}.png` class="icon" style="margin-left: 10px;" onerror="this.onerror=null;this.src='pic/default.png';")
+                          span=detalle.firmante
+                      if(detalle.f_fecha != null)
+                        div.col-md-12
+                          span.titleDetail(style="margin-left: 10px;")  Date:
+                          span=detalle.f_fecha
+                        div.col-md-12
+                          p.titleDetail(style="margin-left: 10px;") Signer Comments:
+                          if(!detalle.firmante_comentarios)
+                            i(style="margin-left: 10px;") None
+                          else
+                            p(style="margin-left: 10px;")=detalle.firmante_comentarios
+                      else
+                        div.col-md-12
+                          if(detalle.estado == 'Rejected')
+                            span
+                          else
+                            span.titleDetail(style="margin-left: 10px;")  Status: 
+                            span Awaiting signature
+                  if(detalle.operador!="N/A")
+                      div.row
+                        div.col-md-12 
+                            h6#operator.title_persons Operator 
+                              if(detalle.o_fecha!= null && (detalle.estado == "Rejected") && (lastUser && lastUser.userName === detalle.operador))
+                                <svg xmlns="http://www.w3.org/2000/svg" height="16" width="14.25" viewBox="0 0 448 512"><!--!Font Awesome Free 6.7.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free Copyright 2025 Fonticons, Inc.--><path fill="#ff0000" d="M64 32C28.7 32 0 60.7 0 96L0 416c0 35.3 28.7 64 64 64l320 0c35.3 0 64-28.7 64-64l0-320c0-35.3-28.7-64-64-64L64 32zm79 143c9.4-9.4 24.6-9.4 33.9 0l47 47 47-47c9.4-9.4 24.6-9.4 33.9 0s9.4 24.6 0 33.9l-47 47 47 47c9.4 9.4 9.4 24.6 0 33.9s-24.6 9.4-33.9 0l-47-47-47 47c-9.4 9.4-24.6 9.4-33.9 0s-9.4-24.6 0-33.9l47-47-47-47c-9.4-9.4-9.4-24.6 0-33.9z"/></svg>                          
+                              if(detalle.o_fecha!= null && (detalle.estado != "Rejected" || !(lastUser && lastUser.userName === detalle.operador)))
+                                i.fas.fa-check-square(style="margin-left: 10px;")
+                              if(detalle.estado == "Apply")
+                                  i#blinking.fas.fa-hourglass(style="color:#ffffff")
+                            img(src=`pic/${userIntegrants.operador}.png` class="icon" style="margin-left: 10px;" onerror="this.onerror=null;this.src='pic/default.png';")
+                            span=detalle.operador
+                            if(detalle.o_fecha != null)
+                              div.col-md-12
+                                span.titleDetail(style="margin-left: 10px;") Date:
+                                span=detalle.o_fecha
+                              div.col-md-12
+                                p.titleDetail(style="margin-left: 10px;") Operator Comments:
+                                if(!detalle.operador_comentarios)
+                                  i(style="margin-left: 10px;") None
+                                else
+                                  p(style="margin-left: 10px;")=detalle.operador_comentarios
+                            else
+                                div.col-md-12
+                                  if(detalle.estado == 'Rejected')
+                                    span
+                                  else
+                                    span.titleDetail(style="margin-left: 10px;") Status:
+                                      span Awaiting operation 
+                  if(detalle.ejecutor!="N/A")
+                    div.row
+                      div.col-md-12
+                        h6#executor.title_persons(padding="5px") Executioner 
+                          if(detalle.e_fecha!= null && (detalle.estado == "Rejected") && (lastUser && lastUser.userName === detalle.ejecutor))
+                            <svg xmlns="http://www.w3.org/2000/svg" height="16" width="14.25" viewBox="0 0 448 512"><!--!Font Awesome Free 6.7.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free Copyright 2025 Fonticons, Inc.--><path fill="#ff0000" d="M64 32C28.7 32 0 60.7 0 96L0 416c0 35.3 28.7 64 64 64l320 0c35.3 0 64-28.7 64-64l0-320c0-35.3-28.7-64-64-64L64 32zm79 143c9.4-9.4 24.6-9.4 33.9 0l47 47 47-47c9.4-9.4 24.6-9.4 33.9 0s9.4 24.6 0 33.9l-47 47 47 47c9.4 9.4 9.4 24.6 0 33.9s-24.6 9.4-33.9 0l-47-47-47 47c-9.4 9.4-24.6 9.4-33.9 0s-9.4-24.6 0-33.9l47-47-47-47c-9.4-9.4-9.4-24.6 0-33.9z"/></svg>                          
+                          if(detalle.e_fecha!= null && (detalle.estado != "Rejected" || !(lastUser && lastUser.userName === detalle.ejecutor)))
+                              i.fas.fa-check-square
+                          if(detalle.estado == "Execute")
+                              i#blinking.fas.fa-hourglass(style="color:#ffffff")
+                        img(src=`pic/${userIntegrants.ejecutor}.png` alt="PDF Icon" class="icon" style="margin-left: 10px;" onerror="this.onerror=null;this.src='pic/default.png';")
+                        span=detalle.ejecutor
+                    if(detalle.e_fecha)
+                        div.col-md-12
+                          span.titleDetail(style="margin-left: 10px;") Date:
+                          span=detalle.e_fecha
+                        div.col-md-12
+                          p.titleDetail(style="margin-left: 10px;") Executioner Comments:
+                            if(!detalle.ejecutor_comentarios)
+                                i(style="margin-left: 10px;") None
+                            else
+                                p(style="margin-left: 10px;")=detalle.ejecutor_comentarios
+                    else
+                        div#executor-status-block.col-md-12
+                          if(detalle.estado == 'Rejected')
+                            span
+                          else
+                            span.titleDetail(style="margin-left: 10px;") Status: 
+                            span#executor-status-text Awaiting execution
+                          p#executor-asignado-line(style="margin-left: 10px; display: #{detalle.asignado && detalle.asignado != 'N/A' ? 'block' : 'none'};")
+                            | #{detalle.asignado && detalle.asignado != 'N/A' ? 'Assigned to ' + detalle.asignado + ' on ' + detalle.asignado_fecha + '.' : ''}
+                          p#executor-asignador-comentarios-line(style="margin-left: 10px; display: #{detalle.asignador_comentarios ? 'block' : 'none'};")
+                            | #{detalle.asignador_comentarios || ''}
+                  //- Sección de CRMs vinculados
+                hr
+                div.containerDetails-right(style="flex: 1;")
+                  div.row
+                    if (detalle.log_id && (detalle.proceso == 'Market Visit' || detalle.proceso == 'Event Conference'))
+                      div.col-md-12
+                        div.section-card-approval(style="padding:1rem; border-radius:8px;")
+                          div.section-header-approval(style="border-bottom:2px solid #00586f; padding-bottom:0.5rem; margin-bottom:1rem;")
+                            h5(style="margin:0; font-size:.8rem; font-weight:600; color:#212529;")
+                              i.fas.fa-calendar-alt(style="margin-right:8px; color:#00586f;")
+                              | Associated Events
+                          div(style="display:flex; flex-wrap:wrap; gap:0.5rem;")
+                            a(href=`/get_forms_marketing_events/${detalle.log_id}` style="display:inline-flex; align-items:center; gap:6px; background:#e8f4f7; color:#00586f; border:1px solid #00586f; border-radius:5px; padding:5px 12px; text-decoration:none; font-size:0.85rem; font-weight:500;")
+                              i.fas.fa-external-link-alt
+                              | Open Events Form
+                    if (detalle.log_id && detalle.proceso == 'Performance Review Delivery')
+                      div.col-md-12
+                        div.section-card-approval(style="padding:1rem; border-radius:8px;")
+                          div.section-header-approval(style="border-bottom:2px solid #00586f; padding-bottom:0.5rem; margin-bottom:1rem;")
+                            h5(style="margin:0; font-size:.8rem; font-weight:600; color:#212529;")
+                              i.fas.fa-user-check(style="margin-right:8px; color:#00586f;")
+                              | Associated Performance Delivery
+                          div(style="display:flex; flex-wrap:wrap; gap:0.5rem;")
+                            a(href=`/forms_hr_performance_review/${detalle.log_id}?read=true` style="display:inline-flex; align-items:center; gap:6px; background:#e8f4f7; color:#00586f; border:1px solid #00586f; border-radius:5px; padding:5px 12px; text-decoration:none; font-size:0.85rem; font-weight:500;")
+                              i.fas.fa-eye
+                              | View
+                            if detalle.estado !== 'Executed'
+                              a(href=`/forms_hr_performance_review/${detalle.log_id}` style="display:inline-flex; align-items:center; gap:6px; background:#e8f4f7; color:#00586f; border:1px solid #00586f; border-radius:5px; padding:5px 12px; text-decoration:none; font-size:0.85rem; font-weight:500;")
+                                i.fas.fa-pen-square
+                                | Edit
+                    if (detalle.log_id && detalle.proceso == 'Change Request')
+                      div.col-md-12
+                        div.section-card-approval(style="padding:.5rem; border-radius:8px;")
+                          div.section-header-approval(style="border-bottom:2px solid #00586f; padding-bottom:0.5rem; margin-bottom:1rem;")
+                            h5(style="margin:0; font-size:.8rem; font-weight:600; color:#212529;")
+                              i.fas.fa-exchange-alt(style="margin-right:8px; color:#00586f;")
+                              | Associated Change Request
+                          div(style="display:flex; flex-wrap:wrap; gap:0.5rem;")
+                            button(type="button" onclick=`openChangeRequestViewModal(${detalle.log_id})` style="display:inline-flex; align-items:center; gap:6px;color:#00586f; border:1px solid #00586f; border-radius:5px; padding:5px 12px; font-size:0.85rem; font-weight:500; cursor:pointer;")
+                              i.fas.fa-eye
+                              | View Change Request
+                    div.col-md-12
+                      div.section-card-approval(style="display:none; padding:.5rem; border-radius:8px;")
+                        div.section-header-approval(style="border-bottom:2px solid #00586f; padding-bottom:0.5rem; margin-bottom:1rem;")
+                          h5(style="margin:0; font-size:.8rem; font-weight:600; color:#212529;")
+                            i.fas.fa-file-alt(style="margin-right:8px; color:#00586f;")
+                            | Associated Approvals
+                        div#approval_relations.approval-relations-container(style="display:flex; flex-wrap:wrap; gap:0.5rem; min-height:50px;")
+                          span(style="color:#6c757d; font-size:0.9rem;") Loading...
+                    div.col-md-12
+                      div.section-card-approval(style="display:none; padding:.5rem; border-radius:8px;")
+                        div.section-header-approval(style="border-bottom:2px solid #00586f; padding-bottom:0.5rem; margin-bottom:1rem;")
+                          h5(style="margin:0; font-size:.8rem; font-weight:600; color:#212529;")
+                            i.fas.fa-link(style="margin-right:8px; color:#00586f;")
+                            | Associated CRMs
+                        div#crm_relations.crm-relations-container(style="display:flex; flex-wrap:wrap; gap:0.5rem; min-height:50px;")
+                          span(style="color:#6c757d; font-size:0.9rem;") Loading...
+                    div.col-md-12
+                      div#card-casdata.section-card-approval(style="display:none; padding:.5rem; border-radius:8px;")
+                        div.section-header-approval(style="border-bottom:2px solid #00586f; padding-bottom:0.5rem; margin-bottom:1rem;")
+                          h5(style="margin:0; font-size:.8rem; font-weight:600; color:#212529;")
+                            i.fas.fa-link(style="margin-right:8px; color:#00586f;")
+                            | CAS References
+                        div#casdata.cas-data-container(style="display:flex; flex-wrap:wrap; gap:0.5rem; min-height:50px;")
+                    div.col-md-12.mt-2
+                      +add-reference({
+                          selectorId: 'reference_type_selector_approval',
+                          tooltip: 'You can add approval or other CRM references to this case',
+                          showSIR: true,
+                          showCAS: true
+                        })
+                        
+    style.
+      .approval-ai-btn {
+        margin-left: 8px;
+        background-color: #ffffff;
+        border: 1px solid #dee2e6;
+        color: #495057;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .approval-ai-btn:hover {
+        border-color: #9dbbc5;
+        background-color: #f7fbfc;
+      }
+      .fixed_headers, td, tr{
+        margin: 0px;
+        padding: 0px 10px;
+      }
+      .containerDetails{
+        border : 2px solid #E9ECEF;
+        border-radius: 10px;
+        padding: 5px 10px;
+        margin-right: 10px
+      }
+      .containerDetails-right, .containerDetails-top{
+        border : 2px solid #E9ECEF;
+        border-radius: 10px;
+        padding: 5px 2px;
+      }
+      .containerDetails-top{
+        padding: 5px 10px;
+      }
+      hr{
+        color:#E9ECEF;
+        border:1px solid #E9ECEF;
+        opacity:0;
+      }
+      .titleDetail{
+        font-weight: "700";
+        padding: 2px;
+      }
+      .detail{
+        color: #00586f;
+      }
+      .icon{
+        border-radius: 50%;
+        margin-right: 0.75rem;
+      }
+      .perfomanceReview svg, .details_date{
+        margin-left: 5px;
+      }
+      .perfomanceReview: {
+        color: #00586f;
+        box-shadow: 2px 2px 2px #85C8D5;
+      }
+
+      .perfomanceReview img {
+        color : #00586f;
+        background-color: #ffff;
+        font-size:"1.5rem";
+        margin-bottom : 5px;
+      }
+
+      .secondIcon {
+          margin-left: 3px;
+          width: 20px;
+          height: 20px;
+      }
+
+      
+      .title_persons, .status{
+        background-color: gray;
+        color: white;
+        padding: 4px;
+        border-radius: 10px 10px 0px 0px;
+        text-align: center;
+      }
+      .status{
+      border-radius: 5px;
+      padding : 4px 10px;
+      }
+      #verifier{
+        background-color: #00ACA0;
+      }
+      #executor{
+        background-color: #00586f;
+      }
+      #approver{
+        background-color: #85C8D5;
+      }
+      #signer{
+        background-color: #7FC0F5;
+      }
+      #operator{
+        background-color: #3660AC;
+      }
+      #asignado{
+        background-color: #D65F00;
+      }
+      #requestor{
+        background-color: #8FAFD6;
+      }
+      .actionMenu{
+        display: flex;
+        align-items: flex-end;
+        justify-content: space-between;
+        padding: 20px 10px 
+      }
+      .actualStatus{
+        margin-left: 10px;
+      }
+   
+      .hidden {
+        display: none;
+      }
+      #showMoreBtn{
+        cursor: pointer;
+      }
+      @keyframes blink {
+        0% { color: #dc3545; }
+        50% { color: #ffffff; }
+        100% { color: #dc3545; }
+      }
+
+      #blinking {
+        animation: blink 1s infinite;
+      }
+      .cost-report-block { border:1.5px solid #d1d5db; border-radius:10px; overflow:hidden; }
+      .cost-report-header { display:flex; justify-content:space-between; align-items:center; padding:10px 18px; border-bottom:1px solid #d1d5db; background:#fff; }
+      .cost-report-num { font-weight:400; font-size:.8rem; text-transform:uppercase; letter-spacing:.06em; }
+      .cost-actions-table { width:100%; border-collapse:collapse; font-size:.82rem; }
+      .cost-actions-table thead th { background:#f5f5f5; border:none; padding:7px 8px; font-size:.7rem; text-transform:uppercase; letter-spacing:.04em; color:#666; white-space:nowrap; font-weight:700; }
+      .cost-actions-table tbody tr { border-bottom:none; transition:background .1s; }
+      .cost-actions-table tbody tr:hover { background:#f8fdff; }
+      .cost-actions-table td { padding:4px 8px; vertical-align:middle; border:none; }
+      .cost-actions-table tfoot .cost-total-row { background:#f5f5f5; }
+      .cost-actions-table tfoot td { padding:7px 8px; border-top:1.5px solid #d1d5db; font-size:.82rem; border-bottom:none; }
+
+      [data-theme="dark"] .approval-ai-btn {
+        background-color: var(--surface-2);
+        border-color: var(--border-default);
+        color: var(--text-primary);
+      }
+      [data-theme="dark"] .approval-ai-btn:hover {
+        background-color: var(--surface-3);
+        border-color: var(--border-strong);
+      }
+      [data-theme="dark"] .containerDetails,
+      [data-theme="dark"] .containerDetails-right,
+      [data-theme="dark"] .containerDetails-top,
+      [data-theme="dark"] .section-card-approval,
+      [data-theme="dark"] .cost-report-block,
+      [data-theme="dark"] .cost-report-header,
+      [data-theme="dark"] .cost-actions-table thead th,
+      [data-theme="dark"] .cost-actions-table tfoot .cost-total-row,
+      [data-theme="dark"] .cost-input,
+      [data-theme="dark"] .cost-select {
+        background: var(--surface-1);
+        color: var(--text-primary);
+        border-color: var(--border-default);
+      }
+      [data-theme="dark"] .cost-actions-table tbody tr:hover {
+        background: var(--surface-2);
+      }
+      [data-theme="dark"] .titleDetail,
+      [data-theme="dark"] .actualStatus,
+      [data-theme="dark"] .add-section-header-approval h5,
+      [data-theme="dark"] .section-header-approval h5,
+      [data-theme="dark"] .cost-report-num {
+        color: var(--text-primary);
+      }
+      [data-theme="dark"] #ApprovalAction .row,
+      [data-theme="dark"] #ApprovalAsignacion .row {
+        background-color: var(--surface-1) !important;
+        color: var(--text-primary);
+        border-color: var(--border-default);
+      }
+      [data-theme="dark"] .btn-cost-remove:hover {
+        background: #4c2d34;
+      }
+      .rich-detail-content table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 8px 0;
+        font-size: 0.85rem;
+      }
+      .rich-detail-content td,
+      .rich-detail-content th {
+        border: 1px solid #dee2e6;
+        padding: 6px 10px;
+        text-align: left;
+      }
+      .rich-detail-content th {
+        background: #f5f5f5;
+        font-weight: 600;
+      }
+      .rich-detail-content b,
+      .rich-detail-content strong { font-weight: 700; }
+      .rich-detail-content u { text-decoration: underline; }
+      [data-theme="dark"] .rich-detail-content td,
+      [data-theme="dark"] .rich-detail-content th {
+        border-color: var(--border-default);
+      }
+      [data-theme="dark"] .rich-detail-content th {
+        background: var(--surface-2);
+      }
+    script.
+      function hideApprovalAction() {
+        var approvalButton = document.getElementById('ApprovalAsignacion');
+        if (approvalButton) {
+          approvalButton.classList.add('Not');
+        }
+      }
+
+      function toggleFatherApproval() {
+
+        const showFatherDiv = document.getElementById('ShowFather');
+        const icon = document.getElementById('toggleFatherApproval');
+        showFatherDiv.classList.toggle('hidden');
+        icon.classList.toggle('fa-chevron-down');
+        icon.classList.toggle('fa-chevron-up');
+      }
+
+      function showMoreOptions() {
+        const showMoreBtn = document.getElementById('showMoreBtn');
+        if (showMoreBtn) {
+          showMoreBtn.classList.toggle('fa-chevron-down');
+          showMoreBtn.classList.toggle('fa-chevron-up');
+        }
+        const tableBody = document.getElementById('optionsTable');
+        if (!tableBody) return;
+        const hiddenTds = tableBody.querySelectorAll('.hidden');
+        hiddenTds.forEach(td => {
+          td.classList.remove('hidden');
+        });
+        if (hiddenTds.length === 0) {
+          tableBody.querySelectorAll('tr').forEach(tr => {
+            if (tr.rowIndex >= 2) {
+              tr.classList.add('hidden');
+            }
+          });
+        }
+      }
+      
+      function goApprovals() {
+        var url_string = window.location.href;
+        var url = new URL(url_string);
+        var params = new URLSearchParams(url.search);
+        let key = params.get('key');
+        let p = params.get('p');
+        let iddevteam = params.get('iddevteam');
+        
+        let newUrl = `/approvals-total`;
+        newUrl = newUrl.replace(/&$/, '');
+        window.location.href = newUrl;
+     }
+     function cancelApproval() {
+        var form = document.getElementById('cancelApprovalForm');
+        var xhr = new XMLHttpRequest();
+        xhr.open('POST', form.action, true);
+        xhr.onload = function () {
+          if (xhr.status === 200) {
+            location.reload();
+          } else {
+            alert('Error cancelling approval');
+          }
+        };
+        var formData = new FormData(form);
+        xhr.send(formData);
+      }
+      
+      // Entry point bound on Cancel buttons. Shows modal first.
+      function cancelApprovalForm(evt) {
+        if (evt && evt.preventDefault) evt.preventDefault();
+        // Prefer Bootstrap modal if available
+        const modalEl = document.getElementById('cancelConfirmModal');
+        if (modalEl && window.bootstrap && window.bootstrap.Modal) {
+          try {
+            let instance = window.bootstrap.Modal.getInstance(modalEl);
+            if (!instance) instance = new window.bootstrap.Modal(modalEl);
+            instance.show();
+            // Store instance globally so confirm can hide it
+            window._cancelModalInstance = instance;
+            return;
+          } catch (e) { /* fallthrough to native confirm */ }
+        }
+        // Fallback to native confirm
+        if (window.confirm('You really want to cancel this approval?')) {
+          cancelApproval();
+        }
+      }
+      // Cancel confirmation handlers
+      function confirmCancelProceed() {
+        try {
+          const modalEl = document.getElementById('cancelConfirmModal');
+          if (modalEl && window.bootstrap && window.bootstrap.Modal) {
+            const instance = window.bootstrap.Modal.getInstance(modalEl) || new window.bootstrap.Modal(modalEl);
+            instance.hide();
+          }
+        } catch (e) { /* ignore */ }
+        cancelApproval();
+      }
+  include ../mixins/modal-container
+
+  //- Categorization Items Modal
+  +categorization-items-modal(approvalItems, detalle)
+
+  //- Modal para crear CRM desde Change Request
+  if changeRequestData
+    div#crm_from_approval_modal.app-modal
+      div.app-modal-dialog(style="max-width:850px;")
+        div.app-modal-header
+          h5.app-modal-title
+            i.fas.fa-user-plus(style="margin-right:8px;")
+            | Create CRM from Change Request
+          button.app-modal-close(type="button" onclick="closeCreateCrmModal()" aria-label="Close") ×
+        div.app-modal-body
+          div.row.mb-3
+            div.col-md-12
+              label.fw-bold Subject:
+              p.text-muted.mb-1= changeRequestData.title
+            div.col-md-12
+              label.fw-bold Case Type:
+              p.text-muted.mb-1 Change Request - #{changeRequestData.collaborator_department}
+            div.col-md-12
+              label.fw-bold Description:
+              p.text-muted.mb-0(style="max-height:80px;overflow-y:auto;white-space:pre-wrap;")= changeRequestData.report
+          hr
+          div.row
+            div.col-md-12
+              - var crm_users = grupousuarios_active ? grupousuarios_active.map(c => ({ value: c.UserID, label: c.Name, department: c.departamento })) : []
+              +floating-users('Assign To', 'cr_asignados', crm_users, [], false, 'Select user', '', '', {}, true)
+          div.row.mt-3
+            div.col-md-12
+              +floating-select('Importance', 'cr_prioridad', [{value: '0', label: 'Normal'}, {value: '1', label: 'Important'}, {value: '2', label: 'Urgent'}], true, 'Select importance', '', '', {defaultValue: '0'})
+        div.app-modal-footer
+          button.btn.btn-secondary(type="button" onclick="closeCreateCrmModal()") Cancel
+          button#submitCrmFromApproval.btn.btn-primary(type="button" onclick="submitCreateCrmFromApproval()")
+            i.fas.fa-save.me-1
+            | Create CRM
+
+  //- Modal para seleccionar CRMs
+  div#crm_modal.app-modal
+    div.app-modal-dialog(style="max-width:1200px;")
+      div.app-modal-header
+        h5.app-modal-title
+          i.fas.fa-link(style="margin-right:8px;")
+          | Select CRMs
+        button#close_crm_modal.app-modal-close(type="button" aria-label="Close") ×
+      div.app-modal-body
+        div.mb-3
+          div.row
+            div.col-md-12.d-flex.gap-2
+              input#search_crms.form-control(placeholder="Search by ID, subject or owner" type="text")
+              select#crm_status_filter.form-control
+                option(value="") All
+                option(value="Pending") Pending
+        div.table-container-approval
+          table#crms_table.table.table-hover
+            thead
+              tr
+                th(style="width:50px;text-align:center;")
+                  input#select_all_crms(type="checkbox")
+                th ID
+                th Subject
+                th Owner
+                th Status
+            tbody#crms_tbody
+              tr
+                td(colspan="5" style="text-align:center;") Loading...
+        div.d-flex.justify-content-between.align-items-center.mt-3
+          div#crm_count
+          div#crm_pagination_controls.pagination
+      div.app-modal-footer
+        button#cancel_crm_selection.btn.btn-secondary Cancel
+        button#confirm_crm_selection.btn.btn-primary Add Selected
+  
+  //- Modal para seleccionar Approvals relacionados
+  div#approval_approval_modal.app-modal
+    div.app-modal-dialog(style="max-width:1200px;")
+      div.app-modal-header
+        h5.app-modal-title
+          i.fas.fa-file-alt(style="margin-right:8px;")
+          | Select Approvals
+        button#close_approval_approval_modal.app-modal-close(type="button" aria-label="Close") ×
+      div.app-modal-body
+        div.mb-3
+          div.row
+            div.col-md-12.d-flex.gap-2
+              input#search_approvals_related.form-control(placeholder="Search by ID, process or details" type="text")
+              select#approval_status_filter.form-control
+                option(value="All") All
+                option(value="Ongoing") Ongoing
+                option(value="Pending") Pending
+                option(value="Closed") Closed
+        div.table-container-approval
+          table#approvals_related_table.table.table-hover
+            thead
+              tr
+                th(style="width:50px;text-align:center;")
+                  input#select_all_approvals(type="checkbox")
+                th ID
+                th Process
+                th Details
+                th Status
+            tbody#approvals_related_tbody
+              tr
+                td(colspan="5" style="text-align:center;") Loading...
+        div.d-flex.justify-content-between.align-items-center.mt-3
+          div#approval_related_count
+          div#approval_pagination_controls.pagination
+      div.app-modal-footer
+        button#cancel_approval_selection.btn.btn-secondary Cancel
+        button#confirm_approval_selection.btn.btn-primary Add Selected
+
+  +ai-chat-modal('aiSummaryModal', 'closeAiModal', 'aiChatWindow', 'aiLoadingRow', 'aiUserPrompt', 'aiSendBtn', 'Approval AI Assistant', 'Analyze', 'Hello! I can analyze this approval detail, linked CRM references, and attached PDF extracts.')
+
+  style.
+    .crm-badge {
+      border: 1px solid #00586f;
+      border-radius: 5px;
+      padding: 0.5rem 0.75rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.85rem;
+      transition: all 0.2s;
+    }
+    .crm-badge:hover {
+      box-shadow: 0 2px 4px rgba(0, 88, 111, 0.2);
+    }
+    .crm-badge .remove-crm {
+      cursor: pointer;
+      color: #dc3545;
+      font-weight: bold;
+      margin-left: 0.5rem;
+    }
+    .crm-badge .remove-crm:hover {
+      color: #a71d2a;
+    }
+
+    .table-container-approval {
+      height: 400px;
+      min-height: 400px;
+      max-height: 400px;
+      overflow-y: auto;
+      border: 1px solid #dee2e6;
+      border-radius: 5px;
+    }
+    #crms_table {
+      margin: 0;
+    }
+    #crms_table thead {
+      background: #00586f;
+      color: white;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+    #crms_table tbody tr {
+      cursor: pointer;
+    }
+    #crms_table tbody tr:hover {
+      background: #f8f9fa;
+    }
+    #crms_table tbody tr.selected {
+      background: #d1e9ec;
+    }
+    .icon-btn-approval:hover {
+      transform: scale(1.2);
+    }
+    .approval-badge {
+      border: 1px solid var(--border-default);
+      border-radius: 5px;
+      padding: 0.5rem 0.75rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.85rem;
+      transition: all 0.2s;
+    }
+    .approval-badge:hover {
+      box-shadow: 0 2px 4px rgba(0, 88, 111, 0.2);
+      border: 1px solid #00586f;
+    }
+    .approval-badge .remove-approval {
+      cursor: pointer;
+      color: #dc3545;
+      font-weight: bold;
+      margin-left: 0.5rem;
+    }
+    .approval-badge .remove-approval:hover {
+      color: #a71d2a;
+    }
+    .pto-detail-modal-table { width:100%; border-collapse:collapse; font-size:.9rem; }
+    .pto-detail-modal-table th { padding:8px 12px; text-align:left; font-weight:600; width:40%; border-bottom:1px solid #e9ecef; }
+    .pto-detail-modal-table td { padding:8px 12px; border-bottom:1px solid #e9ecef; }
+  
+  script.
+    function openCreateCrmModal() {
+      var modal = document.getElementById('crm_from_approval_modal');
+      if (modal) modal.classList.add('open');
+    }
+    function closeCreateCrmModal() {
+      var modal = document.getElementById('crm_from_approval_modal');
+      if (modal) modal.classList.remove('open');
+    }
+    async function submitCreateCrmFromApproval() {
+      var display = document.querySelector('.floating-users-display[data-name="cr_asignados"]');
+      var hiddenInputs = display ? display.querySelectorAll('input[type="hidden"]') : [];
+      var asignados = Array.from(hiddenInputs).map(function(i) { return i.value; }).join(';');
+      var cprioridad = document.getElementById('cr_prioridad') ? document.getElementById('cr_prioridad').value : '0';
+      var UserID = new URL(window.location.href).searchParams.get('p') || '';
+      var approvalId = document.getElementById('ID') ? document.getElementById('ID').value : '';
+      var btn = document.getElementById('submitCrmFromApproval');
+      if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Creating...'; }
+      try {
+        var response = await fetch('/create-crm-from-change-request', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            UserID: UserID,
+            approval_id: approvalId,
+            form_id: approvalId,
+            asignados: asignados,
+            cprioridad: cprioridad
+          })
+        });
+        var data = await response.json();
+        if (data.result === 1) {
+          closeCreateCrmModal();
+          if (typeof loadCrmRelations === 'function') loadCrmRelations();
+        } else {
+          alert('Error creating CRM: ' + (data.error || 'Unknown error'));
+        }
+      } catch (e) {
+        alert('Error: ' + e.message);
+      } finally {
+        if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-save me-1"></i> Create CRM'; }
+      }
+    }
+
+  script(src="/js/scripts_crm.js")
+  script(src="/js/approval_crm_relations.js")
+  script(src="/js/approval_approval_relations.js")
+
+  //- Personal Time Off Detail Modal
+  div#ptoDetailModal.app-modal
+    div.app-modal-dialog(style="max-width:560px;")
+      div.app-modal-header
+        h5.app-modal-title 🗓️Personal Time Off
+        button.app-modal-close(type="button" onclick="closePtoDetailModal()" aria-label="Close") ×
+      div.app-modal-body
+        div#ptoDetailContent
+          div(style="text-align:center;padding:20px;")
+            i.fas.fa-spinner.fa-spin
+      div.app-modal-footer
+        button.btn.btn-secondary(type="button" onclick="closePtoDetailModal()") Close
+
+  script.
+    function openPtoDetailModal(formId) {
+      var modal = document.getElementById('ptoDetailModal');
+      if (modal) {
+        modal.classList.add('open');
+        loadPtoDetail(formId);
+      }
+    }
+    function closePtoDetailModal() {
+      var modal = document.getElementById('ptoDetailModal');
+      if (modal) modal.classList.remove('open');
+    }
+    async function loadPtoDetail(formId) {
+      var content = document.getElementById('ptoDetailContent');
+      content.innerHTML = '<div style="text-align:center;padding:20px;"><i class="fas fa-spinner fa-spin"></i></div>';
+      try {
+        var res = await fetch('/form_hr_personal_time_off/' + formId + '/data');
+        var data = await res.json();
+        if (data.result === 1) {
+          var form = data.form;
+          var typeLabels = {
+            vacation: 'Vacation',
+            medical_cert: 'Medical Certificate',
+            no_medical_cert: 'Absence without Medical Certificate',
+            partial_permit: 'Partial Permit',
+            non_remunerated: 'Non-remunerated Time',
+            license: 'License'
+          };
+          var rows = '';
+          rows += '<tr><th>Request Type</th><td>' + (typeLabels[form.request_type] || form.request_type) + '</td></tr>';
+          if (form.request_type === 'partial_permit' && form.start_permit_hour) {
+            rows += '<tr><th>Hours</th><td>' + form.start_permit_hour + ' - ' + form.end_permit_hour + '</td></tr>';
+          }
+          var sd = form.start_date ? new Date(form.start_date).toLocaleDateString('en-GB') : '-';
+          var ed = form.end_date ? new Date(form.end_date).toLocaleDateString('en-GB') : '-';
+          rows += '<tr><th>Start Date</th><td>' + sd + '</td></tr>';
+          rows += '<tr><th>End Date</th><td>' + ed + '</td></tr>';
+          rows += '<tr><th>Days</th><td>' + form.days + ' Days' || '-' + '</td></tr>';
+          rows += '<tr><th>Notes</th><td>' + (form.notes || '-') + '</td></tr>';
+          content.innerHTML = '<table class="pto-detail-modal-table">' + rows + '</table>';
+        } else {
+          content.innerHTML = '<p style="color:red;">Could not load data.</p>';
+        }
+      } catch (e) {
+        content.innerHTML = '<p style="color:red;">Error: ' + e.message + '</p>';
+      }
+    }

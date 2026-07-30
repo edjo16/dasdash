@@ -1,0 +1,161 @@
+mixin floating-multiselect(label, name, options=[], selected=[], required=false, placeholder='Selecciona una opción', className='', containerClass='', attrs={})
+  div.floating-multiselect-container(class=containerClass)
+    div.floating-multiselect-wrapper
+      div.floating-multiselect-display(tabindex="0" data-name=name data-options=JSON.stringify(options) data-placeholder=placeholder class=selected && selected.length ? 'has-value' : '')
+        if selected && selected.length
+          each sel in selected
+            - var opt = options.find(o => o.value === sel)
+            if opt
+              span.chip(data-value=sel)
+                | #{opt.label}
+                button(type="button" class="remove-chip" data-value=sel) &times;
+          each sel in selected
+            input(type="hidden" name=`${name}[]` value=sel)
+        else
+          span.placeholder= placeholder
+        i.fas.fa-chevron-down.dropdown-arrow
+      div.floating-multiselect-dropdown(id=`dropdown_${name}`)
+        each option in options
+          if !selected.includes(option.value)
+            div.dropdown-option(data-value=option.value)= option.label
+      label.floating-label(for=name)= label + (required ? ' *' : '')
+    span.error-message(data-error-for=name)
+  script.
+    document.addEventListener('DOMContentLoaded', function() {
+      // Initialize all multiselects
+      document.querySelectorAll('.floating-multiselect-display').forEach(function(display) {
+        var name = display.getAttribute('data-name');
+        
+        // Toggle dropdown on click
+        display.addEventListener('click', function(e) {
+          // Don't toggle if clicking remove button
+          if (e.target.classList.contains('remove-chip')) return;
+          
+          var dropdown = document.getElementById('dropdown_' + name);
+          if (dropdown) {
+            dropdown.classList.toggle('show');
+          }
+        });
+        
+        // Close dropdown on blur
+        display.addEventListener('blur', function() {
+          setTimeout(function() {
+            var dropdown = document.getElementById('dropdown_' + name);
+            if (dropdown) dropdown.classList.remove('show');
+          }, 200);
+        });
+        
+        // Handle chip removal
+        display.addEventListener('click', function(e) {
+          if (e.target.classList.contains('remove-chip')) {
+            e.stopPropagation();
+            var value = e.target.getAttribute('data-value');
+            removeFloatingMultiselectChip(name, value);
+          }
+        });
+      });
+      
+      // Handle option selection
+      document.querySelectorAll('.floating-multiselect-dropdown').forEach(function(dropdown) {
+        dropdown.addEventListener('click', function(e) {
+          if (e.target.classList.contains('dropdown-option')) {
+            var name = dropdown.id.replace('dropdown_', '');
+            var value = e.target.getAttribute('data-value');
+            selectFloatingMultiselectOption(name, value);
+          }
+        });
+      });
+    });
+    
+    function selectFloatingMultiselectOption(name, value) {
+      var display = document.querySelector('.floating-multiselect-display[data-name="'+name+'"]');
+      var hiddenInputs = display.querySelectorAll('input[type="hidden"]');
+      var selected = Array.from(hiddenInputs).map(i => i.value);
+      
+      if (!selected.includes(value)) {
+        // Create hidden input
+        var input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = name + '[]';
+        input.value = value;
+        display.appendChild(input);
+        
+        updateFloatingMultiselectDisplay(name);
+      }
+    }
+    
+    function removeFloatingMultiselectChip(name, value) {
+      var display = document.querySelector('.floating-multiselect-display[data-name="'+name+'"]');
+      var hiddenInputs = display.querySelectorAll('input[type="hidden"]');
+      hiddenInputs.forEach(function(input) {
+        if(input.value == value) input.remove();
+      });
+      
+      updateFloatingMultiselectDisplay(name);
+    }
+    
+    function updateFloatingMultiselectDisplay(name) {
+      var display = document.querySelector('.floating-multiselect-display[data-name="'+name+'"]');
+      var dropdown = document.getElementById('dropdown_' + name);
+      var options = JSON.parse(display.getAttribute('data-options'));
+      var placeholder = display.getAttribute('data-placeholder');
+      var selected = Array.from(display.querySelectorAll('input[type="hidden"]')).map(i => i.value);
+      
+      // Store current hidden inputs
+      var hiddenInputs = Array.from(display.querySelectorAll('input[type="hidden"]'));
+      
+      // Clear display content (keep arrow)
+      var arrow = display.querySelector('.dropdown-arrow');
+      display.innerHTML = '';
+      
+      // Add chips or placeholder
+      if(selected.length) {
+        selected.forEach(function(sel) {
+          var opt = options.find(o => o.value == sel);
+          if(opt) {
+            var chip = document.createElement('span');
+            chip.className = 'chip';
+            chip.setAttribute('data-value', sel);
+            chip.textContent = opt.label;
+            
+            var btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'remove-chip';
+            btn.setAttribute('data-value', sel);
+            btn.innerHTML = '&times;';
+            
+            chip.appendChild(btn);
+            display.appendChild(chip);
+          }
+        });
+        display.classList.add('has-value');
+      } else {
+        var placeholderSpan = document.createElement('span');
+        placeholderSpan.className = 'placeholder';
+        placeholderSpan.textContent = placeholder;
+        display.appendChild(placeholderSpan);
+        display.classList.remove('has-value');
+      }
+      
+      // Re-add hidden inputs
+      hiddenInputs.forEach(function(input) {
+        display.appendChild(input);
+      });
+      
+      // Re-add arrow
+      display.appendChild(arrow);
+      
+      // Update dropdown options
+      if(dropdown) {
+        dropdown.innerHTML = '';
+        options.forEach(function(opt) {
+          if(!selected.includes(opt.value)) {
+            var div = document.createElement('div');
+            div.className = 'dropdown-option';
+            div.setAttribute('data-value', opt.value);
+            div.textContent = opt.label;
+            dropdown.appendChild(div);
+          }
+        });
+      }
+    }

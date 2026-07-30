@@ -1,0 +1,697 @@
+extends ../layout
+include ../mixins/floating-textarea
+include ../mixins/floating-rich-textarea
+include ../mixins/floating-file
+include ../mixins/breadcrumb
+include ../mixins/floating-users
+include ../mixins/add-reference
+
+block layout-content
+  div#layoutSidenav_content
+    main
+      div.container-fluid.px-4.crm-page-shell
+        +app-breadcrumb({
+          homeHref: '/',
+          items: [
+            { label: 'CRM', href: '/crm_main' },
+            { label: `CRM # ${crm_id}`, active: true }]
+        })
+        
+        div.Not
+          div.row
+            div.col-md-2
+              label.form-control crm_id 
+              input#crm_id.form-control(value=crm_id)
+            div.col-md-2
+              label.form-control departamentoOrigen 
+              input#departamentoOrigen.form-control
+          input#userCdepartamento(type="hidden" value=userProfile.departamento)
+          input#userIsDevteam(type="hidden" value=devteam ? '1' : '0')
+          input#crmServer1(type="hidden" value=crmServer1 || '')
+        div.card.shadow-sm.mb-4(style="border:none;border-radius:10px;")
+          div.card-body(style="padding:1.2rem;")
+            div.row
+              div.col-md-6
+                div.info-group
+                  label.info-label 
+                    i.fas.fa-comment-dots.colorActive(style="margin-right:5px;")
+                    | Subject:
+                  div#conversacion_titulo.info-value
+              div.col-md-5
+                div.info-group
+                  label.info-label 
+                    i.fas.fa-tag.colorActive(style="margin-right:5px;")
+                    | Case Type:
+                  div#asunto_interno.info-value
+              div.col-md-3
+                div.info-group
+                  label.info-label 
+                    i.fas.fa-calendar-plus.colorActive(style="margin-right:5px;")
+                    | Entry Date:
+                  div#ffingreso.info-value
+              div.col-md-3
+                div.info-group
+                  label.info-label 
+                    i.fas.fa-calendar-day.colorActive(style="margin-right:5px;")
+                    | Start Date:
+                  input#start_date_input.form-control(type="datetime-local" style="display:block; max-width: 180px;")
+              div.col-md-3
+                div.info-group
+                  label.info-label 
+                    i.fas.fa-calendar-check.colorActive(style="margin-right:5px;")
+                    | Due Date:
+                  input#due_date_input.form-control(type="datetime-local" style="display:block; max-width: 180px;")
+              div.col-md-3
+                div.info-group
+                  label.info-label 
+                    i.fas.fa-clock.colorActive(style="margin-right:5px;")
+                    | Last Update:
+                  div#ffmodificado.info-value
+              div.col-md-3
+                div.info-group
+                  label.info-label 
+                    i.fas.fa-user.colorActive(style="margin-right:5px;")
+                    | Owner:
+                  div#de.info-value
+              div.col-md-3
+                div.info-group
+                  label.info-label 
+                    i.fas.fa-address-book.colorActive(style="margin-right:5px;")
+                    | Contact:
+                  div#xcontacto.info-value
+              div.col-md-3
+                div.info-group
+                  label.info-label 
+                    i.fas.fa-exclamation-circle.colorActive(style="margin-right:5px;")
+                    | Priority:
+                  div#xprioridad.info-value.d-flex.align-items-center
+              div.col-md-3
+                div.info-group
+                  label.info-label 
+                    i.fas.fa-handshake.colorActive(style="margin-right:5px;")
+                    | Business Relationship:
+                  div(style="display:flex; gap:8px; align-items:center; margin-top:4px;")
+                    - var brOpts = (typeof businessRelationships !== 'undefined' ? businessRelationships : [])
+                    select#business_relationship_select.form-control.form-control-sm(style="max-width:200px;")
+                      option(value="") — None —
+                      each opt in brOpts
+                        option(value=opt.value) #{opt.label}
+                    button#save_business_relationship_btn.btn.btn-sm(type="button" style="background-color:#00586f;color:white;") Save
+        div.card.mb-4(style="border:none;")
+          div.row.crm-main-row
+            div.col-lg-8
+              div(style="height:100%;")
+                div.messages-header.mb-3.crm-messages-header
+                  div(style="display:flex;align-items:center;gap:10px;")
+                    button#opennewcase.btn.btn-sm(style="background-color:#00586f;color:white;display:flex;align-items:center;gap:5px;border:none;padding:6px 12px;border-radius:5px;")
+                      i.fas.fa-plus
+                      span Add Message
+                    button#openAiModal.btn.btn-sm.crm-ai-btn(title="AI Assistant")
+                      img(src="/icono-ia.png" width="22" height="22" style="object-fit:contain;" onerror="this.style.display='none';this.nextSibling.style.display='inline-block'")
+                      span.crm-ai-btn-label(style="font-size:0.8rem;") AI Assistant
+                  div(style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;")
+                    div.search-container(style="position:relative;")
+                      i.fas.fa-search(style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:#00586f;")
+                      input#SearchBox.form-control.form-control-sm(onkeyup="filterCrmMessages();" placeholder="Search messages" style="padding-left:35px;border-radius:5px;")
+                    div.btn-group.btn-group-sm(role="group" aria-label="Message type filter")
+                      button#msgFilter_user.btn.btn-sm.btn-outline-secondary.active(type="button" onclick="setCrmMsgTypeFilter('user')" title="Show user messages only")
+                        i.fas.fa-user(style="margin-right:4px;")
+                        | User
+                      button#msgFilter_system.btn.btn-sm.btn-outline-secondary(type="button" onclick="setCrmMsgTypeFilter('system')" title="Show system messages only")
+                        i.fas.fa-robot(style="margin-right:4px;")
+                        | System
+                      button#msgFilter_all.btn.btn-sm.btn-outline-secondary(type="button" onclick="setCrmMsgTypeFilter('all')" title="Show all messages")
+                        | All
+                div.table-responsive.shadow-table(style="border-radius:10px;overflow:hidden;")
+                  table.table.table-hover.mb-0#MainTable
+                    thead(style="background-color:#00586f;color:white;")
+                      tr#header
+                        th(style="width:10%;border:none;") Date
+                        th(style="border:none;") Message Preview
+                        th(style="width:5%;border:none;text-align:center;") Actions
+                    tbody#tbody.bg-white
+            div.col-lg-4
+              div
+                div.row
+                  div.col-12
+                    div.section-card.crm-section-card(style="margin-bottom:1rem")
+                      div.section-header(style="display:flex; justify-content:space-between; align-items:center")
+                        div
+                          h5.mb-0 
+                            i.fas.fa-users(style="margin-right:8px;color:#00586f;")
+                            | Assigned
+                        div(style="margin-top:-16px; width: 250px")
+                          - var fuOptions = grupousuarios_active.map(function(u) { return {value: u.UserID, label: u.Name, department: u.departamento}; })
+                          +floating-users('', 'crm_asignados_fu', fuOptions, [], false, 'Add users...', '', '', {}, true, null, false, true)
+                      div#crm_dept_estados
+                  div#card-favoritos-crm.section-card.crm-section-card(style="display:none;")
+                    div.section-header
+                      h5.mb-0
+                        i.fas.fa-star(style="margin-right:8px;color:#ffc107;")
+                        | Favorite Files
+                    div#favoritos-crm-files.favoritos-files-container
+                div.row
+                  div.col-12
+                    div#card-sirdata.section-card.crm-section-card(style="display:none;")
+                      div.section-header
+                        h5.mb-0 
+                          i.fas.fa-link(style="margin-right:8px;color:#00586f;")
+                          | SIR References
+                      div#sirdata.sir-data-container
+                
+                div.row
+                  div.col-12
+                    div#card-casdata.section-card.crm-section-card(style="display:none;")
+                      div.section-header
+                        h5.mb-0 
+                          i.fas.fa-link(style="margin-right:8px;color:#00586f;")
+                          | CAS References
+                      div#casdata.cas-data-container
+                
+                div.row
+                  div.col-12
+                    div.section-card.crm-section-card
+                      div.section-header
+                        h5.mb-0 
+                          i.fas.fa-file-alt(style="margin-right:8px;color:#00586f;")
+                          | Associated Approvals
+                      div#approval_relations.approval-relations-container
+                
+                div.row
+                  div.col-12
+                    div.section-card.crm-section-card
+                      div.section-header
+                        h5.mb-0 
+                          i.fas.fa-link(style="margin-right:8px;color:#00586f;")
+                          | Associated CRMs
+                      div#crm_crm_relations.crm-relations-container
+                div.row
+                  div.col-12
+                    div.section-card.crm-section-card
+                      div.section-header
+                        h5.mb-0 
+                          i.fas.fa-link(style="margin-right:8px;color:#00586f;")
+                          | Associated Events/Meetings
+                      div#crm_meetings_relations.meeting-relations-container
+                        if linked_meetings && linked_meetings.length
+                          each lm in linked_meetings
+                            div.approval-badge
+                              a(href=`/meetings/${lm.meeting_id}` target="" title=lm.meeting_details || lm.action_points)
+                                | #{lm.meeting_id}
+                              span   -  #{lm.action_points}
+
+                +add-reference({
+                    selectorId: 'reference_type_selector',
+                    tooltip: 'You can add approval, CRM, SIR or CAS references to this case',
+                    showSIR: true,
+                    showCAS: true
+                  })
+      //- New case form
+    div#crm_newcase.formulario
+      div(style="display:flex;width:100%;justify-content:space-between;align-items:center;")
+        h3.mt-4 Add new message
+        button#closenewcase.btn.btn-sm(type="button" style="background:none;border:none;font-size:1.5rem;color:#6c757d;cursor:pointer;" onclick="this.closest('.formulario').style.display='none'")
+          i.fas.fa-times
+      hr
+      form#form_crm_new_msg(method="post" action="" name="form_crm_new_msg" enctype="multipart/form-data")
+        div.Not
+          input#UserID(type="text" name="UserID" value=userProfile.UserID)
+          input#crm_id(type="text" name="crm_id" value=crm_id)
+          input#UserName(type="text" name="UserName" value=userProfile.UserName)
+        div.row
+          div.col-md-12
+            +floating-rich-textarea('Message details', 'description', true, 'Type your message...', '', '', {}, 3, '', 6500, false)
+        div#crm_estados.row
+        div.row
+          div.col-md-12
+            +floating-file('Supporting Documents', 'Supportfiles', false, true, false, '*')
+        div.row
+          div.col-md-4
+            button#submitCRMNewMSGCase.form-control(type="submit" style="background-color: #00586f;color: #e9ecef;") Submit
+          //- div.col-md-4
+          //-     label Assigned
+          //-     select#selecionado.form-control(name="selecionado") 
+          //-       option(value="---") --- 
+      div#hidenewcase_adduser.close_menus.Not
+  div#hidenewcase.close_menus.Not
+  
+  //- Modal para seleccionar approvals
+  div#approval_modal.modal-overlay
+    div.modal-container(style="width:50%;max-width:1200px;")
+      div.modal-header
+        h3 
+          i.fas.fa-file-alt(style="margin-right:8px;")
+          | Select Approvals
+        span#close_approval_modal.close-modal &times;
+      div.modal-body
+        div.mb-3
+          div.row
+            div.col-md-8
+              input#search_approvals.form-control(placeholder="Search by ID, requester, process or details" type="text")
+            div.col-md-4
+              select#status_filter.form-control
+                option(value="All") All
+                option(value="Ongoing") Ongoing
+                option(value="Pending") Pending
+                option(value="Closed") Closed
+        div.table-container
+          table#approvals_table.table.table-hover
+            thead
+              tr
+                th(style="width:50px;text-align:center;")
+                  input#select_all(type="checkbox")
+                th ID
+                th Process
+                th Details
+                th Status
+            tbody#approvals_tbody
+              tr
+                td(colspan="5" style="text-align:center;") Loading...
+        div.d-flex.justify-content-between.align-items-center.mt-3
+          div#approval_count
+          div#pagination_controls.pagination
+      div.modal-footer
+        button#cancel_selection.btn.btn-secondary Cancel
+        button#confirm_selection.btn.btn-primary Add Selected
+  include ../mixins/ai-chat-modal
+
+  style.
+    .crm-page-shell {
+      background-color: #f8f9fa;
+    }
+    .crm-main-row {
+      border: none;
+      background-color: #f8f9fa;
+    }
+    .crm-messages-header {
+      display: flex;
+      width: 100%;
+      flex-wrap: wrap;
+      background-color: #f8f9fa;
+      border-radius: 8px;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .crm-ai-btn {
+      background-color: #ffffff;
+      border: 1px solid #dee2e6;
+      padding: 4px 8px;
+      border-radius: 5px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .crm-ai-btn:hover {
+      border-color: #93b2be;
+      background-color: #f7fbfc;
+    }
+    .crm-ai-btn-label {
+      color: #495057;
+    }
+    .crm-section-card {
+      background-color: #ffff;
+    }
+    .info-group {
+      margin-bottom: 0.5rem;
+    }
+    .info-label {
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: #6c757d;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 0.25rem;
+      display: flex;
+      align-items: center;
+    }
+    .info-label i {
+      color: #00586f;
+      font-size: 0.7rem;
+    }
+    .info-value {
+      font-size: 0.95rem;
+      color: #212529;
+      font-weight: 500;
+      min-height: 24px;
+    }
+    .info-value p {
+      margin: 0;
+    }
+    .section-card {
+      border-radius: 8px;
+      padding: 1rem;
+      height: 100%;
+      border: 1px solid #e9ecef;
+    }
+    .section-header {
+      border-bottom: 2px solid #00586f;
+      padding-bottom: 0.5rem;
+      margin-bottom: 1rem;
+    }
+    .section-header h5 {
+      font-size: 1rem;
+      font-weight: 600;
+      color: #212529;
+    }
+    .assigned-users-container,     .sir-data-container, .cas-data-container {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      min-height: 40px;
+    }
+    .approval-relations-container {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      min-height: 40px;
+    }
+    .approval-badge {
+      border: 1px solid #00586f;
+      border-radius: 5px;
+      padding: 0.5rem 0.75rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.85rem;
+      transition: all 0.2s;
+    }
+    .approval-badge:hover {
+      background: #d1e9ec;
+      box-shadow: 0 2px 4px rgba(0, 88, 111, 0.2);
+    }
+    .approval-badge .remove-approval {
+      cursor: pointer;
+      color: #dc3545;
+      font-weight: bold;
+      margin-left: 0.5rem;
+    }
+    .approval-badge .remove-approval:hover {
+      color: #a71d2a;
+    }
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.5);
+      z-index: 9999;
+      justify-content: center;
+      align-items: center;
+    }
+    .modal-overlay.active {
+      display: flex;
+    }
+    .modal-container {
+      background: white;
+      border-radius: 10px;
+      max-height: 90vh;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+    }
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0.5rem 1rem;
+      border-bottom: 2px solid #00586f;
+    }
+    .modal-header h3 {
+      margin: 0;
+      color: #212529;
+      font-size: 1rem;
+    }
+    .close-modal {
+      font-size: 2rem;
+      cursor: pointer;
+      color: #6c757d;
+      line-height: 1;
+    }
+    .close-modal:hover {
+      color: #dc3545;
+    }
+    .modal-body {
+      padding: 1.5rem;
+      overflow-y: auto;
+      flex: 1;
+    }
+    .table-container {
+      min-height: 400px;
+      max-height: 400px;
+      overflow-y: auto;
+      border: 1px solid #dee2e6;
+      border-radius: 5px;
+    }
+    #approvals_table {
+      margin: 0;
+    }
+    #approvals_table thead {
+      background: #00586f;
+      color: white;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+    #approvals_table tbody tr {
+      cursor: pointer;
+    }
+    #approvals_table tbody tr:hover {
+      background: #f8f9fa;
+    }
+    #approvals_table tbody tr.selected {
+      background: #d1e9ec;
+    }
+    .modal-footer {
+      padding: 0.5rem 1rem;
+      border-top: 1px solid #dee2e6;
+      display: flex;
+      justify-content: flex-end;
+      gap: 1rem;
+    }
+    .icon-btn {
+      width: 20px;
+      height: 20px;
+      cursor: pointer;
+      transition: transform 0.2s;
+      filter: invert(25%) sepia(54%) saturate(1051%) hue-rotate(153deg) brightness(92%) contrast(101%);
+    }
+    .icon-btn:hover {
+      transform: scale(1.2);
+    }
+    .shadow-table {
+      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+    }
+    #MainTable thead th {
+      font-size: 0.8rem;
+      font-weight: 600;
+      padding: 0.45rem 0.6rem;
+    }
+    #MainTable tbody td {
+      padding: 0.4rem 0.6rem;
+      vertical-align: middle;
+      border-bottom: 1px solid #f1f3f5;
+      font-size: 0.85rem;
+    }
+    .table tbody tr:last-child td {
+      border-bottom: none;
+    }
+    .table-hover tbody tr:hover {
+      background-color: #f8f9fa;
+      transition: background-color 0.2s ease;
+    }
+    .shadow-sm {
+      box-shadow: 0 0.125rem 0.5rem rgba(0, 0, 0, 0.075) !important;
+    }
+    .g-3 {
+      gap: 1rem !important;
+    }
+    .g-4 {
+      gap: 1.5rem !important;
+    }
+    .colorActive{
+      color: #00586f
+    }
+    .crm-relations-container {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      min-height: 40px;
+    }
+    .crm-message-body {
+      margin-top: 0.35rem;
+      font-size: 0.9rem;
+      line-height: 1.45;
+      color: #212529;
+    }
+    .crm-message-body p,
+    .crm-message-body ul,
+    .crm-message-body ol,
+    .crm-message-body blockquote {
+      margin-bottom: 0.55rem;
+    }
+    .crm-message-body p:last-child,
+    .crm-message-body ul:last-child,
+    .crm-message-body ol:last-child,
+    .crm-message-body blockquote:last-child {
+      margin-bottom: 0;
+    }
+    .crm-message-body code {
+      background: #f1f5f7;
+      border-radius: 4px;
+      padding: 0 0.25rem;
+      font-family: Consolas, Monaco, monospace;
+      font-size: 0.84em;
+    }
+    .crm-message-body b,
+    .crm-message-body strong { font-weight: 700; }
+    .crm-message-body u { text-decoration: underline; }
+    .crm-message-body table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 8px 0;
+      font-size: 0.85rem;
+    }
+    .crm-message-body td,
+    .crm-message-body th {
+      border: 1px solid #dee2e6;
+      padding: 6px 10px;
+      text-align: left;
+    }
+    .crm-message-body th {
+      background: #f5f5f5;
+      font-weight: 600;
+    }
+    .crm-message-body--rich .ai-table-wrap {
+      max-width: 100%;
+    }
+    .crm-message-body--rich .ai-md-table {
+      min-width: 360px;
+      font-size: 0.8rem;
+    }
+
+    [data-theme="dark"] .crm-page-shell,
+    [data-theme="dark"] .crm-main-row,
+    [data-theme="dark"] .crm-messages-header {
+      background-color: var(--surface-1);
+    }
+
+    [data-theme="dark"] .crm-ai-btn {
+      background-color: var(--surface-2);
+      border-color: var(--border-default);
+      color: var(--text-primary);
+    }
+    [data-theme="dark"] .crm-ai-btn-label {
+      color: var(--text-primary);
+    }
+
+    [data-theme="dark"] .crm-ai-btn:hover {
+      background-color: var(--surface-3);
+      border-color: var(--border-strong);
+    }
+
+    [data-theme="dark"] .crm-section-card,
+    [data-theme="dark"] .modal-container,
+    [data-theme="dark"] .modal-body,
+    [data-theme="dark"] .table-container {
+      background: var(--surface-1);
+      color: var(--text-primary);
+      border-color: var(--border-default);
+    }
+
+    [data-theme="dark"] .table-hover tbody tr:hover,
+    [data-theme="dark"] #approvals_table tbody tr:hover,
+    [data-theme="dark"] #approvals_table tbody tr.selected {
+      background: var(--surface-2);
+    }
+
+    [data-theme="dark"] .crm-message-body,
+    [data-theme="dark"] .modal-header h3,
+    [data-theme="dark"] .section-header h5,
+    [data-theme="dark"] .add-section-header h5 {
+      color: var(--text-primary);
+    }
+    [data-theme="dark"] .crm-message-body td,
+    [data-theme="dark"] .crm-message-body th {
+      border-color: var(--border-default);
+    }
+    [data-theme="dark"] .crm-message-body th {
+      background: var(--surface-2);
+    }
+
+    [data-theme="dark"] .close-modal,
+    [data-theme="dark"] .info-label,
+    [data-theme="dark"] .ai-docs-status {
+      color: var(--text-muted);
+    }
+
+    
+  //- Modal para seleccionar CRMs relacionados
+  div#crm_crm_modal.modal-overlay
+    div.modal-container(style="width:50%;max-width:1200px;")
+      div.modal-header
+        h3 
+          i.fas.fa-link(style="margin-right:8px;")
+          | Select CRMs
+        span#close_crm_crm_modal.close-modal &times;
+      div.modal-body
+        div.mb-3
+          div.row
+            div.col-md-8
+              input#search_crms_related.form-control(placeholder="Search by ID, subject or owner" type="text")
+            div.col-md-4
+              select#crm_crm_status_filter.form-control
+                option(value="") All
+                option(value="Pending") Pending
+        div.table-container
+          table#crms_related_table.table.table-hover
+            thead
+              tr
+                th(style="width:50px;text-align:center;")
+                  input#select_all_crms_related(type="checkbox")
+                th ID
+                th Subject
+                th Status
+                th Owner
+            tbody#crms_related_tbody
+              tr
+                td(colspan="5" style="text-align:center;") Loading...
+        div.d-flex.justify-content-between.align-items-center.mt-3
+          div#crm_crm_count
+          div#crm_crm_pagination_controls.pagination
+      div.modal-footer
+        button#cancel_crm_crm_selection.btn.btn-secondary Cancel
+        button#confirm_crm_crm_selection.btn.btn-primary Add Selected
+  
+  script(src="/js/crm_approval_relations.js")
+  script(src="/js/crm_crm_relations.js")
+
+  // Hide sections with no data
+  script.
+    document.addEventListener('DOMContentLoaded', function() {
+      function hideIfEmpty(containerId, parentSelectorFallback) {
+        const container = document.getElementById(containerId);
+        if (!container) return;
+        const parent = container.closest('.section-card') || container.closest('.add-section') || (parentSelectorFallback ? document.querySelector(parentSelectorFallback) : null) || container.parentElement;
+        const text = (container.textContent || '').trim();
+        const hasChildren = container.children && container.children.length > 0;
+        const isEmptyPlaceholder = /loading|no\s+|no\s+found/i.test(text);
+        if ((!hasChildren && !text) || isEmptyPlaceholder) {
+          if (parent) parent.style.display = 'none';
+        } else {
+          if (parent) parent.style.display = '';
+        }
+      }
+      // Linked Approvals
+      hideIfEmpty('approval_relations');
+      // Linked CRMs
+      hideIfEmpty('crm_crm_relations');
+      // Linked Events/Meetings
+      hideIfEmpty('crm_meetings_relations');
+    });
+  script.
+    localStorage.setItem('backpage', 'index');
+  script.
+    window.CRM_SERVER_1 = !{JSON.stringify(crmServer1 || '')};
+  +ai-chat-modal()

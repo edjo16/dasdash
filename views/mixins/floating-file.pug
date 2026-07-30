@@ -1,0 +1,240 @@
+mixin floating-file(label, name, required=false, multiple=true, acceptPdfOnly, accept='*', containerClass='')
+  div.floating-file-container(class=containerClass)
+    label.floating-file-label(for=name)= label + (required ? ' *' : '')
+    div.row.g-2
+      div.col-12.col-md-5
+        div(id=`dropzone-${name}`).dropzone
+          img.dropzone-icon(src="/uploadImage.png" alt="Upload Icon")
+          span.dropzone-desktop(style="padding-bottom: 10px;") Drag and drop the files
+      div.col-12.col-md-7
+        input(
+          type="file"
+          id=name
+          name=name
+          class="form-control floating-file-input"
+          style="display: none;"
+          accept=acceptPdfOnly ? 'application/pdf' : accept
+          multiple=multiple
+          data-required=required
+          data-pdf-only=acceptPdfOnly ? 'true' : 'false'
+        )
+        div(id=`filelist-${name}`).file-list
+    span.error-message(data-error-for=name)
+
+  script.
+    (function() {
+      const inputId = '#{name}';
+      const dropzoneId = `dropzone-${inputId}`;
+      const fileListId = `filelist-${inputId}`;
+      let filesArray = [];
+
+      document.addEventListener('DOMContentLoaded', function() {
+        const dropzone = document.getElementById(dropzoneId);
+        const fileInput = document.getElementById(inputId);
+        const fileList = document.getElementById(fileListId);
+        const isPdfOnly = fileInput.dataset.pdfOnly == 'true';
+
+        if (!dropzone || !fileInput || !fileList) return;
+
+        // Click to open file selector
+        dropzone.addEventListener('click', () => fileInput.click());
+
+        // Drag over
+        dropzone.addEventListener('dragover', (event) => {
+          event.preventDefault();
+          dropzone.classList.add('dragover');
+        });
+
+        // Drag leave
+        dropzone.addEventListener('dragleave', () => {
+          dropzone.classList.remove('dragover');
+        });
+
+        // Drop
+        dropzone.addEventListener('drop', (event) => {
+          event.preventDefault();
+          dropzone.classList.remove('dragover');
+          
+          // Check if folders are being dropped
+          if (event.dataTransfer.items) {
+            for (let item of event.dataTransfer.items) {
+              if (item.kind === 'directory') {
+                showToast('Cannot upload folders. Please upload files only.', 'error');
+                return;
+              }
+            }
+          }
+          
+          const files = Array.from(event.dataTransfer.files);
+          handleFiles(files);
+        });
+
+        // File input change
+        fileInput.addEventListener('change', (event) => {
+          const files = Array.from(event.target.files);
+          handleFiles(files);
+        });
+
+        function sanitizeFileName(name) {
+          const lastDot = name.lastIndexOf('.');
+          const ext     = lastDot !== -1 ? name.slice(lastDot)    : '';
+          const base    = lastDot !== -1 ? name.slice(0, lastDot) : name;
+          const clean   = base
+            .normalize('NFD')                    // decompose accented chars (á → a + ́)
+            .replace(/[\u0300-\u036f]/g, '')     // strip diacritics → á→a, ñ→n, ü→u …
+            .replace(/\s+/g, '_')               // spaces → underscore
+            .replace(/[^a-zA-Z0-9._\-]/g, '_') // anything else unsafe → underscore
+            .replace(/_+/g, '_')               // collapse consecutive underscores
+            .replace(/^_+|_+$/g, '');         // trim leading / trailing underscores
+          return (clean || 'file') + ext.toLowerCase();
+        }
+
+        function handleFiles(files) {
+          files.forEach(file => {
+            if (isPdfOnly && file.type !== 'application/pdf') {
+              showToast('Cannot upload a file that is not a PDF file ...', 'error');
+            } else {
+              const safeName = sanitizeFileName(file.name);
+              const safeFile = safeName !== file.name
+                ? new File([file], safeName, { type: file.type, lastModified: file.lastModified })
+                : file;
+              if (safeName !== file.name) {
+                showToast(`Renamed: "${file.name}" → "${safeName}"`, 'info');
+              }
+              filesArray.push(safeFile);
+            }
+          });
+          updateFileList();
+          updateFileInput();
+          validateFiles();
+        }
+
+        function showToast(message, type) {
+          const toast = document.createElement('div');
+          toast.className = `floating-file-toast ${type}`;
+          toast.textContent = message;
+          document.body.appendChild(toast);
+          setTimeout(() => toast.remove(), 3000);
+        }
+
+        function getFileExtension(filename) {
+          if (filename.includes('.png') || filename.includes('.jpg') || filename.includes('.jpeg')) {
+            return '/icons/png.png';
+          } else if (filename.includes('.doc') || filename.includes('.docx')) {
+            return '/icons/word.png';
+          } else if (filename.includes('.xlsx')) {
+            return '/icons/excel.png';
+          } else if (filename.includes('.pdf')) {
+            return '/icons/pdf.png';
+          }
+          return '/icons/default.png';
+        }
+
+        function updateFileList() {
+          fileList.innerHTML = '';
+          filesArray.forEach((file) => {
+            const fileItem = document.createElement('div');
+            fileItem.className = 'file-item';
+            fileItem.setAttribute('data-file-id', file.name);
+
+            const fileIcon = document.createElement('img');
+            fileIcon.src = getFileExtension(file.name);
+            
+            const fileName = document.createElement('span');
+            fileName.textContent = file.name;
+
+            const removeButton = document.createElement('button');
+            removeButton.innerHTML = `
+              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-tabler icons-tabler-outline icon-tabler-trash">
+                <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+                <path d="M4 7l16 0" />
+                <path d="M10 11l0 6" />
+                <path d="M14 11l0 6" />
+                <path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2 -2l1 -12" />
+                <path d="M9 7v-3a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v3" />
+              </svg>
+            `;
+
+            removeButton.addEventListener('click', () => {
+              const index = filesArray.indexOf(file);
+              if (index > -1) {
+                filesArray.splice(index, 1);
+              }
+              updateFileList();
+              updateFileInput();
+              validateFiles();
+            });
+
+            fileItem.appendChild(fileIcon);
+            fileItem.appendChild(fileName);
+            fileItem.appendChild(removeButton);
+            fileList.appendChild(fileItem);
+          });
+        }
+
+        function updateFileInput() {
+          const dataTransfer = new DataTransfer();
+          filesArray.forEach(file => {
+            dataTransfer.items.add(file);
+          });
+          fileInput.files = dataTransfer.files;
+        }
+
+        function validateFiles() {
+          const isRequired = fileInput.dataset.required === 'true';
+          const errorMsg = document.querySelector(`[data-error-for="${inputId}"]`);
+          
+          errorMsg?.classList.remove('show');
+          
+          if (isRequired && filesArray.length === 0) {
+            if (errorMsg) {
+              errorMsg.textContent = '#{label} is required';
+              errorMsg.classList.add('show');
+            }
+            return false;
+          }
+          return true;
+        }
+
+        // Expose validation globally
+        window[`validateInput_${inputId}`] = function() {
+          return validateFiles();
+        };
+
+        window[`setInputError_${inputId}`] = function(message) {
+          const errorMsg = document.querySelector(`[data-error-for="${inputId}"]`);
+          if (errorMsg) {
+            errorMsg.textContent = message || '#{label} is required';
+            errorMsg.classList.add('show');
+          }
+          return false;
+        };
+
+        window[`clearInputError_${inputId}`] = function() {
+          const errorMsg = document.querySelector(`[data-error-for="${inputId}"]`);
+          errorMsg?.classList.remove('show');
+        };
+
+        // Expose files array for external access
+        window[`getFiles_${inputId}`] = function() {
+          return filesArray;
+        };
+
+        // Programmatically add a file (e.g. auto-generated PDF)
+        window[`addFile_${inputId}`] = function(file) {
+          filesArray.push(file);
+          updateFileList();
+          updateFileInput();
+          validateFiles();
+        };
+
+        // Remove a file by exact name (e.g. replacing auto-generated PDF)
+        window[`removeFileByName_${inputId}`] = function(name) {
+          const idx = filesArray.findIndex(f => f.name === name);
+          if (idx > -1) filesArray.splice(idx, 1);
+          updateFileList();
+          updateFileInput();
+          validateFiles();
+        };
+      });
+    })();

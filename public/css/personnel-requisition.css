@@ -1,0 +1,173 @@
+/* =============================================
+   Personnel Requisition - Step-by-Step Styles
+   ============================================= */
+
+/* Stepper Container */
+.pr-stepper {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin: 30px auto 40px;
+  max-width: 700px;
+  position: relative;
+}
+
+.pr-stepper::before {
+  content: '';
+  position: absolute;
+  top: 20px;
+  left: 10%;
+  right: 10%;
+  height: 3px;
+  background: #e0e0e0;
+  z-index: 0;
+}
+
+.pr-step-indicator {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  cursor: default;
+}
+
+.pr-step-circle {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: #e0e0e0;
+  color: #999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 16px;
+  transition: all 0.4s cubic-bezier(.4,0,.2,1);
+  border: 3px solid #e0e0e0;
+  position: relative;
+}
+
+.pr-step-indicator.active .pr-step-circle {
+  background: #00586f;
+  color: #fff;
+  border-color: #00586f;
+  box-shadow: 0 0 0 6px rgba(0,88,111,0.15);
+  transform: scale(1.1);
+}
+
+.pr-step-indicator.completed .pr-step-circle {
+  background: #004456;
+  border-color: #004456;
+  color: #fff;
+}
+
+.pr-step-label {
+  margin-top: 8px;
+  font-size: 12px;
+  color: #999;
+  font-weight: 500;
+  text-align: center;
+  transition: color 0.3s;
+  max-width: 110px;
+}
+
+.pr-step-indicator.active .pr-step-label {
+  color: #00586f;
+  font-weight: 700;
+}
+
+.pr-step-indicator.completed .pr-step-label {
+  color: #004456;
+  font-weight: 600;
+}
+
+/* Step Content Panels */
+.pr-step-content {
+  display: none;
+  animation: prFadeIn 0.4s ease;
+}
+
+.pr-step-content.active {
+  display: block;
+}
+
+@keyframes prFadeIn {
+  from { opacity: 0; transform: translateY(15px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Navigation buttons */
+.pr-nav-buttons {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 30px;
+  padding-top: 20px;
+  border-top: 1px solid #e9ecef;
+  padding-left: 10px;
+  padding-right: 10px;
+}
+
+.pr-btn {
+  padding: 10px 30px;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 0.95rem;
+  border: none;
+  cursor: pointer;
+  transition: all 0.3s;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pr-btn-prev {
+  background: #f8f9fa;
+  color: #333;
+  border: 2px solid #dee2e6;
+}
+
+.pr-btn-prev:hover {
+  background: #e9ecef;
+  border-color: #adb5bd;
+}
+
+.pr-btn-next {
+  background: #00586f;
+  color: #fff;
+}
+
+.pr-btn-next:hover {
+  background: #004456;
+}
+
+.pr-btn-next:disabled {
+  background: #adb5bd;
+  cursor: not-allowed;
+}
+
+/* =============================================
+   Dark Mode
+   ============================================= */
+[data-theme="dark"] .pr-stepper::before,
+[data-theme="dark"] .pr-step-circle,
+[data-theme="dark"] .pr-nav-buttons {
+  border-color: var(--border-default);
+}
+
+[data-theme="dark"] .pr-step-label {
+  color: var(--text-muted);
+}
+
+[data-theme="dark"] .pr-btn-prev {
+  background: var(--surface-2);
+  color: var(--text-primary);
+  border-color: var(--border-default);
+}
+
+[data-theme="dark"] .pr-btn-prev:hover {
+  background: var(--surface-3);
+  border-color: var(--border-strong);
+}

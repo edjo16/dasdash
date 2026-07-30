@@ -1,0 +1,220 @@
+extends ../layout
+
+include ../ui/filter-bar
+include ../mixins/data-table
+include ../mixins/breadcrumb
+
+block layout-content
+  div#layoutSidenav_content
+    main
+      div.container-fluid.px-4
+        +app-breadcrumb({
+          homeHref: '/',
+          items: [{ label: title, active: true }]
+        })
+        - var categoryItems = [{ value: 'Event Conference', label: 'Event Conference' }, { value: 'Market Visit', label: 'Market Visit' }]
+        - var statusItems = [{ value: 'Planned', label: 'Planned' }, { value: 'Ongoing', label: 'Ongoing' }, { value: 'Finished', label: 'Finished' }]
+        +fb-bar
+          a#forms_marketing_events.fb-btn.marketing-create-btn(href="#" onclick="url_usuario(this.id)")
+            i.fas.fa-plus
+            span Create New
+          +fb-select({id: 'SelectBox', icon: 'fa-layer-group', items: categoryItems, placeholder: 'All Categories', placeholderDisabled: false, onchange: 'SelectTable()', minWidth: '190px'})
+          +fb-select({id: 'SelectBoxStatus', icon: 'fa-circle', items: statusItems, placeholder: 'All Status', placeholderDisabled: false, onchange: 'SelectTable()', minWidth: '150px', iconStyle: 'font-size:.45rem;'})
+          +fb-actions
+            +fb-search({id: 'SearchBox', placeholder: 'Search by Collaborator, category or date', onkeyup: 'SearchTable()'})
+            +fb-reset-btn({onclick: 'resetFilters()'})
+            +fb-view-toggle({id: 'marketingEventsViewMode', tableId: 'MainTable', ariaLabel: 'Select marketing events data view'})
+            +fb-page-size({id: 'SelectBoxPages', sizes: [15, 25, 50, 100], defaultSize: 15, onchange: 'SelectTable()'})
+            +fb-pagination({onPrev: 'changePage(currentPage - 1)', onNext: 'changePage(currentPage + 1)'})
+        +data-table('MainTable', 'totalCount', { internalViewToggle: false })
+          thead
+            tr#header
+              th(style="width:20%;") Collaborator
+              th Category
+              th Country Location
+              th Start Date
+              th End Date
+              th(style="width:10%;") Status
+          tbody
+
+  style.
+    .marketing-create-btn {
+      background-color: #00586f;
+      border-color: #00586f;
+      color: #ffffff;
+    }
+
+    .marketing-create-btn:hover {
+      background-color: #004456;
+      border-color: #004456;
+      color: #ffffff;
+    }
+
+    .fb-page-btn.disabled,
+    .fb-page-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+  script.
+      function debounce(func, wait) {
+        let timeout;
+        return function(...args) {
+          clearTimeout(timeout);
+          timeout = setTimeout(() => func.apply(this, args), wait);
+        };
+      }
+      function formID(id) {
+          var url_string = window.location.href;
+          var url = new URL(url_string);
+        window.location.href = "/get_forms_marketing_events/" + id + "?" + url.searchParams
+      }
+
+      let currentPage = 1;
+      let totalCount = 0;
+      const table = document.querySelector('#MainTable tbody');
+      const searchBox = document.querySelector('#SearchBox');
+      const selectBox = document.querySelector('#SelectBox') ;
+      const selectBoxStatus = document.querySelector('#SelectBoxStatus');
+        function renderTable(forms) { 
+          table.innerHTML = "";
+
+          const selectBox = document.querySelector('select#SelectBox');
+          
+          if (selectBox.querySelectorAll('option').length <= 1) {
+            const departments = [...new Set(forms.map(form => form.category))];
+
+            selectBox.innerHTML = `
+              <option value="" disabled selected>Select the category</option>
+              <option value="" >All</option>
+            `;
+
+            departments.forEach(category => {
+              const option = document.createElement('option');
+              option.value = category;
+              option.textContent = category;
+              selectBox.appendChild(option);
+            });
+          }
+
+          if (forms.length === 0) {
+            const row = document.createElement('tr');
+            row.innerHTML = `
+              <td colspan="7" style="text-align: center;">No data found</td>
+            `;
+            table.appendChild(row);
+          } else {
+
+            forms.forEach(form => {
+              let statusTd
+              if(form.approval_status == 'Not Approved') {
+                statusTd = `<td style="width: 90px; font-size: 10px; margin-top: 4px"><span style="min-width: 90px; width: 90px;border-radius: 10px; padding: 4px; color: white; background-color:rgb(45, 124, 194)"><i class="fas fa-exclamation-circle"></i> Not Approved</span></td>`
+              }
+              else if(form.approval_status == 'Rejected') {
+                statusTd = `<td style="width: 90px; font-size: 10px; margin-top: 4px"><span style="min-width: 90px; width: 90px;border-radius: 10px; padding: 4px; color: white; background-color:rgb(150, 17, 17)"><i class="fas fa-exclamation-circle"></i> Rejected</span></td>`
+              }
+              else if(form.approval_status == 'Planned') {
+                statusTd = `<td style="width: 90px; font-size: 10px; margin-top: 4px"><span style="min-width: 90px; width: 90px;border-radius: 10px; padding: 4px; color: white; background-color: #6c757d"><i class="fas fa-exclamation-circle"></i> Planned</span></td>`
+              }
+              else if( form.approval_status == 'Ongoing') {
+               statusTd = `<td style="width: 90px; font-size: 10px; margin-top: 4px"><span style="min-width: 90px; width: 90px;border-radius: 10px; padding: 4px; color: white; background-color: #ffc107"><i class="fas fa-play-circle"></i> Ongoing</span></td>`
+              }
+              else{
+               statusTd = `<td style="width: 90px; font-size: 10px; margin-top: 4px"><span style="min-width: 90px; width: 90px;border-radius: 10px; padding: 4px; color: white; background-color: #00586f"><i class="fas fa-check-circle"></i> Finished </span></td>`
+              }
+              const row = document.createElement('tr');
+              row.setAttribute(
+                'onclick',
+                `formID(${form.id});return false;`
+              ) 
+              row.innerHTML = `
+                <td>${form.collaborator_name}</td>
+                <td>${form.category}</td>
+                <td><img src="/countries/${form.country.trim()}.png" alt="${form.country} flag" width="32"> ${form.country}</td>
+                <td><i style="padding-right: 3px;" class="fas fa-calendar-alt"></i>${form.start_date ? form.start_date : 'N/A'}</td>
+                <td><i style="padding-right: 3px;" class="fas fa-calendar-check"></i>${form.end_date ? form.end_date : 'N/A'}</td>
+                ${statusTd? statusTd : ''}
+              `;
+              table.appendChild(row);
+            });
+          }
+        }
+      
+      function renderPagination(totalRows) {
+        const rowsPerPage = Number(document.getElementById('SelectBoxPages').value) || 15;
+        const totalPages = Math.max(Math.ceil(totalRows / rowsPerPage), 1);
+        const currentPageText = document.querySelector('#totalCount');
+        currentPageText.textContent = `Current Page ${currentPage} of ${totalPages}`;
+
+        const prevButton = document.querySelector('.fb-page-btn[aria-label="Previous"]');
+        const nextButton = document.querySelector('.fb-page-btn[aria-label="Next"]');
+
+        if (!prevButton || !nextButton) return;
+
+        prevButton.disabled = currentPage <= 1;
+        prevButton.classList.toggle('disabled', prevButton.disabled);
+
+        nextButton.disabled = currentPage >= totalPages;
+        nextButton.classList.toggle('disabled', nextButton.disabled);
+      }
+
+      function changePage(pageNumber) {
+        const rowsPerPage = Number(document.getElementById('SelectBoxPages').value) || 15;
+        const totalPages = Math.max(Math.ceil(totalCount / rowsPerPage), 1);
+        if (pageNumber < 1 || pageNumber > totalPages) {
+          return;
+        }
+        currentPage = pageNumber;
+        fetchFormsTemporaryChangesLocation();
+      }
+
+      const debouncedFetchApprovals = debounce(fetchFormsTemporaryChangesLocation, 400);
+
+      function SearchTable() {
+        debouncedFetchApprovals();
+      }
+
+      function SelectTable() {
+        fetchFormsTemporaryChangesLocation();
+      }
+      function resetFilters() {
+        searchBox.value = "";
+        selectBox.value = "";
+        selectBoxStatus.value = "";
+        document.getElementById('SelectBoxPages').value = '15';
+        currentPage = 1;
+
+        fetchFormsTemporaryChangesLocation();
+      }
+
+      
+      
+      async function fetchFormsTemporaryChangesLocation() {
+        const searchQuery = searchBox.value.trim();
+        const categoriesFilter = selectBox.value;
+        const statusFilter = selectBoxStatus.value;
+        const limit = document.getElementById('SelectBoxPages').value;
+        searchQuery.length > 1 ? currentPage = 1 : currentPage
+        categoriesFilter.length > 1 ? currentPage = 1 : currentPage
+        const requestParams = new URLSearchParams({
+          page: String(currentPage),
+          limit: String(limit).trim()
+        });
+
+        if (searchQuery) requestParams.set('search', searchQuery);
+        if (categoriesFilter) requestParams.set('category', categoriesFilter);
+        if (statusFilter) requestParams.set('status', statusFilter);
+
+        const request = `/get_forms_marketing_events?${requestParams.toString()}`;
+        const response = await fetch(request);
+        const data = await response.json();
+        totalCount = Number(data.totalCount) || 0;
+        renderTable(data.formData.recordset);
+        renderPagination(totalCount);
+
+      }
+
+      // Initialize the table on page load
+      document.addEventListener('DOMContentLoaded', () => {
+        fetchFormsTemporaryChangesLocation();
+      });

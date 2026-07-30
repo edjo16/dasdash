@@ -1,0 +1,277 @@
+
+div#paymnet_div.Not
+    div.row
+        div.col-md-4
+            +floating-select('Originating bank', 'banco', [], false, '', '','', {defaultValue: `N/A`})
+        div.col-md-4
+            +floating-select('Currency', 'moneda', [], false)
+        div.col-md-4
+            +floating-input('Transaction amount', 'monto', 'number', false, '', '', '', {min: '0.01', step: '.01', maxlength: '8', oninput: 'if(this.value < 0) this.value = 0;'})
+    div.row
+        div.col-md-8
+            +floating-beneficiary('Beneficiary', 'beneficiario', true)
+
+    //- Luxemburgo extra fields
+    div#luxemburgo_div.Not
+        hr
+        h5.mb-3 Transfer Letter Information (Luxemburgo)
+
+        div.row
+            div.col-md-6
+                button#btn_preview_lux_pdf.btn.btn-sm.btn-outline-secondary.mt-1(
+                    type="button"
+                    style="display:none"
+                    disabled
+                )
+                    i.fas.fa-file-pdf.me-1
+                    | Preview Luxemburgo PDF
+
+            div.col-md-6
+                div#lux_pdf_status(style="display:none")
+
+    script.
+        // ── Shared preview UI state + Luxemburgo PDF preview ─────────────────
+        (function(){
+            const LUX_BANK_NAME = 'Banco de Luxemburgo';
+            let _luxPdfGenerating = false;
+
+            function debounce(fn, delay){
+                let t;
+                return function(){
+                    clearTimeout(t);
+                    t = setTimeout(fn, delay);
+                };
+            }
+
+            function isLuxemburgoSelected(){
+                const bancoSelect = document.getElementById('banco');
+                if(!bancoSelect || bancoSelect.selectedIndex < 0) return false;
+                return bancoSelect.options[bancoSelect.selectedIndex].text === LUX_BANK_NAME;
+            }
+
+            function resetPreviewButton(btn, buttonReadyText){
+                if(!btn) return;
+
+                btn.disabled = false;
+                btn.innerHTML = `
+                    <i class="fas fa-file-pdf me-1"></i>
+                    ${buttonReadyText || 'Preview PDF'}
+                `;
+            }
+
+            function clearPreviewState(statusEl, btn, buttonReadyText){
+                if(statusEl){
+                    statusEl.innerHTML = '';
+                    statusEl.style.display = 'none';
+                }
+
+                if(btn){
+                    if(btn._objectUrl){
+                        URL.revokeObjectURL(btn._objectUrl);
+                        btn._objectUrl = null;
+                    }
+                    btn.style.display = 'none';
+                    btn.onclick = null;
+                    resetPreviewButton(btn, buttonReadyText);
+                }
+            }
+
+            function setPreviewState({
+                statusEl,
+                btn,
+                loading = false,
+                ready = false,
+                error = false,
+                errorText = 'Error generating PDF',
+                buttonReadyText = 'Preview PDF',
+                buttonLoadingText = 'Loading changes ...',
+                objectUrl = null,
+                filename = 'document.pdf'
+            }) {
+                if(btn){
+                    if(loading){
+                        btn.style.display = '';
+                        btn.disabled = true;
+                        btn.innerHTML = `
+                            <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                            ${buttonLoadingText}
+                        `;
+                        btn.onclick = null;
+                    }
+
+                    if(ready){
+                        btn.style.display = '';
+                        btn.disabled = false;
+                        btn.innerHTML = `
+                            <i class="fas fa-file-pdf me-1"></i>
+                            ${buttonReadyText}
+                        `;
+                        btn.onclick = function(){
+                            const link = document.createElement('a');
+                            link.href = objectUrl;
+                            link.download = filename;
+                            document.body.appendChild(link);
+                            link.click();
+                            document.body.removeChild(link);
+                        };
+                    }
+
+                    if(error){
+                        btn.style.display = '';
+                        btn.disabled = false;
+                        btn.innerHTML = `
+                            <i class="fas fa-file-pdf me-1"></i>
+                            ${buttonReadyText}
+                        `;
+                    }
+                }
+
+                if(statusEl){
+
+                    if(error){
+                        statusEl.style.display = '';
+                        statusEl.innerHTML = `
+                            <i class="fas fa-exclamation-circle me-1 text-danger"></i>
+                            ${errorText}
+                        `;
+                        setTimeout(function(){
+                            statusEl.style.display = 'none';
+                        }, 3000);
+                    }
+                }
+            }
+
+            function toggleLuxForm(){
+                const luxDiv = document.getElementById('luxemburgo_div');
+                const statusEl = document.getElementById('lux_pdf_status');
+                const btn = document.getElementById('btn_preview_lux_pdf');
+
+                if(!luxDiv) return;
+
+                if(isLuxemburgoSelected()){
+                    luxDiv.classList.remove('Not');
+                    luxDiv.classList.add('row');
+                } else {
+                    luxDiv.classList.remove('row');
+                    luxDiv.classList.add('Not');
+                    clearPreviewState(statusEl, btn, 'Preview Luxemburgo PDF');
+                }
+            }
+
+            async function tryGenerateLuxPdf(){
+                if(_luxPdfGenerating || !isLuxemburgoSelected()) return;
+                const company = document.getElementById('compania').value;
+                const benEl = document.getElementById('beneficiario');
+                const monedaEl = document.getElementById('moneda');
+                const montoEl = document.getElementById('monto');
+                const descriptionEl = document.getElementById('description');
+
+                const correspondiente = descriptionEl ? descriptionEl.innerHTML.trim() : '';
+                const benId = benEl ? benEl.value : '';
+                const moneda = monedaEl ? monedaEl.value : '';
+                const monto = montoEl ? montoEl.value : '';
+
+                if(!benId || !moneda || !monto) return;
+
+                _luxPdfGenerating = true;
+
+                const statusEl = document.getElementById('lux_pdf_status');
+                const btn = document.getElementById('btn_preview_lux_pdf');
+
+                setPreviewState({
+                    statusEl,
+                    btn,
+                    loading: true,
+                    errorText: 'Error generating Luxemburgo PDF',
+                    buttonReadyText: 'Preview Luxemburgo PDF',
+                    buttonLoadingText: 'Loading changes...'
+                });
+
+                try {
+                    const res = await fetch('/preview-luxemburgo-pdf', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            beneficiario_id: benId,
+                            company:company,
+                            moneda: moneda,
+                            monto: monto,
+                            correspondiente: correspondiente
+                        })
+                    });
+
+                    if(!res.ok){
+                        throw new Error('Status ' + res.status);
+                    }
+
+                    const json = await res.json();
+
+                    if(!json.pdf){
+                        throw new Error('No PDF data');
+                    }
+
+                    const byteChars = atob(json.pdf);
+                    const byteArr = new Uint8Array(byteChars.length);
+
+                    for(let i = 0; i < byteChars.length; i++){
+                        byteArr[i] = byteChars.charCodeAt(i);
+                    }
+
+                    const blob = new Blob([byteArr], { type: 'application/pdf' });
+
+                    if(btn && btn._objectUrl){
+                        URL.revokeObjectURL(btn._objectUrl);
+                    }
+
+                    const objectUrl = URL.createObjectURL(blob);
+                    if(btn) btn._objectUrl = objectUrl;
+
+                    setPreviewState({
+                        statusEl,
+                        btn,
+                        ready: true,
+                        buttonReadyText: 'Preview Luxemburgo PDF',
+                        objectUrl,
+                        filename: json.filename || 'Transferencia_Luxemburgo.pdf'
+                    });
+
+                } catch(e){
+                    console.warn('[LuxPDF] Generation failed', e);
+
+                    setPreviewState({
+                        statusEl,
+                        btn,
+                        error: true,
+                        errorText: 'Error generating Luxemburgo PDF',
+                        buttonReadyText: 'Preview Luxemburgo PDF'
+                    });
+                } finally {
+                    _luxPdfGenerating = false;
+                }
+            }
+
+            const debouncedLuxPdf = debounce(tryGenerateLuxPdf, 600);
+
+            document.addEventListener('DOMContentLoaded', function(){
+                const bancoEl = document.getElementById('banco');
+                const beneficiarioEl = document.getElementById('beneficiario');
+                const monedaEl = document.getElementById('moneda');
+                const montoEl = document.getElementById('monto');
+                const descriptionEl = document.getElementById('description');
+
+                bancoEl?.addEventListener('change', toggleLuxForm);
+                bancoEl?.addEventListener('change', debouncedLuxPdf);
+                beneficiarioEl?.addEventListener('change', debouncedLuxPdf);
+                monedaEl?.addEventListener('change', debouncedLuxPdf);
+                montoEl?.addEventListener('input', debouncedLuxPdf);
+                descriptionEl?.addEventListener('input', debouncedLuxPdf);
+
+                toggleLuxForm();
+            });
+
+            window.toggleLuxForm = toggleLuxForm;
+            window.isLuxemburgoSelected = isLuxemburgoSelected;
+            window.setPreviewState = setPreviewState;
+        })();

@@ -1,0 +1,242 @@
+extends ../layout
+include ../mixins/floating-input
+include ../mixins/floating-textarea
+include ../mixins/data-table
+include ../mixins/floating-select
+include ../ui/filter-bar
+include ../mixins/breadcrumb
+
+block layout-content
+  div#layoutSidenav_content
+    main
+      div.container-fluid.px-4
+        input#username(type="hidden" value=userProfile.UsuarioID)
+        input#compania_val(type="hidden" value=compania)
+
+        +app-breadcrumb({
+          homeHref: '/',
+          items: [{ label: title, active: true }]
+        })
+
+        +fb-bar
+          a#btnNewBeneficiary.page-link(
+            href="#"
+            onclick="openNewBeneficiaryModal(); return false;"
+            style="display:flex;align-items:center;gap:5px;background-color:#00586f;color:white;border-radius:5px;padding:6px 12px;height:34px;")
+            i.fas.fa-plus
+            span New Beneficiary
+
+          +fb-search({
+            id: 'searchInput',
+            placeholder: 'Search by name, bank, account, IBAN, SWIFT...',
+            onkeyup: 'window._beneficiarySearchKeyup(event)'
+          })
+
+          +fb-select({
+            id: 'depFilter',
+            icon: 'fa-building',
+            items: (departments || []).map(function(d){ return { value: d.id, label: d.nombre }; }),
+            placeholder: 'All departments',
+            placeholderDisabled: false,
+            onchange: 'window._beneficiaryFilterChange()',
+            minWidth: '160px'
+          })
+
+          +fb-select({
+            id: 'estadoFilter',
+            icon: 'fa-toggle-on',
+            items: [
+              { value: '1', label: 'Active' },
+              { value: '0', label: 'Inactive' }
+            ],
+            placeholder: 'All statuses',
+            placeholderDisabled: false,
+            onchange: 'window._beneficiaryFilterChange()',
+            minWidth: '135px'
+          })
+
+          +fb-actions
+            +fb-view-toggle({id: 'beneficiaryViewMode', tableId: 'MainTable', ariaLabel: 'Select beneficiary data view'})
+            +fb-page-size({
+              id: 'limitSelect',
+              sizes: [15, 25, 50],
+              defaultSize: 15,
+              onchange: 'window._beneficiaryLimitChange()'
+            })
+            +fb-pagination({
+              onPrev: 'window._beneficiaryPrevPage()',
+              onNext: 'window._beneficiaryNextPage()'
+            })
+
+        +fb-info({ id: 'totalCount' })
+
+        +data-table('MainTable', '_noCount', { internalViewToggle: false })
+          thead
+            tr#header
+              th(style="width:4%") #
+              th(style="width:11%") Company
+              th(style="width:11%") Dep
+              th(style="width:11%") keyword
+              th(style="width:18%") Name
+              th(style="width:14%") Bank
+              th(style="width:13%") Account
+              th(style="width:11%") Country
+              th(style="width:9%") Access
+              th(style="width:9%") Status
+          tbody#beneficiaryTbody.bg-white
+            tr
+              td.text-center.py-4(colspan="10")
+                span.spinner-border.spinner-border-sm.me-2
+                | Loading…
+
+  include ./beneficiary_modal
+
+  script.
+    window._benDepartments = !{JSON.stringify(departments || [])};
+    window._benCompanies   = !{JSON.stringify(companies   || [])};
+    window._benDefaultCompania = !{JSON.stringify(compania || '')};
+    window._benDefaultDep      = !{JSON.stringify(userProfile.Dep || '')};
+    (function(){
+      let state = { page:1, limit:15, total:0 };
+      let searchTimer = null;
+
+      const get  = id => document.getElementById(id);
+      const user = () => get('username')?.value || '';
+      const q    = () => (get('searchInput')?.value || '').trim();
+      const depFilter    = () => get('depFilter')?.value    || '';
+      const estadoFilter = () => get('estadoFilter')?.value || '';
+      const esc  = v  => (v == null ? '' : String(v)).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+      // ── Table / pagination logic ────────────────────────────────────────
+      async function fetchPage(page){
+        state.page = page;
+        state.limit = parseInt(get('limitSelect')?.value || '15');
+        const tbody = get('beneficiaryTbody');
+          tbody.innerHTML = '<tr><td class="text-center py-4" colspan="10"><span class="spinner-border spinner-border-sm me-2"></span>Loading…</td></tr>';
+        try {
+          const res = await fetch('/list_beneficiaries', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ user: user(), q: q(), page: state.page, limit: state.limit,
+              dep_filter: depFilter() || null, estado: estadoFilter() !== '' ? estadoFilter() : null })
+          });
+          if(!res.ok) throw new Error('Status ' + res.status);
+          const json = await res.json();
+          state.total = json.total || 0;
+          populateDepFilter(json.departments || []);
+          renderTable(json.data || []);
+          renderPager();
+        } catch(err) {
+          console.error(err);
+          tbody.innerHTML = '<tr><td class="text-center text-danger py-4" colspan="10">Error loading data.</td></tr>';
+        }
+      }
+
+      function renderTable(rows){
+        const tbody  = get('beneficiaryTbody');
+        const counter = get('totalCount');
+        if(!rows.length){
+          tbody.innerHTML = '<tr><td class="text-center text-muted py-4" colspan="10">No beneficiaries found.</td></tr>';
+          if(counter) counter.textContent = '';
+          return;
+        }
+        const start = (state.page - 1) * state.limit + 1;
+        const end   = Math.min(state.page * state.limit, state.total);
+        if(counter) counter.textContent = 'Showing ' + start + '–' + end + ' of ' + state.total;
+
+        tbody.innerHTML = rows.map((r, i) => {
+          const canEdit = r.edit === true;
+          const badge   = canEdit
+            ? '<span class="badge bg-success">Edit</span>'
+            : '<span class="badge bg-secondary">View</span>';
+          return '<tr onclick="openBeneficiaryModal(\'' + r.beneficiario_id + '\')">'
+            + '<td class="text-muted">' + (start + i) + '</td>'
+            + '<td>' + esc(r.compania_nombre) + '</td>'
+            + '<td>' + esc(r.departamento) + '</td>'
+            + '<td>' + esc(r.display_name) + '</td>'
+            + '<td>' + esc(r.cuenta_banco_beneficiario) + '</td>'
+            + '<td>' + esc(r.banco_beneficiario) + '</td>'
+            + '<td>' + esc(r.cuenta_banco) + '</td>'
+            + '<td>' + esc(r.pais_beneficiario_nombre||'') + '</td>'
+            + '<td>' + badge + '</td>'+
+            '<td>' + (r.estado == 1 ? '<span class="badge bg-success">Active</span>' : r.estado == 0 ? '<span class="badge bg-danger">Inactive</span>' : '') + '</td>' +
+            '</tr>';
+        }).join('');
+      }
+
+      function populateDepFilter(departments){
+        const sel = get('depFilter');
+        if(!sel || sel.options.length > 1) return;
+        departments.forEach(function(d){
+          const opt = document.createElement('option');
+          opt.value = d.id;
+          opt.textContent = d.nombre;
+          sel.appendChild(opt);
+        });
+      }
+
+      function renderPager(){
+        const totalPages = Math.ceil(state.total / state.limit) || 1;
+        const pagerButtons = document.querySelectorAll('.fb-pagination .fb-page-btn');
+        const prev = pagerButtons[0];
+        const next = pagerButtons[1];
+        if(prev) prev.classList.toggle('disabled', state.page <= 1);
+        if(next) next.classList.toggle('disabled', state.page >= totalPages);
+      }
+
+      window._beneficiarySearchKeyup = function(e){
+        if (e && e.key === 'Enter') {
+          clearTimeout(searchTimer);
+          fetchPage(1);
+        }
+      };
+
+      window._beneficiaryFilterChange = function(){
+        fetchPage(1);
+      };
+
+      window._beneficiaryLimitChange = function(){
+        fetchPage(1);
+      };
+
+      window._beneficiaryPrevPage = function(){
+        if(state.page > 1) fetchPage(state.page - 1);
+      };
+
+      window._beneficiaryNextPage = function(){
+        const totalPages = Math.ceil(state.total / state.limit) || 1;
+        if(state.page < totalPages) fetchPage(state.page + 1);
+      };
+
+      window._beneficiaryListRefresh = () => fetchPage(state.page);
+
+      document.addEventListener('DOMContentLoaded', function(){
+        fetchPage(1);
+        get('searchInput')?.addEventListener('input', function(){
+          clearTimeout(searchTimer);
+          searchTimer = setTimeout(function(){
+            fetchPage(1);
+          }, 300);
+        });
+      });
+    })();
+
+  style.
+    .shadow-table {
+      overflow-y: auto;
+      overflow-x: auto;
+      max-height: calc(100vh - 340px);
+    }
+    #MainTable { table-layout: fixed; width: 100%; }
+    #MainTable thead th {
+      position: sticky;
+      top: 0;
+      z-index: 2;
+      background: #ffffff;
+    }
+    #MainTable tbody tr td { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .shadow-table::-webkit-scrollbar { width: 5px; }
+    .shadow-table::-webkit-scrollbar-track { background: transparent; }
+    .shadow-table::-webkit-scrollbar-thumb { background: #c0cdd4; border-radius: 10px; }
+    .shadow-table::-webkit-scrollbar-thumb:hover { background: #00586f; }
+

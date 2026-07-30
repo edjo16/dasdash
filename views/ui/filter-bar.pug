@@ -1,0 +1,752 @@
+//- ══════════════════════════════════════════════════════════════
+//- Filter Bar — individual reusable mixins + convenience wrapper
+//- Styles live in: public/css/filter-bar.css (loaded via layout)
+//- ══════════════════════════════════════════════════════════════
+//-
+//- INDIVIDUAL MIXINS
+//- ─────────────────
+//- +fb-bar                          — flex container (.fb-bar)
+//- +fb-search(opts)                 — search pill input
+//-     opts.id, opts.placeholder, opts.onkeyup
+//- +fb-select(opts)                 — generic dropdown pill
+//-     opts.id, opts.icon, opts.items [{value,label}]
+//-     opts.placeholder, opts.placeholderDisabled (default true)
+//-     opts.onchange, opts.minWidth, opts.iconStyle, opts.filterLabel
+//- +fb-department-select(opts)      — department dropdown (optional)
+//-     opts.items [{nombre}], opts.onchange
+//- +fb-type-select(opts)            — Approvals/Payments/Request
+//-     opts.onchange
+//- +fb-status-select(opts)          — approval status dropdown
+//-     opts.onchange, opts.items (optional override)
+//- +fb-date-btn(opts)               — calendar button trigger
+//-     opts.targetId
+//- +fb-date-offcanvas(opts)         — offcanvas date panel
+//-     opts.id, opts.onChange
+//- +fb-reset-btn(opts)              — reset button
+//-     opts.onclick (default 'resetFilters()')
+//- +fb-actions                      — right-side wrapper (block mixin)
+//- +fb-download-btn(opts)           — Excel download button
+//-     opts.onclick (default 'downloadExcel(event)')
+//- +fb-page-size(opts)              — page-size select
+//-     opts.id, opts.sizes, opts.onchange
+//- +fb-view-toggle(opts)            — table/card view selector
+//-     opts.id, opts.ariaLabel, opts.tableId
+//- +fb-pagination(opts)             — prev/next buttons
+//-     opts.onPrev, opts.onNext
+//- +fb-info(opts)                   — total count span
+//-     opts.id (default 'totalCount')
+//- +fb-mobile-toggle(opts)          — "Filters" button (mobile/tablet only)
+//-     opts.targetId, opts.label, opts.badgeId
+//- +fb-secondary(opts)              — drawer wrapper (block mixin)
+//-     opts.id, opts.title
+//-     desktop: children flow inline in +fb-bar (display: contents)
+//-     mobile/tablet (≤991px): becomes bottom sheet opened by +fb-mobile-toggle
+//-
+//- CONVENIENCE WRAPPER
+//- ────────────────────
+//- +filter-bar(opts)                — composes all the above
+//-   include ../ui/filter-bar
+//-   - const _depts = (managerDepartments && managerDepartments.length > 0) ? managerDepartments : null
+//-   +filter-bar({
+//-     id: 'approvals',                    // unique prefix (required)
+//-     searchId: 'SearchBox',              // id for the search input
+//-     searchPlaceholder: 'Search...',
+//-     processes: process,                 // array of strings → Process dropdown
+//-     departments: _depts,               // array of {nombre} → Department dropdown; null = hidden
+//-     showType:   true,                   // Type dropdown  (Approvals/Payments/Request)
+//-     showStatus: true,                   // Status dropdown
+//-     showDate:   true,                   // Date range offcanvas
+//-     showDownload: true,                 // Excel download button
+//-     showViewToggle: false,              // Optional table/cards toggle in actions
+//-     viewTableId: 'MainTable',           // table id used by +data-table for card mode sync
+//-     viewToggleId: 'approvals-view-mode',// optional custom id for the toggle root
+//-     pageSizes: [15,25,50,100,250],
+//-     onSearch:       'SearchTableApproval',
+//-     onChange:       'SelectTable',
+//-     onStatusChange: 'SelectFetch',
+//-     totalCountId:   'totalCount',
+//-   })
+//- ──────────────────────────────────────────────────────────────
+
+//- ══════════════════════════════════════════════════════════════
+//- INDIVIDUAL MIXINS
+//- ══════════════════════════════════════════════════════════════
+
+//- ── +fb-bar ─────────────────────────────────────────────────
+//- Flex container. Wrap individual filter mixins inside.
+mixin fb-bar
+  div.fb-bar
+    block
+
+//- ── +fb-search(opts) ────────────────────────────────────────
+//- opts: { id, placeholder, onkeyup }
+mixin fb-search(opts)
+  - const _id  = (opts && opts.id)          || 'SearchBox'
+  - const _ph  = (opts && opts.placeholder) || 'Search...'
+  - const _ev  = (opts && opts.onkeyup)     || ''
+  div.fb-search(onclick="var i=this.querySelector('input'); if(i) i.focus();")
+    i.fas.fa-search
+    input(id=_id type="text" placeholder=_ph onkeyup=_ev autocomplete="off")
+
+//- ── +fb-select(opts) ────────────────────────────────────────
+//- Generic dropdown pill. Use for any select-based filter.
+//- opts: {
+//-   id, icon (fa class, default 'fa-layer-group'),
+//-   items [{value, label}], placeholder,
+//-   placeholderDisabled (default true — set false for "All X" reset option),
+//-   onchange, minWidth (CSS value e.g. '130px'), iconStyle, filterLabel
+//- }
+mixin fb-select(opts)
+  - const _id      = (opts && opts.id)                          || 'SelectBox'
+  - const _icon    = (opts && opts.icon)                        || 'fa-layer-group'
+  - const _items   = (opts && opts.items)                       || []
+  - const _ph      = (opts && opts.placeholder)                 || 'Select...'
+  - const _phDis   = !(opts && opts.placeholderDisabled === false)
+  - const _ev      = (opts && opts.onchange)                    || ''
+  - const _minW    = (opts && opts.minWidth)                    || null
+  - const _iStyle  = (opts && opts.iconStyle)                   || ''
+  - const _label   = (opts && opts.filterLabel)                 || _ph
+  div.fb-select-wrap(style=`${_minW ? 'min-width:'+_minW+';' : ''}` data-fb-filter=_label)
+    i(class=`fas ${_icon} fb-icon` style=_iStyle)
+    select(id=_id onchange=_ev)
+      if _phDis
+        option(value="" disabled selected)= _ph
+      else
+        option(value="" selected)= _ph
+      each item in _items
+        option(value=item.value)= item.label
+    i.fas.fa-chevron-down.fb-select-arrow
+
+//- ── +fb-department-select(opts) ─────────────────────────────
+//- opts: { items [{nombre}], onchange }
+mixin fb-department-select(opts)
+  - const _items = (opts && opts.items) || []
+  - const _ev    = (opts && opts.onchange) || ''
+  if _items && _items.length > 0
+    div.fb-select-wrap(data-fb-filter="Department")
+      i.fas.fa-building.fb-icon
+      select#SelectBoxDepartment(onchange=_ev)
+        option(value="All") All departments
+        each dept in _items
+          option(value=dept.nombre)= dept.nombre
+      i.fas.fa-chevron-down.fb-select-arrow
+
+//- ── +fb-type-select(opts) ───────────────────────────────────
+//- Approvals / Payments / Request dropdown (approvals-specific).
+//- opts: { onchange }
+mixin fb-type-select(opts)
+  - const _ev = (opts && opts.onchange) || ''
+  div.fb-select-wrap(style="min-width:95px;" data-fb-filter="Type")
+    i.fas.fa-tag.fb-icon
+    select#justPayments(onchange=_ev)
+      option(value="" disabled selected) Type
+      option(value="0") Approvals
+      option(value="1") Payments
+      option(value="2") Request
+      option(value="All") All
+    i.fas.fa-chevron-down.fb-select-arrow
+
+//- ── +fb-status-select(opts) ─────────────────────────────────
+//- Approval workflow status dropdown.
+//- opts: { onchange, items (optional override [{value,label}]) }
+mixin fb-status-select(opts)
+  - const _ev    = (opts && opts.onchange) || ''
+  - const _items = (opts && opts.items) || [{value:'Ongoing',label:'Ongoing'},{value:'Pending',label:'Pending'},{value:'Closed',label:'Closed'},{value:'Rejected',label:'Rejected'},{value:'All',label:'All'}]
+  div.fb-select-wrap(style="min-width:105px;" data-fb-filter="Status")
+    i.fas.fa-circle.fb-icon(style="font-size:.45rem;")
+    select#SelectBoxStatus(onchange=_ev)
+      option(value="" disabled selected) Status
+      each item in _items
+        option(value=item.value)= item.label
+    i.fas.fa-chevron-down.fb-select-arrow
+
+//- ── +fb-date-btn(opts) ──────────────────────────────────────
+//- Button that opens the date offcanvas. Pair with +fb-date-offcanvas.
+//- opts: { targetId }
+mixin fb-date-btn(opts)
+  - const _ocId = (opts && opts.targetId) || 'fb-date-offcanvas'
+  button.fb-btn(
+    type="button"
+    data-fb-filter="Date"
+    data-bs-toggle="offcanvas"
+    data-bs-target=`#${_ocId}`
+    aria-controls=_ocId
+  )
+    i.fas.fa-calendar-alt
+    span Date
+
+//- ── +fb-date-offcanvas(opts) ────────────────────────────────
+//- Offcanvas date range panel. Place outside fb-bar.
+//- opts: { id, onChange }
+mixin fb-date-offcanvas(opts)
+  - const _ocId = (opts && opts.id)       || 'fb-date-offcanvas'
+  - const _ev   = (opts && opts.onChange) || ''
+  div.offcanvas.offcanvas-end.fb-date-oc(
+    data-bs-scroll="true"
+    data-bs-backdrop="true"
+    tabindex="-1"
+    id=_ocId
+    aria-labelledby=`${_ocId}-lbl`
+  )
+    div.offcanvas-header
+      h5.offcanvas-title(id=`${_ocId}-lbl`)
+        i.fas.fa-calendar-alt(style="margin-right:8px; color:#00586f;")
+        | Date Filters
+      button.btn-close(type="button" data-bs-dismiss="offcanvas" aria-label="Close")
+    div.offcanvas-body
+      p.fb-oc-hint Filter type:
+      div.fb-oc-radios
+        label.fb-oc-radio
+          input(type="radio" name="dateFilterStart" value="true" checked onclick=_ev)
+          span Start date only
+        label.fb-oc-radio
+          input(type="radio" name="dateFilterStart" value="false" onclick=_ev)
+          span Start and end date
+      div.fb-oc-fields
+        div.fb-oc-field
+          label.fb-oc-label Start Date
+          input#solicitante_fecha.form-control.date(
+            type="text"
+            name="solicitante_fecha"
+            onchange="datemins(this)"
+            placeholder="DD/MM/YYYY"
+          )
+        div.fb-oc-field
+          label.fb-oc-label End Date
+          input#cierre_fecha.form-control.date(
+            type="text"
+            name="cierre_fecha"
+            onchange="datemins(this)"
+            placeholder="DD/MM/YYYY"
+          )
+      p.fb-oc-note Searches update automatically when dates are selected.
+
+//- ── +fb-reset-btn(opts) ─────────────────────────────────────
+//- opts: { onclick (default 'resetFilters()') }
+mixin fb-reset-btn(opts)
+  - const _ev = (opts && opts.onclick) || 'resetFilters()'
+  button.fb-btn(type="button" onclick=_ev)
+    svg(xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round")
+      path(stroke="none" d="M0 0h24v24H0z" fill="none")
+      path(d="M20 11a8.1 8.1 0 0 0 -15.5 -2m-.5 -4v4h4")
+      path(d="M4 13a8.1 8.1 0 0 0 15.5 2m.5 4v-4h-4")
+
+//- ── +fb-actions ─────────────────────────────────────────────
+//- Right-side wrapper (margin-left: auto pushes it to the right).
+//- Block mixin — put fb-download-btn, fb-page-size, fb-pagination inside.
+mixin fb-actions
+  div.fb-actions
+    block
+
+//- ── +fb-download-btn(opts) ──────────────────────────────────
+//- opts: { onclick (default 'downloadExcel(event)') }
+mixin fb-download-btn(opts)
+  - const _ev = (opts && opts.onclick) || 'downloadExcel(event)'
+  button.fb-btn(type="button" onclick=_ev)
+    img(src="/icons/excel.png" style="width:13px;height:13px;object-fit:contain;vertical-align:middle;" alt="Excel")
+
+//- ── +fb-page-size(opts) ─────────────────────────────────────
+//- opts: { id, sizes [15,25,50,100,250], onchange, defaultSize }
+mixin fb-page-size(opts)
+  - const _id      = (opts && opts.id)          || 'SelectBoxPages'
+  - const _sizes   = (opts && opts.sizes)        || [15, 25, 50, 100, 250]
+  - const _ev      = (opts && opts.onchange)     || ''
+  - const _default = (opts && opts.defaultSize)  || _sizes[0]
+  div.fb-select-wrap-page
+    select(id=_id onchange=_ev)
+      each ps in _sizes
+        if ps === _default
+          option(value=ps selected)= ps
+        else
+          option(value=ps)= ps
+    i.fas.fa-chevron-down.fb-select-arrow
+
+//- ── +fb-view-toggle(opts) ───────────────────────────────────
+//- Table/Card view selector for list UIs.
+//- opts: { id (default 'ViewMode'), ariaLabel (default 'Select data view'), tableId }
+mixin fb-view-toggle(opts)
+  - const _id    = (opts && opts.id)        || 'ViewMode'
+  - const _aria  = (opts && opts.ariaLabel) || 'Select data view'
+  - const _table = (opts && opts.tableId)   || ''
+  if _table
+    div.fb-view-toggle(id=_id role="group" aria-label=_aria data-card-table-id=_table)
+      button.fb-view-btn.is-active(type="button" data-view="table" aria-pressed="true")
+        i.fas.fa-table(aria-hidden="true")
+      button.fb-view-btn(type="button" data-view="card" aria-pressed="false")
+        i.fas.fa-th-large(aria-hidden="true")
+  else
+    div.fb-view-toggle(id=_id role="group" aria-label=_aria)
+      button.fb-view-btn.is-active(type="button" data-view="table" aria-pressed="true")
+        i.fas.fa-table(aria-hidden="true")
+      button.fb-view-btn(type="button" data-view="card" aria-pressed="false")
+        i.fas.fa-th-large(aria-hidden="true")
+
+//- ── +fb-pagination(opts) ────────────────────────────────────
+//- opts: { onPrev, onNext }
+mixin fb-pagination(opts)
+  - const _prev = (opts && opts.onPrev) || 'changePage(currentPage - 1)'
+  - const _next = (opts && opts.onNext) || 'changePage(currentPage + 1)'
+  div.fb-pagination
+    button.fb-page-btn(type="button" onclick=_prev aria-label="Previous")
+      i.fas.fa-chevron-left
+    button.fb-page-btn(type="button" onclick=_next aria-label="Next")
+      i.fas.fa-chevron-right
+
+//- ── +fb-info(opts) ──────────────────────────────────────────
+//- Total record / page count display line.
+//- opts: { id (default 'totalCount') }
+mixin fb-info(opts)
+  - const _id = (opts && opts.id) || 'totalCount'
+  span.fb-info(id=_id)
+
+//- ── +fb-mobile-toggle(opts) ─────────────────────────────────
+//- "Filters" button that opens the secondary-filter drawer.
+//- Hidden on desktop via CSS, visible on tablet / mobile.
+//- opts: { targetId (default 'fb-secondary'), label (default 'Filters'), badgeId }
+mixin fb-mobile-toggle(opts)
+  - const _target = (opts && opts.targetId) || 'fb-secondary'
+  - const _label  = (opts && opts.label)    || 'Filters'
+  - const _badge  = (opts && opts.badgeId)  || (_target + '-badge')
+  button.fb-btn.fb-mobile-toggle(
+    type="button"
+    aria-expanded="false"
+    aria-controls=_target
+    data-fb-open=_target
+  )
+    i.fas.fa-sliders-h(aria-hidden="true")
+    span= _label
+    span.fb-toggle-badge(id=_badge hidden aria-live="polite")
+
+//- ── +fb-secondary(opts) ─────────────────────────────────────
+//- Block mixin. Wraps secondary filters. On desktop the children
+//- flow inline into +fb-bar (via display: contents). On tablet /
+//- mobile the same container becomes a fixed bottom sheet that is
+//- opened with +fb-mobile-toggle.
+//- opts: { id (default 'fb-secondary'), title (default 'Filters') }
+mixin fb-secondary(opts)
+  - const _id    = (opts && opts.id)    || 'fb-secondary'
+  - const _title = (opts && opts.title) || 'Filters'
+  div.fb-backdrop(hidden data-fb-close=_id aria-hidden="true")
+  div.fb-secondary(
+    id=_id
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby=`${_id}-title`
+    aria-hidden="true"
+    tabindex="-1"
+  )
+    div.fb-secondary-header
+      h2.fb-secondary-title(id=`${_id}-title`)
+        i.fas.fa-sliders-h(aria-hidden="true")
+        | #{_title}
+      button.fb-secondary-close(type="button" aria-label="Close filters" data-fb-close=_id)
+        i.fas.fa-times(aria-hidden="true")
+    div.fb-secondary-body
+      div.fb-secondary-active(data-fb-active-wrap hidden)
+        p.fb-secondary-active-label Active filters
+        div.fb-secondary-chip-list(data-fb-active-chips)
+      block
+    div.fb-secondary-footer
+      button.fb-secondary-clear(type="button" data-fb-clear=_id) Clear
+      button.fb-secondary-apply(type="button" data-fb-close=_id) Apply
+      button.fb-secondary-dismiss(type="button" data-fb-close=_id) Close
+
+  script.
+    (function(){
+      if (window.__fbBottomSheetInit) return;
+      window.__fbBottomSheetInit = true;
+
+      var lastFocus = null;
+      var MOBILE_QUERY = window.matchMedia('(max-width: 991.98px)');
+
+      function focusableInside(el) {
+        return el.querySelectorAll(
+          'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]),' +
+          ' textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+        );
+      }
+
+      function toArray(nodeList) {
+        return Array.prototype.slice.call(nodeList || []);
+      }
+
+      function uniq(values) {
+        var seen = {};
+        var out = [];
+        values.forEach(function(v){
+          var key = String(v).toLowerCase();
+          if (seen[key]) return;
+          seen[key] = true;
+          out.push(v);
+        });
+        return out;
+      }
+
+      function isActiveValue(value) {
+        if (value == null) return false;
+        var normalized = String(value).trim();
+        if (!normalized) return false;
+        return normalized.toLowerCase() !== 'all';
+      }
+
+      function getLayerLabel(node, index) {
+        return node.getAttribute('data-fb-filter') || node.getAttribute('aria-label') || ('Filter ' + (index + 1));
+      }
+
+      function ensureLayerStructure(drawer) {
+        var body = drawer && drawer.querySelector('.fb-secondary-body');
+        if (!body || body.getAttribute('data-fb-layerized') === 'true') return;
+        var nodes = toArray(body.children);
+        var order = 0;
+
+        nodes.forEach(function(node){
+          if (!node || node.nodeType !== 1) return;
+          if (node.hasAttribute('data-fb-active-wrap') || node.classList.contains('fb-layer')) return;
+
+          var label = getLayerLabel(node, order++);
+          var layer = document.createElement('section');
+          layer.className = 'fb-layer';
+          layer.setAttribute('data-fb-layer-label', label);
+
+          var header = document.createElement('button');
+          header.className = 'fb-layer-header';
+          header.type = 'button';
+          header.setAttribute('data-fb-layer-toggle', 'true');
+          header.setAttribute('aria-expanded', 'true');
+
+          var title = document.createElement('span');
+          title.className = 'fb-layer-title';
+          title.textContent = label;
+
+          var state = document.createElement('span');
+          state.className = 'fb-layer-state';
+          state.textContent = 'Not set';
+
+          var icon = document.createElement('i');
+          icon.className = 'fas fa-chevron-down fb-layer-chevron';
+          icon.setAttribute('aria-hidden', 'true');
+
+          header.appendChild(title);
+          header.appendChild(state);
+          header.appendChild(icon);
+
+          var content = document.createElement('div');
+          content.className = 'fb-layer-content';
+          content.appendChild(node);
+
+          layer.appendChild(header);
+          layer.appendChild(content);
+          body.appendChild(layer);
+        });
+
+        body.setAttribute('data-fb-layerized', 'true');
+      }
+
+      function getLayerValues(layer) {
+        var values = [];
+        var controls = toArray(layer.querySelectorAll('select, input, textarea'));
+
+        controls.forEach(function(control){
+          if (!control || control.disabled) return;
+          var tag = control.tagName;
+          var type = (control.type || '').toLowerCase();
+
+          if (tag === 'SELECT') {
+            if (!isActiveValue(control.value)) return;
+            var selected = control.options[control.selectedIndex];
+            values.push((selected && selected.text ? selected.text : control.value).trim());
+            return;
+          }
+
+          if (type === 'checkbox' || type === 'radio') {
+            if (!control.checked) return;
+            values.push(control.getAttribute('data-fb-chip') || control.value || 'Selected');
+            return;
+          }
+
+          if (!isActiveValue(control.value)) return;
+          values.push(String(control.value).trim());
+        });
+
+        if (layer.querySelector('[data-bs-toggle="offcanvas"]')) {
+          var startDate = document.getElementById('solicitante_fecha');
+          var endDate = document.getElementById('cierre_fecha');
+          if (startDate && startDate.value.trim()) values.push('From ' + startDate.value.trim());
+          if (endDate && endDate.value.trim()) values.push('To ' + endDate.value.trim());
+        }
+
+        return uniq(values);
+      }
+
+      function updateLayerState(layer) {
+        var state = layer.querySelector('.fb-layer-state');
+        var values = getLayerValues(layer);
+
+        if (!values.length) {
+          layer.classList.remove('is-active');
+          if (state) state.textContent = 'Not set';
+          layer.setAttribute('data-fb-active-count', '0');
+          return { active: false, chips: [] };
+        }
+
+        layer.classList.add('is-active');
+        layer.setAttribute('data-fb-active-count', String(values.length));
+        if (state) state.textContent = values.length > 1 ? (values.length + ' selected') : values[0];
+        return { active: true, chips: values };
+      }
+
+      function updateDrawerState(drawer) {
+        if (!drawer) return;
+        ensureLayerStructure(drawer);
+
+        var activeWrap = drawer.querySelector('[data-fb-active-wrap]');
+        var chipList = drawer.querySelector('[data-fb-active-chips]');
+        if (chipList) chipList.innerHTML = '';
+
+        var activeLayers = 0;
+        var layers = toArray(drawer.querySelectorAll('.fb-layer'));
+        layers.forEach(function(layer){
+          var label = layer.getAttribute('data-fb-layer-label') || 'Filter';
+          var state = updateLayerState(layer);
+          if (!state.active) return;
+          activeLayers += 1;
+
+          if (chipList) {
+            var chip = document.createElement('span');
+            chip.className = 'fb-chip';
+            chip.textContent = label + ': ' + (state.chips.length > 1 ? state.chips.length + ' selected' : state.chips[0]);
+            chipList.appendChild(chip);
+          }
+        });
+
+        if (activeWrap) activeWrap.hidden = activeLayers === 0;
+        window.fbSetActiveFilterCount(drawer.id, activeLayers);
+      }
+
+      function setSelectToDefault(select) {
+        if (!select || select.disabled) return;
+        var hasAll = false;
+        var hasEmpty = false;
+        toArray(select.options).forEach(function(opt){
+          if (String(opt.value).toLowerCase() === 'all') hasAll = true;
+          if (String(opt.value) === '') hasEmpty = true;
+        });
+
+        if (hasAll) select.value = 'All';
+        else if (hasEmpty) select.value = '';
+        else select.selectedIndex = 0;
+
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+
+      function clearDrawerFilters(drawerId) {
+        var drawer = document.getElementById(drawerId);
+        if (!drawer) return;
+
+        toArray(drawer.querySelectorAll('select')).forEach(setSelectToDefault);
+        toArray(drawer.querySelectorAll('input[type="text"], input[type="search"], input[type="date"], textarea')).forEach(function(input){
+          if (!input.value) return;
+          input.value = '';
+          input.dispatchEvent(new Event('input', { bubbles: true }));
+          input.dispatchEvent(new Event('change', { bubbles: true }));
+        });
+
+        ['solicitante_fecha', 'cierre_fecha'].forEach(function(id){
+          var field = document.getElementById(id);
+          if (!field || !field.value) return;
+          field.value = '';
+          field.dispatchEvent(new Event('input', { bubbles: true }));
+          field.dispatchEvent(new Event('change', { bubbles: true }));
+        });
+
+        updateDrawerState(drawer);
+      }
+
+      function open(id) {
+        var sheet = document.getElementById(id);
+        if (!sheet || sheet.classList.contains('is-open')) return;
+        lastFocus = document.activeElement;
+        ensureLayerStructure(sheet);
+        updateDrawerState(sheet);
+        sheet.classList.add('is-open');
+        sheet.setAttribute('aria-hidden', 'false');
+        var backdrop = sheet.previousElementSibling;
+        if (backdrop && backdrop.classList.contains('fb-backdrop')) {
+          backdrop.hidden = false;
+          backdrop.setAttribute('aria-hidden', 'false');
+          requestAnimationFrame(function(){ backdrop.classList.add('is-open'); });
+        }
+        document.querySelectorAll('[data-fb-open="' + id + '"]').forEach(function(t){
+          t.setAttribute('aria-expanded', 'true');
+        });
+        document.body.classList.add('fb-drawer-open');
+        document.body.classList.add('fb-sheet-open');
+        var focusables = focusableInside(sheet);
+        if (focusables.length) focusables[0].focus();
+      }
+
+      function close(id) {
+        var sheet = id ? document.getElementById(id) : document.querySelector('.fb-secondary.is-open');
+        if (!sheet) return;
+        sheet.classList.remove('is-open');
+        sheet.setAttribute('aria-hidden', 'true');
+        var backdrop = sheet.previousElementSibling;
+        if (backdrop && backdrop.classList.contains('fb-backdrop')) {
+          backdrop.classList.remove('is-open');
+          backdrop.setAttribute('aria-hidden', 'true');
+          // Hide after transition to keep it out of the a11y tree
+          setTimeout(function(){
+            if (!sheet.classList.contains('is-open')) backdrop.hidden = true;
+          }, 250);
+        }
+        document.querySelectorAll('[data-fb-open="' + sheet.id + '"]').forEach(function(t){
+          t.setAttribute('aria-expanded', 'false');
+        });
+        if (!document.querySelector('.fb-secondary.is-open')) {
+          document.body.classList.remove('fb-drawer-open');
+          document.body.classList.remove('fb-sheet-open');
+        }
+        if (lastFocus && typeof lastFocus.focus === 'function') lastFocus.focus();
+      }
+
+      function refreshAllDrawers() {
+        toArray(document.querySelectorAll('.fb-secondary')).forEach(updateDrawerState);
+      }
+
+      // Event delegation: open / close triggers + backdrop click
+      document.addEventListener('click', function(e){
+        var openBtn = e.target.closest('[data-fb-open]');
+        if (openBtn) { e.preventDefault(); open(openBtn.getAttribute('data-fb-open')); return; }
+        var closeBtn = e.target.closest('[data-fb-close]');
+        if (closeBtn) { e.preventDefault(); close(closeBtn.getAttribute('data-fb-close')); return; }
+        var clearBtn = e.target.closest('[data-fb-clear]');
+        if (clearBtn) { e.preventDefault(); clearDrawerFilters(clearBtn.getAttribute('data-fb-clear')); return; }
+
+        var layerBtn = e.target.closest('[data-fb-layer-toggle]');
+        if (layerBtn) {
+          e.preventDefault();
+          var layer = layerBtn.closest('.fb-layer');
+          if (!layer) return;
+          layer.classList.toggle('is-collapsed');
+          layerBtn.setAttribute('aria-expanded', layer.classList.contains('is-collapsed') ? 'false' : 'true');
+          return;
+        }
+
+        // Auto-close drawer when a nested Bootstrap offcanvas/modal trigger
+        // is activated (e.g. the "Date" button inside the drawer opens its
+        // own offcanvas — z-index would otherwise stack ours on top).
+        var bsToggle = e.target.closest('[data-bs-toggle="offcanvas"], [data-bs-toggle="modal"]');
+        if (bsToggle) {
+          var hostDrawer = bsToggle.closest('.fb-secondary.is-open');
+          if (hostDrawer) close(hostDrawer.id);
+        }
+      });
+
+      // Close with Esc + trap focus inside the drawer with Tab
+      document.addEventListener('keydown', function(e){
+        var sheet = document.querySelector('.fb-secondary.is-open');
+        if (!sheet) return;
+        if (e.key === 'Escape') { e.preventDefault(); close(sheet.id); return; }
+        if (e.key === 'Tab') {
+          var f = focusableInside(sheet);
+          if (!f.length) return;
+          var first = f[0], last = f[f.length - 1];
+          if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+          else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+        }
+      });
+
+      document.addEventListener('change', function(e){
+        var target = e.target;
+        if (!target) return;
+        var host = target.closest('.fb-secondary');
+        if (host) updateDrawerState(host);
+        if (target.id === 'solicitante_fecha' || target.id === 'cierre_fecha') refreshAllDrawers();
+      });
+
+      document.addEventListener('input', function(e){
+        var target = e.target;
+        if (!target) return;
+        var host = target.closest('.fb-secondary');
+        if (host) updateDrawerState(host);
+      });
+
+      // Auto-close when the viewport grows back to desktop
+      var mq = window.matchMedia('(min-width: 992px)');
+      function onMq(e){ if (e.matches) close(); }
+      if (mq.addEventListener) mq.addEventListener('change', onMq);
+      else if (mq.addListener) mq.addListener(onMq);
+
+      if (MOBILE_QUERY.addEventListener) MOBILE_QUERY.addEventListener('change', refreshAllDrawers);
+      else if (MOBILE_QUERY.addListener) MOBILE_QUERY.addListener(refreshAllDrawers);
+
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', refreshAllDrawers);
+      } else {
+        refreshAllDrawers();
+      }
+
+      // Public API: update the badge counter on the toggle button
+      window.fbSetActiveFilterCount = function(targetId, count) {
+        var badge = document.getElementById(targetId + '-badge');
+        if (!badge) return;
+        if (count > 0) { badge.textContent = String(count); badge.hidden = false; }
+        else { badge.textContent = ''; badge.hidden = true; }
+      };
+    })();
+
+//- ══════════════════════════════════════════════════════════════
+//- CONVENIENCE WRAPPER — composes all individual mixins above.
+//- Backward-compatible with existing +filter-bar({...}) calls.
+//- ══════════════════════════════════════════════════════════════
+mixin filter-bar(opts)
+  - const _id       = (opts && opts.id)                  || 'fb'
+  - const _searchId = (opts && opts.searchId)            || 'SearchBox'
+  - const _ph       = (opts && opts.searchPlaceholder)   || 'Search...'
+  - const _procs    = (opts && opts.processes)           || []
+  - const _depts    = (opts && opts.departments)         || null
+  - const _showType = !(opts && opts.showType === false)
+  - const _showStat = !(opts && opts.showStatus === false)
+  - const _showDate = !(opts && opts.showDate === false)
+  - const _showDl   = !!(opts && opts.showDownload)
+  - const _showView = !!(opts && opts.showViewToggle)
+  - const _viewId   = (opts && opts.viewToggleId)      || (_id + '-view-toggle')
+  - const _viewTbl  = (opts && opts.viewTableId)       || 'MainTable'
+  - const _sizes    = (opts && opts.pageSizes)           || [15, 25, 50, 100, 250]
+  - const _onSearch = (opts && opts.onSearch)            || 'SearchTableApproval'
+  - const _onChange = (opts && opts.onChange)            || 'SelectTable'
+  - const _onStatus = (opts && opts.onStatusChange)      || 'SelectFetch'
+  - const _totalId  = (opts && opts.totalCountId)        || 'totalCount'
+  - const _ocId     = `${_id}-date-offcanvas`
+  - const _drawerId = `${_id}-filters`
+
+  +fb-bar
+    +fb-search({id: _searchId, placeholder: _ph, onkeyup: `${_onSearch}()`})
+    //- Mobile/tablet bottom-sheet opener (hidden on desktop)
+    +fb-mobile-toggle({targetId: _drawerId, label: 'Filters'})
+    //- Secondary filters: inline on desktop (display: contents),
+    //- bottom sheet on tablet/mobile (≤991px).
+    +fb-secondary({id: _drawerId, title: 'Filters'})
+      if _depts
+        +fb-department-select({items: _depts, onchange: `${_onChange}()`})
+      +fb-select({id: 'SelectBox', icon: 'fa-layer-group', items: _procs.map(function(p){ return {value:p,label:p}; }), placeholder: 'Process', filterLabel: 'Process', onchange: `${_onChange}()`})
+      if _showType
+        +fb-type-select({onchange: `${_onChange}()`})
+      if _showStat
+        +fb-status-select({onchange: `${_onStatus}()`})
+      if _showDate
+        +fb-date-btn({targetId: _ocId})
+    +fb-reset-btn
+    +fb-actions
+      if _showDl
+        +fb-download-btn
+      if _showView
+        +fb-view-toggle({id: _viewId, tableId: _viewTbl})
+      +fb-page-size({id: 'SelectBoxPages', sizes: _sizes, onchange: `${_onChange}()`})
+      +fb-pagination
+
+  +fb-info({id: _totalId})
+
+  if _showDate
+    +fb-date-offcanvas({id: _ocId, onChange: `${_onChange}()`})
+

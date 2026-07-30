@@ -1,0 +1,14 @@
+extends layout
+block layout-content
+  div#layoutSidenav_content
+    main
+      div.container-fluid.px-4
+        a(href="#" onclick="/" style="color:#212529")
+            i.fas.fa-chevron-left
+            span(href="#" onclick="/" style="padding-left: 0.5rem;") Back
+      div.container-fluid.px-4(style="text-align:center;")
+        h2.mt-4(style="text-align:center;") #{title}
+        h3.text-danger(style="text-align:center;") You do not have permission to view this page
+        img( src="/error_image.png" alt="upload icon"  style="width:300px;")
+        a(href="#" onclick="/" style="color:#212529")
+          p(href="#" onclick="/" style="padding-left: 0.5rem;") Back to Dashboard

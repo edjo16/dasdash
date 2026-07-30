@@ -1,0 +1,194 @@
+extends ../layout
+include ../mixins/floating-input
+include ../mixins/floating-select
+include ../mixins/data-table
+
+block layout-content
+  div#layoutSidenav_content
+    main
+      div.container-fluid.px-4
+        input#username(type="hidden" value=userProfile.UsuarioID)
+
+        a(href="/" style="color:#212529")
+          i.fas.fa-chevron-left
+          span(style="padding-left:0.5rem;") Home
+
+        h2.mt-4 Cost Code Manager
+
+        div(style="display:flex;width:100%;align-items:center;justify-content:space-between;").breadcrumb.mb-4
+          div(style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;")
+            button#btnNewCostCode.page-link(
+              type="button"
+              onclick="openNewCostCodeModal()"
+              style="display:flex;align-items:center;gap:5px;background-color:#00586f;color:white;border-radius:5px;border:none;padding:.375rem .75rem;cursor:pointer;")
+              i.fas.fa-plus
+              span New Cost Code
+          div(style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;")
+            div(style="position:relative;")
+              i.fas.fa-search(style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:#00586f;pointer-events:none;")
+              input#searchInput.form-control(placeholder="Search by name…" style="width:220px;padding-left:35px;")
+            select#companyFilter.form-control(style="width:auto;min-width:140px;")
+              option(value="") All companies
+              each c in companies
+                option(value=c.ccompania)= c.xnombre
+            select#depFilter.form-control(style="width:auto;min-width:140px;")
+              option(value="") All departments
+            select#estadoFilter.form-control(style="width:auto;")
+              option(value="") All statuses
+              option(value="1") Active
+              option(value="0") Inactive
+            select#limitSelect.form-control(style="width:auto;")
+              option(value="15" selected) 15
+              option(value="25") 25
+              option(value="50") 50
+            div#pagination-container
+              ul.pagination.mb-0(style="margin:0;")
+                li.page-item
+                  a.page-link(href="#" id="btnPrev" aria-label="Previous")
+                    i.fas.fa-chevron-left
+                li.page-item
+                  a.page-link(href="#" id="btnNext" aria-label="Next")
+                    i.fas.fa-chevron-right
+
+        +data-table('MainTable', '_noCount')
+          thead
+            tr#header
+              th(style="width:5%") #
+              th(style="width:20%") Company
+              th(style="width:20%") Department
+              th(style="width:30%") Name
+              th(style="width:12%") Status
+              th(style="width:13%") Modified
+          tbody#costCodeTbody.bg-white
+            tr
+              td.text-center.py-4(colspan="6")
+                span.spinner-border.spinner-border-sm.me-2
+                | Loading…
+        span#totalCount
+
+  include ./cost_code_modal
+
+  script.
+    (function(){
+      let state = { page:1, limit:15, total:0 };
+      const get  = id => document.getElementById(id);
+      const q    = () => (get('searchInput')?.value || '').trim();
+      const depFilter     = () => get('depFilter')?.value     || '';
+      const companyFilter = () => get('companyFilter')?.value || '';
+      const estadoFilter  = () => get('estadoFilter')?.value  || '';
+      const esc  = v  => (v == null ? '' : String(v)).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+      async function fetchPage(page){
+        state.page = page;
+        state.limit = parseInt(get('limitSelect')?.value || '15');
+        const tbody = get('costCodeTbody');
+        tbody.innerHTML = '<tr><td class="text-center py-4" colspan="6"><span class="spinner-border spinner-border-sm me-2"></span>Loading…</td></tr>';
+        try {
+          const res = await fetch('/list_cost_codes', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              q: q(), page: state.page, limit: state.limit,
+              dep_filter: depFilter() || null,
+              company_filter: companyFilter() || null,
+              status_filter: estadoFilter() !== '' ? estadoFilter() : null
+            })
+          });
+          if(!res.ok) throw new Error('Status ' + res.status);
+          const json = await res.json();
+          state.total = json.total || 0;
+          populateDepFilter(json.departments || []);
+          renderTable(json.data || []);
+          renderPager();
+        } catch(err) {
+          console.error(err);
+          tbody.innerHTML = '<tr><td class="text-center text-danger py-4" colspan="6">Error loading data.</td></tr>';
+        }
+      }
+
+      function renderTable(rows){
+        const tbody  = get('costCodeTbody');
+        const counter = get('totalCount');
+        if(!rows.length){
+          tbody.innerHTML = '<tr><td class="text-center text-muted py-4" colspan="6">No cost codes found.</td></tr>';
+          if(counter) counter.textContent = '';
+          return;
+        }
+        const start = (state.page - 1) * state.limit + 1;
+        const end   = Math.min(state.page * state.limit, state.total);
+        if(counter) counter.textContent = 'Showing ' + start + '–' + end + ' of ' + state.total;
+
+        tbody.innerHTML = rows.map((r, i) => {
+          const statusBadge = r.status == 1
+            ? '<span class="badge bg-success">Active</span>'
+            : '<span class="badge bg-danger">Inactive</span>';
+          const modified = r.fmodificado ? new Date(r.fmodificado).toLocaleDateString() : '';
+          return '<tr style="cursor:pointer;" onclick="openCostCodeModal(\'' + r.cost_id + '\')">'
+            + '<td class="text-muted">' + (start + i) + '</td>'
+            + '<td>' + esc(r.nombre_compania) + '</td>'
+            + '<td>' + esc(r.nombre_departamento) + '</td>'
+            + '<td>' + esc(r.xname) + '</td>'
+            + '<td>' + statusBadge + '</td>'
+            + '<td style="font-size:.8rem;">' + esc(modified) + '</td>'
+            + '</tr>';
+        }).join('');
+      }
+
+      function populateDepFilter(departments){
+        const sel = get('depFilter');
+        if(!sel || sel.dataset.populated) return;
+        departments.forEach(function(d){
+          const opt = document.createElement('option');
+          opt.value = d.id;
+          opt.textContent = d.nombre;
+          sel.appendChild(opt);
+        });
+        sel.dataset.populated = '1';
+      }
+
+      function renderPager(){
+        const totalPages = Math.ceil(state.total / state.limit) || 1;
+        const prev = get('btnPrev');
+        const next = get('btnNext');
+        if(prev) prev.parentElement.classList.toggle('disabled', state.page <= 1);
+        if(next) next.parentElement.classList.toggle('disabled', state.page >= totalPages);
+      }
+
+      window._costCodeListRefresh = () => fetchPage(state.page);
+
+      document.addEventListener('DOMContentLoaded', function(){
+        fetchPage(1);
+        get('searchInput')?.addEventListener('keydown', e => { if(e.key === 'Enter') fetchPage(1); });
+        get('searchInput')?.addEventListener('input',   () => { if(!get('searchInput').value) fetchPage(1); });
+        get('depFilter')?.addEventListener('change',    () => fetchPage(1));
+        get('companyFilter')?.addEventListener('change', () => fetchPage(1));
+        get('estadoFilter')?.addEventListener('change', () => fetchPage(1));
+        get('limitSelect')?.addEventListener('change',  () => fetchPage(1));
+        get('btnPrev')?.addEventListener('click', e => { e.preventDefault(); if(state.page > 1) fetchPage(state.page - 1); });
+        get('btnNext')?.addEventListener('click', e => {
+          e.preventDefault();
+          const totalPages = Math.ceil(state.total / state.limit) || 1;
+          if(state.page < totalPages) fetchPage(state.page + 1);
+        });
+      });
+    })();
+
+  style.
+    .shadow-table {
+      overflow-y: auto;
+      overflow-x: auto;
+      max-height: calc(100vh - 340px);
+    }
+    #MainTable { table-layout: fixed; width: 100%; }
+    #MainTable thead th {
+      position: sticky;
+      top: 0;
+      z-index: 2;
+      background: #ffffff;
+    }
+    #MainTable tbody tr td { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .shadow-table::-webkit-scrollbar { width: 5px; }
+    .shadow-table::-webkit-scrollbar-track { background: transparent; }
+    .shadow-table::-webkit-scrollbar-thumb { background: #c0cdd4; border-radius: 10px; }
+    .shadow-table::-webkit-scrollbar-thumb:hover { background: #00586f; }
+    span#totalCount { display:block; font-size:.8rem; color:#6b7280; margin-top:.35rem; padding-left:2px; }

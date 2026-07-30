@@ -1,0 +1,156 @@
+//- ── User Cell Picker Mixin ────────────────────────────────────────────────
+//- Renders an inline user-picker cell (avatar button + search dropdown).
+//-
+//- Parameters:
+//-   field     {String}  data-field attribute value             (default: 'responsible')
+//-   value     {String}  current selected UserID                (default: '')
+//-   respUser  {Object}  resolved user { UserID, Name } or null (default: null)
+//-   disabled  {Boolean} disables the picker button             (default: false)
+//-   showClear {Boolean} show the × clear button                (default: true)
+//-
+//- The host page must expose the users list before this component runs:
+//-   window.userCellPickerUsersData = users.map(u => ({ id: u.UserID, name: u.Name }))
+
+mixin user-cell-picker(field='responsible', value='', respUser=null, disabled=false, showClear=true)
+  - var _hasVal = value && value !== ''
+  div(class=`user-cell-picker${_hasVal ? ' has-value' : ''}`)
+    input(type="hidden" data-field=field value=value || '')
+    button.user-cell-btn(type="button" disabled=disabled)
+      if respUser
+        img.user-cell-avatar(
+          src=`/pic/${respUser.UserID}.png`
+          width="24" height="24"
+          onerror="this.onerror=null;this.src='/pic/default.png';"
+          title=respUser.Name
+        )
+      else
+        span.user-cell-placeholder ＋
+    if showClear
+      button.user-cell-clear(type="button" title="Clear") ×
+    div.user-cell-dropdown(hidden)
+      input.user-cell-search(type="text" placeholder="Search users...")
+
+  script.
+    (function () {
+      // ── Inject CSS once ──────────────────────────────────────────────────
+      if (!document.getElementById('_ucp_styles')) {
+        var _s = document.createElement('style');
+        _s.id  = '_ucp_styles';
+        _s.textContent =
+          '.user-cell-picker{position:relative;width:100%;min-width:50px;display:flex;align-items:center;justify-content:center;gap:4px;}' +
+          '.user-cell-btn{background:transparent;border:none;border-bottom:1px solid transparent;padding:3px;cursor:pointer;display:flex;align-items:center;justify-content:center;border-radius:50%;transition:border-color .15s,background .15s;}' +
+          '.user-cell-btn:hover:not(:disabled){background:#f0fafd;}' +
+          '.user-cell-btn:disabled{opacity:.65;cursor:default;}' +
+          '.user-cell-clear{background:none;border:none;color:#bbb;cursor:pointer;font-size:.75rem;line-height:1;padding:1px 3px;border-radius:50%;transition:color .15s;display:none;}' +
+          '.user-cell-clear:hover{color:#dc3545;}' +
+          '.user-cell-picker.has-value .user-cell-clear{display:inline-flex;}' +
+          '.user-cell-avatar{border-radius:50%;object-fit:cover;flex-shrink:0;display:block;}' +
+          '.user-cell-placeholder{color:#aaa;font-size:.78rem;font-weight:400;white-space:nowrap;}' +
+          '.user-cell-name{font-size:.82rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:140px;}' +
+          '.user-cell-dropdown{position:fixed;z-index:9999;background:#fff;border:1px solid #d0dce0;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.13);min-width:240px;max-height:230px;overflow-x:hidden;overflow-y:auto;padding:4px 0;}' +
+          '.user-cell-search{width:calc(90% - 12px);margin:5px 6px;padding:5px 9px;border:1px solid #ddd;border-radius:5px;font-size:.8rem;outline:none;}' +
+          '.user-cell-option{display:flex;align-items:center;padding:6px 10px;cursor:pointer;font-size:.82rem;transition:background .1s;gap:6px;}' +
+          '.user-cell-option:hover{background:#f0fafd;color:#00586f;}';
+        document.head.appendChild(_s);
+      }
+
+      // ── Register behavior once ───────────────────────────────────────────
+      if (window._ucpReady) return;
+      window._ucpReady = true;
+
+      window.ucpPopulateDropdown = function (dropdown) {
+        var data = window.userCellPickerUsersData || [];
+        data.forEach(function (u) {
+          var opt = document.createElement('div');
+          opt.className     = 'user-cell-option';
+          opt.dataset.value = u.id;
+          opt.dataset.label = u.name;
+          opt.innerHTML = '<img src="/pic/' + u.id + '.png" width="18" height="18" style="border-radius:50%;object-fit:cover;" onerror="this.onerror=null;this.src=\'/pic/default.png\';">' + u.name;
+          dropdown.appendChild(opt);
+        });
+      };
+
+      window.ucpFilterSearch = function (input) {
+        var q = input.value.toLowerCase();
+        var dropdown = input.closest('.user-cell-dropdown');
+        if (!dropdown) return;
+        dropdown.querySelectorAll('.user-cell-option').forEach(function (opt) {
+          opt.style.display = (!q || opt.dataset.label.toLowerCase().includes(q)) ? '' : 'none';
+        });
+      };
+
+      window.ucpInit = function () {
+        document.querySelectorAll('.user-cell-picker:not([data-ucp])').forEach(function (picker) {
+          picker.setAttribute('data-ucp', '1');
+          var hidden   = picker.querySelector('input[data-field]');
+          var btn      = picker.querySelector('.user-cell-btn');
+          var dropdown = picker.querySelector('.user-cell-dropdown');
+          if (!hidden || !btn || !dropdown) return;
+
+          btn.addEventListener('click', function (e) {
+            e.stopPropagation();
+            var isOpen = !dropdown.hidden;
+            document.querySelectorAll('.user-cell-dropdown').forEach(function (d) { d.hidden = true; });
+            if (!isOpen) {
+              if (!dropdown.hasAttribute('data-pop')) {
+                dropdown.setAttribute('data-pop', '1');
+                window.ucpPopulateDropdown(dropdown);
+              }
+              var rect = btn.getBoundingClientRect();
+              dropdown.style.top   = (rect.bottom + 2) + 'px';
+              dropdown.style.left  = rect.left + 'px';
+              dropdown.style.width = Math.max(rect.width, 210) + 'px';
+              dropdown.hidden = false;
+              var s = dropdown.querySelector('.user-cell-search');
+              if (s) { s.value = ''; window.ucpFilterSearch(s); s.focus(); }
+            }
+          });
+
+          dropdown.addEventListener('click', function (e) {
+            var opt = e.target.closest('.user-cell-option');
+            if (!opt) return;
+            e.stopPropagation();
+            hidden.value = opt.dataset.value;
+            picker.classList.add('has-value');
+            btn.innerHTML = '<img class="user-cell-avatar" src="/pic/' + opt.dataset.value + '.png" width="24" height="24" style="border-radius:50%;object-fit:cover;" onerror="this.onerror=null;this.src=\'/pic/default.png\';" title="' + opt.dataset.label + '">';
+            dropdown.hidden = true;
+            var row = picker.closest('tr');
+            if (row && row.dataset.id && !row.classList.contains('new-row-placeholder')) {
+              var trigger = row.querySelector('.action-input');
+              if (trigger) trigger.dispatchEvent(new Event('blur', { bubbles: true }));
+            }
+          });
+
+          var clearBtn = picker.querySelector('.user-cell-clear');
+          if (clearBtn) {
+            clearBtn.addEventListener('click', function (e) {
+              e.stopPropagation();
+              hidden.value = '';
+              picker.classList.remove('has-value');
+              btn.innerHTML = '<span class="user-cell-placeholder">＋</span>';
+              var row = picker.closest('tr');
+              if (row && row.dataset.id && !row.classList.contains('new-row-placeholder')) {
+                var trigger = row.querySelector('.action-input');
+                if (trigger) trigger.dispatchEvent(new Event('blur', { bubbles: true }));
+              }
+            });
+          }
+
+          var search = dropdown.querySelector('.user-cell-search');
+          if (search) search.addEventListener('input', function () { window.ucpFilterSearch(this); });
+        });
+      };
+
+      document.addEventListener('click', function () {
+        document.querySelectorAll('.user-cell-dropdown').forEach(function (d) { d.hidden = true; });
+      });
+
+      window.addEventListener('scroll', function (e) {
+        var openDropdown = document.querySelector('.user-cell-dropdown:not([hidden])');
+        if (!openDropdown) return;
+        if (openDropdown.contains(e.target)) return;
+        openDropdown.hidden = true;
+      }, true);
+
+      document.addEventListener('DOMContentLoaded', window.ucpInit);
+    }());

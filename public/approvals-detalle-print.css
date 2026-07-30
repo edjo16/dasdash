@@ -1,0 +1,27 @@
+@media print {
+    * {
+        transition: none !important
+    }
+    #backlink,
+    .breadcrumb {
+        display: none;
+    }
+    h1,
+    .h1 {
+        font-size: 1.5rem;
+        margin-bottom: 1rem;
+    }
+    .row,
+    .col-md-3,
+    .col-md-12,
+    h5 {
+        display: flex;
+        /* margin-right: 5rem; */
+    }
+    p {
+        tab-size: 4;
+        -moz-tab-size: 4;
+        -o-tab-size: 4;
+        white-space: pre-wrap;
+    }
+}

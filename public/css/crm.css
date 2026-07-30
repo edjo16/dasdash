@@ -1,0 +1,361 @@
+.crm_container {
+    padding: 5px;
+    margin-bottom: 5px;
+  }
+  
+  .crm_title{
+    background-color: #e9ecef;
+    display: flex;
+    text-align: left;
+    font-weight: 400;
+    line-height: 1.5;
+    border-radius: 0.25rem;    
+    font-size: 0.8rem;
+    padding: 0.5rem;
+    font-weight: bold;
+  }
+  .crm_id{
+    width:3.3rem;
+    text-align: center  !important;
+    cursor:pointer;
+  }
+  .crm_subject{
+    width:13rem;
+  }
+  .crm_fingreso{
+    width:5.5rem !important;
+    text-align: center !important;
+  }
+  .crm_festado{
+    width:5.5rem !important;
+    text-align: center !important;
+  }
+  .crm_u_asignado{
+    width:6.5rem;
+  }
+  .crm_status{
+    width:4rem;
+  }
+  .crm_de{
+    width:10rem;
+  }
+  .crm_icon{
+    width:0.9rem;
+  }
+  .crm_prioridad{
+    width:1.5rem;
+  }
+  .crm_tr {
+    display: flex;
+    /* cursor: pointer; */
+    padding: 5px;
+  }
+  .crm_rows{
+    display: flex;
+  }
+  .crm_tr > *{
+    font-size: 0.8rem;
+    padding-top: 0.5rem;
+  }
+  .crm_tr:nth-child(even) {
+    background-color: #e9ecef;
+}
+  .crm_rows_childs {
+    display: none;
+    display: flex;  
+    flex-wrap: wrap; /* Para que los divs se ajusten automáticamente si no caben en una fila */
+  }
+  .hijo {
+    flex: 0 0 calc(33.33% - 10px); /* Para crear columnas, ajustar el ancho y dejar espacio entre ellas */
+    margin: 5px;
+    padding: 10px;
+    border: 1px solid #ccc;
+    box-sizing: border-box; /* Incluir el padding en el ancho total del div */
+  }
+  .tabla_asignados{
+    height: fit-content;
+    margin-right: 20px;
+  }
+  .tabla_asignados>tr>*{   
+    margin-bottom: 0.5rem;
+  }
+  
+  .tabla_asignados>tr>th{   
+    text-align: center;
+    font-size: large;
+  }
+  tr>th{
+    vertical-align: top;
+    height: 30px;
+    min-width: 4rem;
+  }
+  td>img{
+    margin-right: 0.5rem;
+    width: 0.875em;
+  }
+  .crm_celda{
+    display: flex;
+  }
+  .crm_celda>*{
+    vertical-align: bottom;
+    /* margin-right: 10px; */
+  }
+  .crm_remove_user{
+    margin-left: 10px;
+    visibility: hidden;
+    cursor: pointer;
+  }
+  .crm_tr_remove_user:hover img {
+    visibility: visible;
+}
+
+.crm_select{  
+  padding: 0.25rem 0.5rem;
+  font-size: 0.75rem;
+  /* margin-left: 10px; */
+  height: 30px;
+}
+.crm_icons{
+  width: 0.85rem;  
+  margin-left: 10px;
+  cursor: pointer;
+}
+
+.formulario { 
+  height: 100%;
+  width: 35%;
+  position: fixed;
+  background-color: #fff;
+  padding: 20px;
+  border-left: 2px solid #ccc;
+  right: 0%;
+  box-shadow: -2px 0 5px rgba(0, 0, 0, 0.2);
+  z-index: 1000;
+  transition: transform 0.3s ease-in-out;
+  transform: translateX(100%);
+}
+.mostrar {
+  transform: translateX(0); 
+}
+.crm_checkbox{
+  margin-left: auto;
+  display: none;
+}
+.crm_checkbox:checked{
+  display: block;
+}
+.div_seleccion:hover .crm_checkbox{
+  display: block;
+}
+#newcase_profilepics{
+  display: block;
+}
+#prioridad_Important{
+  filter: invert(35%) sepia(49%) saturate(6924%) hue-rotate(6deg) brightness(106%) contrast(103%);
+}
+#prioridad_Urgent{
+  filter: invert(33%) sepia(98%) saturate(7245%) hue-rotate(357deg) brightness(94%) contrast(118%);
+}
+#crm_detalle>tbody>tr>td{
+  padding-left: 1rem;
+}
+
+/* =============================================
+   CRM Page Styles (shared across CRM pages)
+   ============================================= */
+
+/* Buttons */
+.btn-primary {
+  background-color: #00586f;
+  border-color: #00586f;
+  color: #ffffff;
+  padding: 8px 16px;
+  font-size: 14px;
+}
+.btn-primary:hover {
+  background-color: #004456;
+  border-color: #004456;
+}
+.btn-secondary {
+  background-color: #6c757d;
+  border-color: #6c757d;
+  color: #ffffff;
+  padding: 8px 16px;
+  font-size: 14px;
+}
+.btn-secondary:hover {
+  background-color: #5a6268;
+  border-color: #545b62;
+}
+
+/* Profile pic */
+.profile_pic {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  margin-right: 5px;
+  object-fit: cover;
+}
+
+/* Tooltip */
+.info-tooltip {
+  position: relative;
+  cursor: pointer;
+}
+.info-tooltip .tooltip-content {
+  visibility: hidden;
+  width: 220px;
+  background-color: #ffffffff;
+  color: #333;
+  text-align: left;
+  border-radius: 6px;
+  padding: 10px;
+  position: absolute;
+  z-index: 99999;
+  top: 50%;
+  right: 100%;
+  margin-right: 10px;
+  transform: translateY(-50%);
+  opacity: 0;
+  transition: opacity 0.3s;
+  font-size: 12px;
+  box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+}
+.info-tooltip .tooltip-content::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 100%;
+  margin-top: -5px;
+  border-width: 5px;
+  border-style: solid;
+  border-color: transparent transparent transparent #333;
+}
+.info-tooltip:hover .tooltip-content {
+  visibility: visible;
+  opacity: 1;
+}
+.tooltip-label {
+  font-weight: 600;
+  color: #000000ff;
+  font-size: 11px;
+}
+
+/* Gap utilities */
+.g-3 { gap: 1rem !important; }
+.g-4 { gap: 1.5rem !important; }
+
+/* Color utilities */
+.colorActive { color: #00586f; }
+
+/* =============================================
+   CRM Detail / Info card styles
+   ============================================= */
+.info-group { margin-bottom: 0.5rem; }
+.info-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #6c757d;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 0.25rem;
+  display: flex;
+  align-items: center;
+}
+.info-label i { color: #00586f; font-size: 0.7rem; }
+.info-value { font-size: 0.95rem; color: #212529; font-weight: 500; min-height: 24px; }
+.info-value p { margin: 0; }
+.section-card {
+  border-radius: 8px;
+  padding: 1rem;
+  height: 100%;
+  border: 1px solid #e9ecef;
+}
+.section-header {
+  border-bottom: 2px solid #00586f;
+  padding-bottom: 0.5rem;
+  margin-bottom: 1rem;
+}
+.section-header h5 { font-size: 1rem; font-weight: 600; color: #212529; }
+.assigned-users-container, .sir-data-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  min-height: 50px;
+}
+.icon-btn {
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+  transition: transform 0.2s;
+  filter: invert(25%) sepia(54%) saturate(1051%) hue-rotate(153deg) brightness(92%) contrast(101%);
+}
+.icon-btn:hover { transform: scale(1.2); }
+
+/* SIR data reference rows */
+.sir-ref-id { font-weight: 600; font-size: 0.85rem; color: #212529; }
+.sir-meta { font-size: 0.72rem; color: #6c757d; }
+.sir-del-btn {
+  filter: invert(20%) sepia(80%) saturate(600%) hue-rotate(330deg);
+  width: 14px;
+  height: 14px;
+}
+
+/* =============================================
+   Dark Mode
+   ============================================= */
+[data-theme="dark"] .crm_title,
+[data-theme="dark"] .crm_tr:nth-child(even),
+[data-theme="dark"] .hijo,
+[data-theme="dark"] .formulario,
+[data-theme="dark"] .section-card,
+[data-theme="dark"] .add-section,
+[data-theme="dark"] .info-tooltip .tooltip-content {
+  background: var(--surface-2);
+  color: var(--text-primary);
+  border-color: var(--border-default);
+}
+
+[data-theme="dark"] .crm_tr,
+[data-theme="dark"] .info-value,
+[data-theme="dark"] .section-header h5,
+[data-theme="dark"] .sir-ref-id,
+[data-theme="dark"] .add-section-header h5,
+[data-theme="dark"] .tooltip-label {
+  color: var(--text-primary);
+}
+
+[data-theme="dark"] .info-label,
+[data-theme="dark"] .sir-meta {
+  color: var(--text-muted);
+}
+
+[data-theme="dark"] .info-tooltip .tooltip-content::after {
+  border-color: transparent transparent transparent var(--surface-1);
+}
+
+[data-theme="dark"] .formulario {
+  box-shadow: -2px 0 10px rgba(0, 0, 0, 0.45);
+}
+
+[data-theme="dark"] .colorActive {
+  color: #8cc5d3;
+}
+
+/* =============================================
+   Message body collapsible (Show more/less)
+   ============================================= */
+.crm-message-body--collapsible {
+  max-height: 190px;
+  overflow: hidden;
+}
+.crm-message-body--expanded {
+  max-height: none !important;
+}
+.crm-show-more-link {
+  color: #00586f;
+  font-weight: bold;
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+

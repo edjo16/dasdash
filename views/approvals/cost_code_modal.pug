@@ -1,0 +1,189 @@
+include ../mixins/floating-input
+include ../mixins/floating-select
+include ../mixins/modal-container
+
+//- ── Cost Code Modal ──────────────────────────────────────────────────
++modal-container('costCodeModal', 'modalCCTitle', 'modalCCClose', 'modalCCCancel', 'modalCCSave', 'Cost Code')
+  input#modalCCId(type="hidden")
+  div#modal_cc_audit_strip(style="display:none;")
+    div(style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px;")
+      span#modal_cc_audit_created(style="font-size:.72rem;color:#6b7280;")
+      span#modal_cc_audit_modified(style="font-size:.72rem;color:#6b7280;")
+  div.row
+    div.col-md-6.mb-2
+      - var companyOptions = (typeof companies !== 'undefined' ? companies : []).map(function(c){ return {value: c.ccompania, label: c.xnombre} })
+      +floating-select('Company', 'modal_cc_company', companyOptions, true, 'Select')
+    div.col-md-6.mb-2
+      - var depOptions = (typeof departments !== 'undefined' ? departments : []).map(function(d){ return {value: d.id, label: d.nombre} })
+      +floating-select('Department', 'modal_cc_department', depOptions, true, 'Select')
+  div.row
+    div.col-md-8.mb-2
+      +floating-input('Category Name', 'modal_cc_xname', 'text', true, '', '', '', {maxlength: '100'})
+    div.col-md-4.mb-2
+      - var estadoOptions = [{ value: '1', label: 'Active' }, { value: '0', label: 'Inactive' }]
+      +floating-select('Status', 'modal_cc_status', estadoOptions, false, 'Select')
+
+script.
+  (function(){
+    const get = id => document.getElementById(id);
+
+    const MODAL_CC_FIELDS = ['cc_company', 'cc_department', 'cc_xname', 'cc_status'];
+
+    function setModalVal(field, v) {
+      const el = get('modal_' + field);
+      if (!el) return;
+      el.value = v ?? '';
+      if (el.value) el.classList.add('has-value'); else el.classList.remove('has-value');
+    }
+
+    function resetCCModal() {
+      MODAL_CC_FIELDS.forEach(function(f) {
+        const el = get('modal_' + f);
+        if (!el) return;
+        el.value = '';
+        el.classList.remove('valid', 'error', 'has-value');
+        if (el.tagName === 'SELECT') el.removeAttribute('disabled');
+        else { el.removeAttribute('readonly'); el.removeAttribute('disabled'); }
+        const errEl = el.closest('.floating-select-container, .floating-input-container')?.querySelector('.error-message');
+        if (errEl) { errEl.textContent = ''; errEl.classList.remove('show'); }
+      });
+      const strip = get('modal_cc_audit_strip');
+      if (strip) strip.style.display = 'none';
+      const auditCreated = get('modal_cc_audit_created');
+      if (auditCreated) auditCreated.textContent = '';
+      const auditModified = get('modal_cc_audit_modified');
+      if (auditModified) auditModified.textContent = '';
+    }
+
+    function to12HourFormat(fechaHora) {
+      if (!fechaHora) return '';
+      fechaHora = String(fechaHora).replace(/^=/, '').trim();
+      const [fecha, hora] = fechaHora.split(' ');
+      if (!hora) return fecha;
+      let [h, m] = hora.split(':');
+      h = parseInt(h, 10);
+      const ampm = h >= 12 ? 'PM' : 'AM';
+      h = h % 12 || 12;
+      return fecha + ' ' + h + ':' + m + ' ' + ampm;
+    }
+
+    async function saveCCModal() {
+      const cost_id = get('modalCCId')?.value || null;
+      const REQUIRED = ['cc_company', 'cc_department', 'cc_xname'];
+      let ok = true;
+      REQUIRED.forEach(function(f) {
+        const el = get('modal_' + f);
+        if (!el) return;
+        if (!el.value || !el.value.trim()) {
+          el.classList.add('error');
+          el.classList.remove('valid', 'has-value');
+          ok = false;
+        } else {
+          el.classList.add('valid', 'has-value');
+          el.classList.remove('error');
+        }
+      });
+      if (!ok) {
+        if (typeof launch_toast === 'function') launch_toast('Please fill all required fields', 0);
+        return;
+      }
+
+      const payload = {
+        cost_id: cost_id || null,
+        ccompany: get('modal_cc_company')?.value || '',
+        cdepartment: get('modal_cc_department')?.value || '',
+        xname: get('modal_cc_xname')?.value || '',
+        status: get('modal_cc_status')?.value || '1'
+      };
+
+      try {
+        const res = await fetch('/save_cost_code', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const json = await res.json();
+        if (json.result === 1) {
+          if (typeof launch_toast === 'function') launch_toast(cost_id ? 'Cost code updated' : 'Cost code created', 1);
+          closeCCModal();
+          if (typeof window._costCodeListRefresh === 'function') window._costCodeListRefresh();
+        } else {
+          alert(json.error || 'Error saving cost code');
+        }
+      } catch(err) {
+        console.error(err);
+        alert('Error saving cost code');
+      }
+    }
+
+    function closeCCModal() {
+      get('costCodeModal').classList.remove('open');
+      document.body.style.overflow = '';
+    }
+
+    window.openNewCostCodeModal = function() {
+      const modal = get('costCodeModal');
+      resetCCModal();
+      get('modalCCTitle').textContent = 'New Cost Code';
+      get('modalCCId').value = '';
+      get('modalCCSave').style.display = '';
+      setModalVal('cc_status', '1');
+      modal.classList.add('open');
+      document.body.style.overflow = 'hidden';
+    };
+
+    window.openCostCodeModal = async function(id) {
+      const modal = get('costCodeModal');
+      resetCCModal();
+      get('modalCCTitle').textContent = 'Loading…';
+      get('modalCCSave').style.display = 'none';
+      modal.classList.add('open');
+      document.body.style.overflow = 'hidden';
+      try {
+        const res = await fetch('/cost_code_detail?id=' + encodeURIComponent(id));
+        const json = await res.json();
+        if (json.result !== 1 || !json.costCode) {
+          alert('Cost code not found');
+          closeCCModal();
+          return;
+        }
+        const cc = json.costCode;
+        get('modalCCTitle').textContent = 'Edit Cost Code';
+        get('modalCCId').value = cc.cost_id;
+        setModalVal('cc_company', cc.ccompany);
+        setModalVal('cc_department', cc.cdepartment);
+        setModalVal('cc_xname', cc.xname);
+        setModalVal('cc_status', cc.status);
+        get('modalCCSave').style.display = '';
+
+        // Audit info
+        if (cc.fingreso || cc.fmodificado) {
+          const strip = get('modal_cc_audit_strip');
+          if (strip) strip.style.display = '';
+          const created = get('modal_cc_audit_created');
+          if (created && cc.fingreso) created.textContent = 'Created: ' + to12HourFormat(new Date(cc.fingreso).toLocaleString()) + (cc.uingreso ? ' by ' + cc.uingreso : '');
+          const modified = get('modal_cc_audit_modified');
+          if (modified && cc.fmodificado) modified.textContent = 'Modified: ' + to12HourFormat(new Date(cc.fmodificado).toLocaleString()) + (cc.umodificado ? ' by ' + cc.umodificado : '');
+        }
+      } catch(err) {
+        console.error(err);
+        alert('Error loading cost code');
+        closeCCModal();
+      }
+    };
+
+    document.addEventListener('DOMContentLoaded', function() {
+      const closeBtn = get('modalCCClose');
+      const cancelBtn = get('modalCCCancel');
+      const saveBtn = get('modalCCSave');
+      if (closeBtn) closeBtn.addEventListener('click', closeCCModal);
+      if (cancelBtn) cancelBtn.addEventListener('click', closeCCModal);
+      if (saveBtn) saveBtn.addEventListener('click', saveCCModal);
+
+      // Close on backdrop click
+      const modal = get('costCodeModal');
+      if (modal) modal.addEventListener('click', function(e) {
+        if (e.target === modal) closeCCModal();
+      });
+    });
+  })();

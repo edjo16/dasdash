@@ -1,0 +1,213 @@
+mixin floating-user-single(label, name, options=[], selected='', required=false, placeholder='select an option', className='', containerClass='', attrs={}, orderByDepartment=true, firstDepartment=null)
+  div.floating-user-single-container(class=containerClass)
+    div.floating-user-single-wrapper
+      - if (typeof firstDepartment !== 'undefined' && firstDepartment)
+        script.
+          window.floatingUserSingleFirstDepartment = '#{firstDepartment}';
+      div.floating-user-single-display(tabindex="0" data-name=name data-options=JSON.stringify(options) data-placeholder=placeholder data-order-by-department=orderByDepartment class=selected ? 'has-value' : '')
+        if selected
+          - var opt = options.find(o => o.value === selected)
+          if opt
+            span.chip(data-value=selected)
+              img(src=`/pic/${opt.value}.png` width="20" height="20" style="border-radius:50%;object-fit:cover;margin-right:4px;" onerror="this.onerror=null;this.src='/pic/default.png';")
+              span= opt.label
+              button(type="button" class="remove-chip" data-value=selected) &times;
+            input(type="hidden" name=name value=selected)
+        else
+          span.placeholder= placeholder
+        i.fas.fa-chevron-down.dropdown-arrow
+      div.floating-user-single-dropdown(id=`dropdown_${name}`)
+        input(type="text" class="dropdown-search" placeholder="Search by name..." oninput="filterFloatingSingleDropdownOptions(this, '${name}')")
+        if orderByDepartment
+          - var grouped = {};
+          - options.forEach(function(opt) {
+          -   if (!grouped[opt.department]) grouped[opt.department] = [];
+          -   grouped[opt.department].push(opt);
+          - });
+          - var departments = Object.keys(grouped).sort(function(a, b) {
+          -   if (firstDepartment && a === firstDepartment) return -1;
+          -   if (firstDepartment && b === firstDepartment) return 1;
+          -   return a.localeCompare(b, undefined, {sensitivity: 'base'});
+          - });
+          - departments.forEach(function(dep) {
+          .dropdown-department-label(data-department=dep style="font-weight:bold;padding:4px 10px 2px 10px;color:#6b7280;") #{dep}
+          -   grouped[dep].forEach(function(option) {
+          if selected !== option.value
+            div.dropdown-option(data-value=option.value data-label=option.label data-department=dep)
+              img(src=`/pic/${option.value}.png` title=`${option.label}` width="20" height="20" style="vertical-align:middle;border-radius:50%;margin-right:6px;" onerror="this.onerror=null;this.src='/pic/default.png';")
+              | #{option.label}
+          -   });
+          - });
+        else
+          each option in options
+            if selected !== option.value
+              div.dropdown-option(data-value=option.value data-label=option.label)
+                img(src=`/pic/${option.value}.png` title=`${option.label}` width="20" height="20" style="vertical-align:middle;border-radius:50%;margin-right:6px;" onerror="this.onerror=null;this.src='/pic/default.png';")
+                | #{option.label}
+      label.floating-label(for=name)= label + (required ? ' *' : '')
+    span.error-message(data-error-for=name)
+  script.
+    document.addEventListener('DOMContentLoaded', function() {
+      document.querySelectorAll('.floating-user-single-display').forEach(function(display) {
+        var name = display.getAttribute('data-name');
+        display.addEventListener('click', function(e) {
+          if (e.target.classList.contains('remove-chip')) return;
+          var dropdown = document.getElementById('dropdown_' + name);
+          if (dropdown) {
+            dropdown.classList.toggle('show');
+            if (dropdown.classList.contains('show')) {
+              updateFloatingSingleDisplay(name);
+              var newDropdown = document.getElementById('dropdown_' + name);
+              var searchInput = newDropdown.querySelector('.dropdown-search');
+              if (searchInput) filterFloatingSingleDropdownOptions(searchInput, name);
+            }
+          }
+        });
+        display.addEventListener('click', function(e) {
+          if (e.target.classList.contains('remove-chip')) {
+            e.stopPropagation();
+            var value = e.target.getAttribute('data-value');
+            removeFloatingSingleChip(name, value);
+          }
+        });
+      });
+      document.querySelectorAll('.floating-user-single-dropdown').forEach(function(dropdown) {
+        dropdown.addEventListener('click', function(e) {
+          if (e.target.classList.contains('dropdown-option')) {
+            var name = dropdown.id.replace('dropdown_', '');
+            var value = e.target.getAttribute('data-value');
+            selectFloatingSingleOption(name, value);
+          }
+        });
+      });
+    });
+    window.filterFloatingSingleDropdownOptions = function(input, name) {
+      var filter = input.value.toLowerCase();
+      var dropdown = document.getElementById('dropdown_' + name);
+      if (!dropdown) return;
+      var visibleDepartments = {};
+      dropdown.querySelectorAll('.dropdown-option').forEach(function(opt) {
+        var label = opt.getAttribute('data-label') || '';
+        var department = opt.getAttribute('data-department') || '';
+        var isVisible = label.toLowerCase().includes(filter);
+        opt.style.display = isVisible ? '' : 'none';
+        if (isVisible && department) {
+          visibleDepartments[department] = true;
+        }
+      });
+      dropdown.querySelectorAll('.dropdown-department-label').forEach(function(depLabel) {
+        var department = depLabel.getAttribute('data-department') || '';
+        depLabel.style.display = visibleDepartments[department] ? '' : 'none';
+      });
+    }
+    function selectFloatingSingleOption(name, value) {
+      var display = document.querySelector('.floating-user-single-display[data-name="'+name+'"]');
+      var hiddenInput = display.querySelector('input[type="hidden"]');
+      if (hiddenInput) hiddenInput.remove();
+      var input = document.createElement('input');
+      input.type = 'hidden';
+      input.name = name;
+      input.value = value;
+      display.appendChild(input);
+      updateFloatingSingleDisplay(name);
+    }
+    function removeFloatingSingleChip(name, value) {
+      var display = document.querySelector('.floating-user-single-display[data-name="'+name+'"]');
+      var hiddenInput = display.querySelector('input[type="hidden"]');
+      if (hiddenInput && hiddenInput.value == value) hiddenInput.remove();
+      updateFloatingSingleDisplay(name);
+    }
+    function updateFloatingSingleDisplay(name) {
+      var display = document.querySelector('.floating-user-single-display[data-name="'+name+'"]');
+      var dropdown = document.getElementById('dropdown_' + name);
+      var options = JSON.parse(display.getAttribute('data-options'));
+      var placeholder = display.getAttribute('data-placeholder');
+      var selected = '';
+      var hiddenInput = display.querySelector('input[type="hidden"]');
+      if (hiddenInput) selected = hiddenInput.value;
+      var arrow = display.querySelector('.dropdown-arrow');
+      display.innerHTML = '';
+      if(selected) {
+        var opt = options.find(o => o.value == selected);
+        if(opt) {
+          var chip = document.createElement('span');
+          chip.className = 'chip';
+          chip.setAttribute('data-value', selected);
+          chip.innerHTML = `<img src='/pic/${opt.value}.png' title="${opt.label}" width='20' height='20' style='border-radius:50%;object-fit:cover;margin-right:4px;' onerror="this.onerror=null;this.src='/pic/default.png';"> <span>${opt.label}</span>`;
+          var btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'remove-chip';
+          btn.setAttribute('data-value', selected);
+          btn.innerHTML = '&times;';
+          chip.appendChild(btn);
+          display.appendChild(chip);
+        }
+        display.classList.add('has-value');
+      } else {
+        var placeholderSpan = document.createElement('span');
+        placeholderSpan.className = 'placeholder';
+        placeholderSpan.textContent = placeholder;
+        display.appendChild(placeholderSpan);
+        display.classList.remove('has-value');
+      }
+      if (hiddenInput) display.appendChild(hiddenInput);
+      display.appendChild(arrow);
+      if(dropdown) {
+        var prevSearch = dropdown.querySelector('.dropdown-search');
+        var prevValue = prevSearch ? prevSearch.value : '';
+        dropdown.innerHTML = '';
+        var searchInput = document.createElement('input');
+        searchInput.type = 'text';
+        searchInput.className = 'dropdown-search';
+        searchInput.placeholder = 'Buscar...';
+        searchInput.setAttribute('oninput', `filterFloatingSingleDropdownOptions(this, '${name}')`);
+        if (prevValue) searchInput.value = prevValue;
+        dropdown.appendChild(searchInput);
+        if (prevValue) {
+          setTimeout(function() { filterFloatingSingleDropdownOptions(searchInput, name); }, 0);
+        }
+        var orderByDepartment = display.getAttribute('data-order-by-department') !== 'false';
+        if(orderByDepartment) {
+          var grouped = {};
+          options.forEach(function(opt) {
+            if (selected !== opt.value) {
+              if (!grouped[opt.department]) grouped[opt.department] = [];
+              grouped[opt.department].push(opt);
+            }
+          });
+          var departments = Object.keys(grouped).sort(function(a, b) {
+            if (window.floatingUserSingleFirstDepartment && a === window.floatingUserSingleFirstDepartment) return -1;
+            if (window.floatingUserSingleFirstDepartment && b === window.floatingUserSingleFirstDepartment) return 1;
+            return a.localeCompare(b, undefined, {sensitivity: 'base'});
+          });
+          departments.forEach(function(dep) {
+            var depLabel = document.createElement('div');
+            depLabel.className = 'dropdown-department-label';
+            depLabel.setAttribute('data-department', dep);
+            depLabel.style = 'font-weight:bold;padding:4px 10px 2px 10px;color:#6b7280;';
+            depLabel.textContent = dep;
+            dropdown.appendChild(depLabel);
+            grouped[dep].forEach(function(opt) {
+              var div = document.createElement('div');
+              div.className = 'dropdown-option';
+              div.setAttribute('data-value', opt.value);
+              div.setAttribute('data-label', opt.label);
+              div.setAttribute('data-department', dep);
+              div.innerHTML = `<img src='/pic/${opt.value}.png' width='20' height='20' style='vertical-align:middle;border-radius:50%;margin-right:6px;' onerror="this.onerror=null;this.src='/pic/default.png';">${opt.label}`;
+              dropdown.appendChild(div);
+            });
+          });
+        } else {
+          options.forEach(function(opt) {
+            if(selected !== opt.value) {
+              var div = document.createElement('div');
+              div.className = 'dropdown-option';
+              div.setAttribute('data-value', opt.value);
+              div.setAttribute('data-label', opt.label);
+              div.innerHTML = `<img src='/pic/${opt.value}.png' width='20' height='20' style='vertical-align:middle;border-radius:50%;margin-right:6px;' onerror="this.onerror=null;this.src='/pic/default.png';">${opt.label}`;
+              dropdown.appendChild(div);
+            }
+          });
+        }
+      }
+    }

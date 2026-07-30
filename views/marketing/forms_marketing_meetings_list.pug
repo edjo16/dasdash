@@ -1,0 +1,365 @@
+extends ../layout
+
+include ../ui/filter-bar
+include ../mixins/data-table
+include ../mixins/floating-input
+include ../mixins/floating-textarea
+include ../mixins/breadcrumb
+
+block layout-content
+  div#layoutSidenav_content
+    main
+      div.container-fluid.px-4
+        +app-breadcrumb({
+          homeHref: '/',
+          items: [{ label: title, active: true }]
+        })
+        
+        +fb-bar
+          button#btnNewMeeting.fb-btn.meetings-create-btn(onclick="openCreateModal()")
+            i.fas.fa-plus
+            span New Meeting
+          +fb-actions
+            +fb-search({id: 'SearchBox', placeholder: 'Search by name or address', onkeyup: 'SearchTable()'})
+            +fb-view-toggle({id: 'meetingViewMode', ariaLabel: 'Select meetings view'})
+            +fb-reset-btn({onclick: 'resetMeetingFilters()'})
+            +fb-page-size({id: 'SelectBoxPages', sizes: [15, 25, 50, 100], defaultSize: 15, onchange: 'fetchMeetings()'})
+            +fb-pagination({onPrev: 'changePage(currentPage - 1)', onNext: 'changePage(currentPage + 1)'})
+
+        +data-table('MainTable', 'totalCount', { cardView: false })
+          thead
+            tr#header
+              th(style="width:25%;") Meeting Name
+              th(style="width:25%;") Address
+              th(style="width:15%;text-align:center;") Created By
+              th(style="width:15%; text-align:center;") Date
+          tbody.bg-white
+
+        +data-card-view('MeetingsCardView', 'MeetingsCardGrid', 'Loading meetings...')
+
+  //- ── Create Meeting Modal ─────────────────────────────────────────────────
+  div#createMeetingModal.modal.fade(tabindex="-1" role="dialog")
+    div.modal-dialog(role="document")
+      div.modal-content
+        div.modal-header
+          h5.modal-title New Meeting
+          button.btn-close(type="button" data-bs-dismiss="modal" aria-label="Close")
+        div.modal-body
+          +floating-input('Meeting Name', 'newMeetingName', 'text', true, 'What is this meeting about?', '', '', {maxlength: '125'})
+          +floating-input('Address', 'newMeetingAddress', 'text', false, 'Where will it take place?', '', '', {maxlength: '275'})
+          +floating-textarea('Comments', 'newMeetingComments', false, 'Additional notes...', '', '', {maxlength: '500'}, 3)
+        div.modal-footer
+          button.btn.btn-secondary(type="button" data-bs-dismiss="modal") Cancel
+          button#btnSaveMeeting.btn(
+            type="button"
+            style="background-color:#00586f;color:#fff;"
+            onclick="saveMeeting()"
+          ) Create
+
+  style.
+    .meetings-create-btn {
+      background-color: #00586f;
+      border-color: #00586f;
+      color: #ffffff;
+    }
+
+    .meetings-create-btn:hover {
+      background-color: #004456;
+      border-color: #004456;
+      color: #ffffff;
+    }
+
+    .fb-page-btn.disabled,
+    .fb-page-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    svg{
+      margin-right:0 !important;
+    }
+
+  script.
+    const _userId  = '!{userProfile.UsuarioID}';
+    let currentPage = 1;
+    let totalCount = 0;
+    let activeViewMode = 'table';
+    const mobileViewMedia = window.matchMedia('(max-width: 767.98px)');
+
+    function debounce(fn, wait) {
+      let t;
+      return function(...args) { clearTimeout(t); t = setTimeout(() => fn.apply(this, args), wait); };
+    }
+
+    function escapeHtml(value) {
+      return String(value == null ? '' : value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
+    function getDefaultViewMode() {
+      return mobileViewMedia.matches ? 'card' : 'table';
+    }
+
+    function syncViewToggleButtons() {
+      const toggle = document.getElementById('meetingViewMode');
+      if (!toggle) return;
+      toggle.querySelectorAll('.fb-view-btn').forEach(function(btn) {
+        const isActive = btn.dataset.view === activeViewMode;
+        btn.classList.toggle('is-active', isActive);
+        btn.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+      });
+    }
+
+    function setViewMode(mode) {
+      activeViewMode = mode === 'card' ? 'card' : 'table';
+
+      const tableResponsive = document.querySelector('#MainTable')?.closest('.table-responsive');
+      const cardView = document.getElementById('MeetingsCardView');
+
+      if (tableResponsive) tableResponsive.hidden = activeViewMode !== 'table';
+      if (cardView) cardView.hidden = activeViewMode !== 'card';
+
+      syncViewToggleButtons();
+    }
+
+    function initViewControls() {
+      const toggle = document.getElementById('meetingViewMode');
+      if (toggle && !toggle.dataset.bound) {
+        toggle.addEventListener('click', function(e) {
+          const btn = e.target.closest('.fb-view-btn');
+          if (!btn) return;
+          setViewMode(btn.dataset.view || 'table');
+        });
+        toggle.dataset.bound = '1';
+      }
+
+      const cardGrid = document.getElementById('MeetingsCardGrid');
+      if (cardGrid && !cardGrid.dataset.bound) {
+        cardGrid.addEventListener('click', function(e) {
+          const card = e.target.closest('.data-card[data-meeting-id]');
+          if (!card) return;
+          goToDetail(card.getAttribute('data-meeting-id'));
+        });
+
+        cardGrid.addEventListener('keydown', function(e) {
+          const card = e.target.closest('.data-card[data-meeting-id]');
+          if (!card) return;
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            goToDetail(card.getAttribute('data-meeting-id'));
+          }
+        });
+
+        cardGrid.dataset.bound = '1';
+      }
+
+      setViewMode(getDefaultViewMode());
+    }
+
+    function goToDetail(id) {
+      const url = new URL(window.location.href);
+      window.location.href = '/meetings/' + id + '?' + url.searchParams.toString();
+    }
+
+    async function fetchMeetings() {
+      const url     = new URL(window.location.href);
+      const p       = url.searchParams.get('p');
+      const dev     = url.searchParams.get('iddevteam');
+      const searchBox = document.getElementById('SearchBox');
+      const search  = searchBox ? searchBox.value.trim() : '';
+      const limit   = document.getElementById('SelectBoxPages').value;
+      if (search.length > 0 && search.length < 2) return;
+      if (search.length > 1) currentPage = 1;
+      
+      const params = new URLSearchParams({
+        page: String(currentPage),
+        limit: String(limit)
+      });
+      if (search) params.set('search', search);
+      
+      const qs = `/get_meetings?${params.toString()}`;
+      const res  = await fetch(qs);
+      const data = await res.json();
+      totalCount = Number(data.totalCount) || 0;
+      renderTable(data.rows);
+      renderCards(data.rows);
+      renderPagination(totalCount);
+    }
+
+    function renderTable(rows) {
+      const tbody = document.querySelector('#MainTable tbody');
+      tbody.innerHTML = '';
+      if (!rows || rows.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">No meetings found</td></tr>';
+        return;
+      }
+      rows.forEach(function(m) {
+        const meetingId = String(m.id == null ? '' : m.id);
+        const meetingIdJs = meetingId.replace(/'/g, "\\'");
+        const meetingName = escapeHtml(m.meeting_name || 'Untitled meeting');
+        const meetingAddress = escapeHtml(m.meeting_address || '-');
+        const creator = escapeHtml(m.uingreso || '');
+        const creatorAvatar = encodeURIComponent(String(m.uingreso || 'default'));
+        const createdAt = escapeHtml(m.fingreso || '');
+        const tr = document.createElement('tr');
+        tr.setAttribute(
+                'onclick',
+                `goToDetail(${m.id});return false;`
+        ) 
+        tr.innerHTML = `
+          <td><strong>${meetingName}</strong></td>
+          <td>${meetingAddress}</td>
+          <td style="text-align:center;"><img src="/pic/${creatorAvatar}.png" onerror="this.onerror=null;this.src='/pic/default.png';" style="width:30px;height:30px;border-radius:50%;object-fit:cover;" title="${creator}"></td>
+          <td style="text-align:center;"><i class="fas fa-calendar-alt" style="margin-right:4px;"></i> <span style="margin-left:4px;">${createdAt}</span> </td>
+          `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    function renderCards(rows) {
+      const cardGrid = document.getElementById('MeetingsCardGrid');
+      if (!cardGrid) return;
+
+      if (!rows || rows.length === 0) {
+        cardGrid.innerHTML = '<div class="data-card-empty">No meetings found</div>';
+        return;
+      }
+
+      cardGrid.innerHTML = rows.map(function(m) {
+        const meetingId = escapeHtml(String(m.id == null ? '' : m.id));
+        const meetingName = escapeHtml(m.meeting_name || 'Untitled meeting');
+        const meetingAddress = escapeHtml(m.meeting_address || 'No address');
+        const creator = escapeHtml(m.uingreso || 'N/A');
+        const creatorAvatar = encodeURIComponent(String(m.uingreso || 'default'));
+        const createdAt = escapeHtml(m.fingreso || 'N/A');
+        return `
+          <article class="data-card" tabindex="0" role="button" data-meeting-id="${meetingId}" aria-label="Open ${meetingName}">
+            <h4 class="data-card-title">${meetingName}</h4>
+            <p class="data-card-text">${meetingAddress}</p>
+            <div class="data-card-meta">
+              <div class="data-card-user">
+                <img src="/pic/${creatorAvatar}.png" onerror="this.onerror=null;this.src='/pic/default.png';" alt="${creator} avatar">
+                <span title="${creator}">${creator}</span>
+              </div>
+              <div class="data-card-date">
+                <i class="fas fa-calendar-alt" style="margin-right:4px;"></i>${createdAt}
+              </div>
+            </div>
+          </article>
+        `;
+      }).join('');
+    }
+
+    function renderPagination(totalCount) {
+      const limit      = parseInt(document.getElementById('SelectBoxPages').value) || 15;
+      const totalPages = Math.max(Math.ceil(totalCount / limit), 1);
+      const span       = document.getElementById('totalCount');
+      if (span) span.textContent = `Page ${currentPage} of ${totalPages} — ${totalCount} record(s)`;
+      
+      const prevBtn = document.querySelector('.fb-page-btn[aria-label="Previous"]');
+      const nextBtn = document.querySelector('.fb-page-btn[aria-label="Next"]');
+      
+      if (prevBtn) {
+        prevBtn.disabled = currentPage <= 1;
+        prevBtn.classList.toggle('disabled', prevBtn.disabled);
+      }
+      if (nextBtn) {
+        nextBtn.disabled = currentPage >= totalPages;
+        nextBtn.classList.toggle('disabled', nextBtn.disabled);
+      }
+    }
+
+    function changePage(page) {
+      const limit = parseInt(document.getElementById('SelectBoxPages').value) || 15;
+      const totalPages = Math.max(Math.ceil(totalCount / limit), 1);
+      if (page < 1 || page > totalPages) return;
+      currentPage = page;
+      fetchMeetings();
+    }
+
+    function resetMeetingFilters() {
+      const searchBox = document.getElementById('SearchBox');
+      if (searchBox) searchBox.value = '';
+      document.getElementById('SelectBoxPages').value = '15';
+      currentPage = 1;
+      fetchMeetings();
+    }
+
+    const debouncedFetch = debounce(fetchMeetings, 400);
+    function SearchTable() { debouncedFetch(); }
+
+    // ── Create modal ─────────────────────────────────────────────────────────
+    function openCreateModal() {
+      ['newMeetingName', 'newMeetingAddress', 'newMeetingComments'].forEach(function(id) {
+        const el = document.getElementById(id);
+        if (el) {
+          el.value = '';
+          el.dataset.touched = 'false';
+          el.classList.remove('valid', 'error', 'has-value');
+        }
+        if (window['clearInputError_' + id]) window['clearInputError_' + id]();
+      });
+      bootstrap.Modal.getOrCreateInstance(document.getElementById('createMeetingModal')).show();
+    }
+
+    async function saveMeeting() {
+      // Direct validation — no dependency on mixin global functions
+      const nameEl = document.getElementById('newMeetingName');
+      const name   = nameEl ? nameEl.value.trim() : '';
+      if (!name) {
+        if (nameEl) {
+          nameEl.dataset.touched = 'true';
+          nameEl.classList.remove('valid');
+          nameEl.classList.add('error');
+          const errMsg = document.querySelector('[data-error-for="newMeetingName"]');
+          if (errMsg) { errMsg.textContent = 'Meeting Name is required'; errMsg.classList.add('show'); }
+          nameEl.focus();
+        }
+        return;
+      }
+      // Clear any leftover error on the name field
+      nameEl.classList.remove('error');
+      nameEl.classList.add('valid');
+      const nameErr = document.querySelector('[data-error-for="newMeetingName"]');
+      if (nameErr) nameErr.classList.remove('show');
+
+      // Optional field validators for visual feedback
+      if (window['validateInput_newMeetingAddress'])  window['validateInput_newMeetingAddress']();
+      if (window['validateInput_newMeetingComments']) window['validateInput_newMeetingComments']();
+
+      const btn = document.getElementById('btnSaveMeeting');
+      btn.disabled = true;
+      try {
+        const res  = await fetch('/meetings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            meeting_name:     document.getElementById('newMeetingName').value.trim(),
+            meeting_address:  document.getElementById('newMeetingAddress').value.trim(),
+            meeting_comments: document.getElementById('newMeetingComments').value.trim(),
+            user_id:          _userId,
+          }),
+        });
+        const data = await res.json();
+        btn.disabled = false;
+        if (data.result === 1) {
+          bootstrap.Modal.getInstance(document.getElementById('createMeetingModal')).hide();
+          launch_toast('Meeting created', 1);
+          fetchMeetings();
+        } else {
+          launch_toast('Error creating meeting', 2);
+        }
+      } catch(e) {
+        btn.disabled = false;
+        launch_toast('Error creating meeting', 2);
+      }
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+      initViewControls();
+      fetchMeetings();
+    });

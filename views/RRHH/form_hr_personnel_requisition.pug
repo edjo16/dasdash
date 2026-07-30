@@ -1,0 +1,836 @@
+extends ../layout
+include ../mixins/floating-input
+include ../mixins/floating-textarea
+include ../mixins/floating-file
+include ../mixins/floating-select
+include ../mixins/floating-date
+include ../ui/button-submit
+
+block layout-content
+  link(rel="stylesheet" href="/css/personnel-requisition.css")
+  div#layoutSidenav_content(style="justify-content: start;")
+    main
+      div.container-fluid.px-4
+        a(href="#" onclick="goBack()" style="color:#212529")
+            i.fas.fa-chevron-left
+            span(href="#" onclick="goBack()" style="padding-left: 0.5rem;") Back
+        h3#titlename.mt-4 #{title}
+        ol.breadcrumb.mb-4
+          li.breadcrumb-item.active This form is designed to facilitate the request for additional personnel within the organization.
+
+        //- Stepper
+        div.pr-stepper
+          div.pr-step-indicator.active(data-step="1")
+            div.pr-step-circle 1
+            span.pr-step-label Reason
+          div.pr-step-indicator(data-step="2")
+            div.pr-step-circle 2
+            span.pr-step-label Job Info
+          div.pr-step-indicator(data-step="3")
+            div.pr-step-circle 3
+            span.pr-step-label Compensation
+          div.pr-step-indicator(data-step="4")
+            div.pr-step-circle 4
+            span.pr-step-label Source
+          div.pr-step-indicator(data-step="5")
+            div.pr-step-circle 5
+            span.pr-step-label Review & Submit
+
+    form#form_hr_personnel_requisition(method="post" action="" enctype="multipart/form-data" autocomplete="off")
+      //- Hidden fields
+      input#mform(type="hidden" name="mform" value=mform[0].id)
+      input#username(type="hidden" name="username" value=userProfile.UsuarioID)
+      input#xnombre(type="hidden" name="xnombre" value=userProfile.UserName)
+      input#id_dep_inicio(type="hidden" name="id_dep_inicio" value=userProfile.Dep)
+      input#requestorName(type="hidden" name="requestorName" value=userMenu.Name)
+      input#requestorPosition(type="hidden" name="requestorPosition" value=userMenu.xcargo)
+
+      //- ============================
+      //- STEP 1: Reason for the Requisition
+      //- ============================
+      div.pr-step-content.active(data-step="1")
+        .section
+          h4 Reason for the requisition
+          div.row
+            div.col-md-6
+              p.pr-readonly-field
+                strong Requestor Name: 
+                span= userMenu.Name
+            div.col-md-6
+              p.pr-readonly-field
+                strong Position: 
+                span= userMenu.xcargo
+          div.row
+            - var reasonOptions = [{value:'New position',label:'New position'},{value:'Add to Staff',label:'Add to Staff'},{value:'Promotion or Transfer',label:'Promotion or Transfer'},{value:'Retirement',label:'Retirement'},{value:'Long Medical Leave',label:'Long Medical Leave'},{value:'Termination',label:'Termination'}]
+            div.col-md-6
+              +floating-select("Reason", "reasonForRequisition", reasonOptions, true, 'Select', '', '', {defaultValue: 'New position', onchange: "checkReason()"})
+            div.col-md-6
+              +floating-date("Expected Start Date", "expectedStartDate", false, 'DD/MM/YYYY')
+          div.row
+            div.col-md-6
+              +floating-input("Who do we need to replace", "replaceWho", 'text', false, 'Write the name... (MAX 30 CHARACTERS)', '', '', {maxlength: '30'})
+            div.col-md-6
+              +floating-date("Effective Date (last day of work)", "effectiveDate", false, 'DD/MM/YYYY')
+          div.row
+            div.col-md-6
+              +floating-textarea("Justify New Position or Add to Staff", "supportOrBussineesNotes", false, 'Detail needs and add a business case if necessary... (MAX 500 characters)', '', '', {maxlength: '500'}, 3)
+            div.col-md-6
+              +floating-textarea("Notes", "reasonNotes", false, 'Provide any information relevant for the Reason of the request. e.i. Confidential, Urgency, temporal or permanent... (MAX 350 characters)', '', '', {maxlength: '350'}, 3)
+          div.row
+            div.col-md-12
+              .checkbox-group(style="font-weight:normal; margin-top: 8px;")
+                input(type="checkbox" id="businessCaseIsAttached" name="businessCaseIsAttached" value="1")
+                label(for="businessCaseIsAttached" style="font-weight:normal; margin-left: 6px; display:inline;") Business Case is attached
+        div.pr-nav-buttons
+          div
+          button.pr-btn.pr-btn-next(type="button" onclick="prNext()")
+            span Next
+            i.fas.fa-arrow-right
+
+      //- ============================
+      //- STEP 2: Job Information
+      //- ============================
+      div.pr-step-content(data-step="2")
+        .section
+          h4 Job Information
+          div.row
+            - var positionTypeOptions = [{value:'C-Level',label:'C-Level'},{value:'Global Head',label:'Global Head'},{value:'Head',label:'Head'},{value:'Manager',label:'Manager'},{value:'Supervisor',label:'Supervisor'},{value:'Coordinator',label:'Coordinator'},{value:'Sr. Analyst',label:'Sr. Analyst'},{value:'Analyst',label:'Analyst'},{value:'Assistant',label:'Assistant'},{value:'Support',label:'Support'}]
+            div.col-md-6
+              +floating-select("Position Type", "positionType", positionTypeOptions, true, 'Choose Position')
+            div.col-md-6
+              +floating-input("Position Job Title", "positionJobTitle", 'text', true, 'Write the position', '', '', {maxlength: '75'})
+          div.row
+            div.col-md-6
+              +floating-input("Area", "area", 'text', true, 'Write the area where you work... (MAX 50 CHARACTERS)', '', '', {maxlength: '50'})
+            div.col-md-6
+              +floating-input("Position Location Required", "location", 'text', true, 'Country(ies) or Region(s) LATAM, MENA… (MAX 50 CHARACTERS)', '', '', {maxlength: '50'})
+          div.row
+            div.col-md-12
+              label.section-label Available Desk/Office: *
+              .radio-group(style="display: flex; gap: 10px; margin-bottom: 12px;")
+                label(style="display: flex; gap: 5px; font-weight:normal;")
+                  input(type="radio" name="availableDeskOffice" value="Not required" required)
+                  | Not required
+                label(style="display: flex; gap: 5px; font-weight:normal;")
+                  input(type="radio" name="availableDeskOffice" value="Available" required)
+                  | Available
+                label(style="display: flex; gap: 5px; font-weight:normal;")
+                  input(type="radio" name="availableDeskOffice" value="TBD" required)
+                  | TBD (add notes)
+            div.col-md-12
+              label.section-label General Functions / Description:
+              .radio-group(style="display: flex; flex-direction: column; gap: 5px; margin-bottom: 12px;")
+                label(style="display: flex; gap: 5px; font-weight:normal;")
+                  input(type="radio" name="attachedDescription" value="withMyA")
+                  | Attached Current Job Description with my approval
+                label(style="display: flex; gap: 5px; font-weight:normal;")
+                  input(type="radio" name="attachedDescription" value="withMyNotes")
+                  | Attached Current Job Description with my notes and updates
+                label(style="display: flex; gap: 5px; font-weight:normal;")
+                  input(type="radio" name="attachedDescription" value="withBasicsFunctions")
+                  | Attached Job Description Request Form with basic functions and needs.
+            div.col-md-12
+              +floating-textarea("Special Requirements", "notesObservationsRequirements", false, 'Notes, observations or Special Requirements for this search... (MAX 500 characters)', '', '', {maxlength: '500'}, 4)
+        div.pr-nav-buttons
+          button.pr-btn.pr-btn-prev(type="button" onclick="prPrev()")
+            i.fas.fa-arrow-left
+            span Previous
+          button.pr-btn.pr-btn-next(type="button" onclick="prNext()")
+            span Next
+            i.fas.fa-arrow-right
+
+      //- ============================
+      //- STEP 3: Compensation & Benefits
+      //- ============================
+      div.pr-step-content(data-step="3")
+        .section
+          h4 Compensation & Benefits
+          table(style="width: 100%; border-collapse: collapse;")
+            tr
+              th(style="border: 1px solid #ddd; padding: 8px; text-align: left;") COMPENSATION Range
+              th(style="border: 1px solid #ddd; padding: 8px; text-align: left;")
+                +floating-input("Min", "minCompensationRange", 'number', true, 'Example: 1000', '', '', {min: '0'})
+              th(style="border: 1px solid #ddd; padding: 8px; text-align: left;")
+                +floating-input("Average", "avegareCompensationRange", 'number', true, 'Example: 1500', '', '', {min: '0'})
+              th(style="border: 1px solid #ddd; padding: 8px; text-align: left;")
+                +floating-input("Max", "maxCompensationRange", 'number', true, 'Example: 2000', '', '', {min: '0'})
+            tr
+              td(style="border: 1px solid #ddd; padding: 8px; text-align: left;") * Range Information Source
+              td(style="border: 1px solid #ddd; padding: 8px; text-align: left;" colspan="3")
+                +floating-input("Range Information Source", "rangeInfoSource", 'text', true, 'Internal equity / external source? (MAX 50 CHARACTERS)', '', '', {maxlength: '50'})
+          div.row(style="margin-top: 14px;")
+            div.col-md-12
+              label.section-label Benefits:
+              .checkbox-group(style="margin: 8px 0px 12px;")
+                label
+                  input(type="checkbox" name="benefits" value="Allowance Insurance")
+                  | Allowance Insurance
+                label
+                  input(type="checkbox" name="benefits" value="Allowance Connectivity")
+                  | Allowance Connectivity
+                label
+                  input(type="checkbox" name="benefits" value="Parking space")
+                  | Parking space
+          div.row
+            div.col-md-12
+              label.section-label Annual Bonus:
+              .radio-group(style="display: flex; gap: 10px; margin: 8px 0px 12px;")
+                label(style="display: flex; gap: 5px; font-weight:normal;")
+                  input(type="radio" name="annualBonus" value="Non explicit")
+                  | Non explicit
+                label(style="display: flex; gap: 5px; font-weight:normal;")
+                  input(type="radio" name="annualBonus" value="1 to 3 times")
+                  | 1 to 3 times
+                label(style="display: flex; gap: 5px; font-weight:normal;")
+                  input(type="radio" name="annualBonus" value="3 to 5 times")
+                  | 3 to 5 times
+                label(style="display: flex; gap: 5px; font-weight:normal;")
+                  input(type="radio" name="annualBonus" value="Other")
+                  | Other
+          div.row
+            div.col-md-12
+              +floating-textarea("Compensation & Benefits Notes / Considerations", "benefitsNotes", false, 'Notes, observations on Compensation to consider... (MAX 250 characters)', '', '', {maxlength: '250'}, 3)
+        div.pr-nav-buttons
+          button.pr-btn.pr-btn-prev(type="button" onclick="prPrev()")
+            i.fas.fa-arrow-left
+            span Previous
+          button.pr-btn.pr-btn-next(type="button" onclick="prNext()")
+            span Next
+            i.fas.fa-arrow-right
+
+      //- ============================
+      //- STEP 4: Source for the Search
+      //- ============================
+      div.pr-step-content(data-step="4")
+        .section
+          h4 Source for the Search
+          div.row
+            div.col-md-12
+              label.section-label Source:
+              .checkbox-group(style="margin: 8px 0px 12px;")
+                label
+                  input(type="checkbox" name="source" value="Internal Candidate")
+                  | Internal Candidate
+                label
+                  input(type="checkbox" name="source" value="HR Search & Refferals")
+                  | HR Search & Referrals
+                label
+                  input(type="checkbox" name="source" value="Headhunter")
+                  | Headhunter
+                label
+                  input(type="checkbox" name="source" value="Executive Headhunter")
+                  | Executive Headhunter
+          div.row
+            div.col-md-6
+              +floating-textarea("Name Pre-Identify Candidates", "preIndentifyCandidate", false, 'Write the name of the pre-identify candidates... (MAX 100 characters)', '', '', {maxlength: '100'}, 3)
+            div.col-md-6
+              +floating-textarea("Name Preferred Headhunter", "headhunter", false, 'Write the name of the preferred headhunter... (MAX 100 characters)', '', '', {maxlength: '100'}, 3)
+          div.row
+            div.col-md-12
+              +floating-textarea("Notes / Special Requirements for this Search", "notesSourceRequiriments", false, 'Provide detailed notes, observations, or any special requirements for this search... (MAX 200 characters)', '', '', {maxlength: '200'}, 3)
+          div.row
+            div.col-md-6
+              +floating-file("Supporting Documents", "Supportfiles", false, true, false)
+        div.pr-nav-buttons
+          button.pr-btn.pr-btn-prev(type="button" onclick="prPrev()")
+            i.fas.fa-arrow-left
+            span Previous
+          button.pr-btn.pr-btn-next(type="button" onclick="prNext()")
+            span Next
+            i.fas.fa-arrow-right
+
+      //- ============================
+      //- STEP 5: Review & Submit
+      //- ============================
+      div.pr-step-content(data-step="5")
+        .section
+          h4 Review your request
+          p.text-muted Please review all information before submitting.
+
+          //- Reason summary
+          .pr-review-block
+            h5 Reason for the Requisition
+            div.row
+              div.col-md-4
+                p
+                  strong Reason: 
+                  span#review-reason -
+              div.col-md-4
+                p
+                  strong Expected Start Date: 
+                  span#review-expectedStartDate -
+              div.col-md-4#review-replaceWho-block
+                p
+                  strong Replace: 
+                  span#review-replaceWho -
+            div.row
+              div.col-md-4#review-effectiveDate-block
+                p
+                  strong Effective Date: 
+                  span#review-effectiveDate -
+              div.col-md-4#review-supportNotes-block
+                p
+                  strong Justification: 
+                  span#review-supportNotes -
+              div.col-md-4
+                p
+                  strong Notes: 
+                  span#review-reasonNotes -
+
+          //- Job Info summary
+          .pr-review-block
+            h5 Job Information
+            div.row
+              div.col-md-3
+                p
+                  strong Position Type: 
+                  span#review-positionType -
+              div.col-md-3
+                p
+                  strong Job Title: 
+                  span#review-positionJobTitle -
+              div.col-md-3
+                p
+                  strong Area: 
+                  span#review-area -
+              div.col-md-3
+                p
+                  strong Location: 
+                  span#review-location -
+            div.row
+              div.col-md-4
+                p
+                  strong Desk/Office: 
+                  span#review-deskOffice -
+              div.col-md-4
+                p
+                  strong Description: 
+                  span#review-attachedDescription -
+
+          //- Compensation summary
+          .pr-review-block
+            h5 Compensation & Benefits
+            div.row
+              div.col-md-3
+                p
+                  strong Min: 
+                  span#review-minComp -
+              div.col-md-3
+                p
+                  strong Average: 
+                  span#review-avgComp -
+              div.col-md-3
+                p
+                  strong Max: 
+                  span#review-maxComp -
+              div.col-md-3
+                p
+                  strong Source: 
+                  span#review-rangeSource -
+            div.row
+              div.col-md-4
+                p
+                  strong Benefits: 
+                  span#review-benefits -
+              div.col-md-4
+                p
+                  strong Annual Bonus: 
+                  span#review-annualBonus -
+
+          //- Source summary
+          .pr-review-block
+            h5 Source for the Search
+            div.row
+              div.col-md-4
+                p
+                  strong Source: 
+                  span#review-source -
+              div.col-md-4
+                p
+                  strong Pre-Identify Candidates: 
+                  span#review-preIdentify -
+              div.col-md-4
+                p
+                  strong Headhunter: 
+                  span#review-headhunter -
+
+          //- Approval Flow members
+          .pr-review-block
+            h5 Approval Flow
+            div#pr-actors-panel
+              p.text-muted Loading approval flow...
+
+          //- Files
+          .pr-review-block
+            h5 Attached Files
+            div#review-files
+              p.text-muted No files attached.
+
+          div.row(style="margin-top: 14px;")
+            div.col-md-8
+              div.form-check
+                input#requisitionHrCheck.form-check-input(type="checkbox" name="performanceHrCheck")
+                label.form-check-label(for="requisitionHrCheck") Are you sure you want to submit this form?
+        div.pr-nav-buttons
+          button.pr-btn.pr-btn-prev(type="button" onclick="prPrev()")
+            i.fas.fa-arrow-left
+            span Previous
+          +submit-button('submitPersonnelRequest', 'Submit', 'pr-btn pr-btn-next', 'fas fa-paper-plane')
+
+    style.
+      h4 {
+        color: rgb(0,88,111);
+      }
+      .section, .section-flex {
+        margin: 20px;
+        border: 2px solid rgb(0,88,111);
+        padding: 15px;
+        border-radius: 20px;
+      }
+      .section-flex {
+        display: flex;
+        flex-wrap: wrap;
+        margin-bottom: 15px;
+      }
+      .section-label {
+        display: block;
+        margin-bottom: 5px;
+        font-weight: bold;
+      }
+      .checkbox-group {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+      .checkbox-group label {
+        display: flex;
+        align-items: center;
+        font-weight: normal;
+        cursor: pointer;
+      }
+      .checkbox-group input[type="checkbox"] {
+        margin-right: 5px;
+      }
+      .pr-readonly-field {
+        margin-bottom: 8px;
+        font-size: 0.95rem;
+      }
+      .pr-review-block {
+        border-bottom: 1px solid #eee;
+        padding-bottom: 12px;
+        margin-bottom: 12px;
+      }
+      .pr-review-block:last-of-type {
+        border-bottom: none;
+      }
+      .pr-review-block h5 {
+        color: rgb(0,88,111);
+        margin-bottom: 8px;
+        font-size: 1rem;
+      }
+      .pr-review-block p {
+        margin-bottom: 4px;
+        font-size: 0.9rem;
+      }
+      .pr-actor-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 6px 0;
+        border-bottom: 1px solid #f0f0f0;
+      }
+      .pr-actor-row:last-child {
+        border-bottom: none;
+      }
+      .pr-actor-badge {
+        background: rgb(0,88,111);
+        color: #fff;
+        padding: 2px 10px;
+        border-radius: 12px;
+        font-size: 0.8rem;
+        min-width: 80px;
+        text-align: center;
+      }
+      .pr-actor-name {
+        font-size: 0.9rem;
+      }
+      @media (max-width: 600px) {
+        .checkbox-group {
+          flex-direction: column;
+        }
+      }
+    script.
+      // ── Stepper state ──
+      var prCurrentStep = 1;
+      var prTotalSteps  = 5;
+
+      // ── Actors state (fetched from server) ──
+      var _prActors = null;
+      var _prFlow = null;
+      var _prEstado = null;
+
+      function prUpdateStepper() {
+        document.querySelectorAll('.pr-step-content').forEach(function(el) {
+          el.classList.toggle('active', +el.dataset.step === prCurrentStep);
+        });
+        document.querySelectorAll('.pr-step-indicator').forEach(function(el) {
+          var s = +el.dataset.step;
+          el.classList.toggle('active', s === prCurrentStep);
+          el.classList.toggle('completed', s < prCurrentStep);
+        });
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+
+      function prNext() {
+        if (!prValidateStep(prCurrentStep)) return;
+        if (prCurrentStep === 4) {
+          populateReview();
+        }
+        if (prCurrentStep < prTotalSteps) { prCurrentStep++; prUpdateStepper(); }
+      }
+
+      function prPrev() {
+        if (prCurrentStep > 1) { prCurrentStep--; prUpdateStepper(); }
+      }
+
+      // ── Per-step validation ──
+      function prValidateStep(step) {
+        var valid = true;
+
+        function check(id) {
+          var el = document.getElementById(id);
+          if (!el) return;
+          var val = (el.value || '').trim();
+          if (!val) {
+            var setErr = window['setInputError_' + id] || window['setSelectError_' + id];
+            if (setErr) setErr('This field is required');
+            valid = false;
+          } else {
+            var clr = window['clearInputError_' + id] || window['clearSelectError_' + id];
+            if (clr) clr();
+          }
+        }
+
+        function checkConditional(id) {
+          var el = document.getElementById(id);
+          if (el && !el.disabled && el.dataset.required === 'true') {
+            var val = (el.value || '').trim();
+            if (!val) {
+              var setErr = window['setInputError_' + id];
+              if (setErr) setErr('This field is required');
+              valid = false;
+            } else {
+              var clr = window['clearInputError_' + id];
+              if (clr) clr();
+            }
+          }
+        }
+
+        if (step === 1) {
+          check('reasonForRequisition');
+          ['expectedStartDate', 'effectiveDate', 'replaceWho', 'supportOrBussineesNotes'].forEach(checkConditional);
+        } else if (step === 2) {
+          ['positionType', 'positionJobTitle', 'area', 'location'].forEach(check);
+          if (!document.querySelector('input[name="availableDeskOffice"]:checked')) {
+            var radioLabel = document.querySelector('.section-label');
+            if (radioLabel) radioLabel.style.color = '#ef4444';
+            valid = false;
+          } else {
+            var radioLabel = document.querySelector('.section-label');
+            if (radioLabel) radioLabel.style.color = '';
+          }
+        } else if (step === 3) {
+          ['minCompensationRange', 'avegareCompensationRange', 'maxCompensationRange', 'rangeInfoSource'].forEach(check);
+        } else if (step === 4) {
+          // Source step — no required fields
+        } else if (step === 5) {
+          if (!document.getElementById('requisitionHrCheck').checked) {
+            launch_toast('Please confirm you want to submit the form', 2);
+            valid = false;
+          }
+        }
+
+        if (!valid && step !== 5) {
+          launch_toast('Please fill all required fields before continuing', 2);
+        }
+        return valid;
+      }
+
+      // ── Populate Review Step ──
+      function populateReview() {
+        var val = function(id) { var el = document.getElementById(id); return el ? (el.value || '').trim() : '-'; };
+
+        // Reason
+        document.getElementById('review-reason').textContent = val('reasonForRequisition');
+        document.getElementById('review-expectedStartDate').textContent = val('expectedStartDate') || '-';
+        document.getElementById('review-replaceWho').textContent = val('replaceWho') || '-';
+        document.getElementById('review-effectiveDate').textContent = val('effectiveDate') || '-';
+        document.getElementById('review-supportNotes').textContent = val('supportOrBussineesNotes') || '-';
+        document.getElementById('review-reasonNotes').textContent = val('reasonNotes') || '-';
+
+        var reason = val('reasonForRequisition');
+        var showReplace = !(reason === 'New position' || reason === 'Add to Staff' || reason === 'Termination');
+        var showEffective = !(reason === 'New position' || reason === 'Add to Staff');
+        var showSupport = (reason === 'New position' || reason === 'Add to Staff');
+        document.getElementById('review-replaceWho-block').style.display = showReplace ? '' : 'none';
+        document.getElementById('review-effectiveDate-block').style.display = showEffective ? '' : 'none';
+        document.getElementById('review-supportNotes-block').style.display = showSupport ? '' : 'none';
+
+        // Job Info
+        document.getElementById('review-positionType').textContent = val('positionType');
+        document.getElementById('review-positionJobTitle').textContent = val('positionJobTitle');
+        document.getElementById('review-area').textContent = val('area');
+        document.getElementById('review-location').textContent = val('location');
+        var deskRadio = document.querySelector('input[name="availableDeskOffice"]:checked');
+        document.getElementById('review-deskOffice').textContent = deskRadio ? deskRadio.value : '-';
+        var descRadio = document.querySelector('input[name="attachedDescription"]:checked');
+        document.getElementById('review-attachedDescription').textContent = descRadio ? descRadio.value : '-';
+
+        // Compensation
+        document.getElementById('review-minComp').textContent = val('minCompensationRange');
+        document.getElementById('review-avgComp').textContent = val('avegareCompensationRange');
+        document.getElementById('review-maxComp').textContent = val('maxCompensationRange');
+        document.getElementById('review-rangeSource').textContent = val('rangeInfoSource');
+
+        var benefitsChecked = [];
+        document.querySelectorAll('input[name="benefits"]:checked').forEach(function(cb) { benefitsChecked.push(cb.value); });
+        document.getElementById('review-benefits').textContent = benefitsChecked.length > 0 ? benefitsChecked.join(', ') : '-';
+
+        var bonusRadio = document.querySelector('input[name="annualBonus"]:checked');
+        document.getElementById('review-annualBonus').textContent = bonusRadio ? bonusRadio.value : '-';
+
+        // Source
+        var sourceChecked = [];
+        document.querySelectorAll('input[name="source"]:checked').forEach(function(cb) { sourceChecked.push(cb.value); });
+        document.getElementById('review-source').textContent = sourceChecked.length > 0 ? sourceChecked.join(', ') : '-';
+        document.getElementById('review-preIdentify').textContent = val('preIndentifyCandidate') || '-';
+        document.getElementById('review-headhunter').textContent = val('headhunter') || '-';
+
+        // Actors panel
+        renderActorsPanel();
+
+        // Files
+        var filesContainer = document.getElementById('review-files');
+        var getFiles = window['getFiles_Supportfiles'];
+        if (getFiles) {
+          var files = getFiles();
+          if (files && files.length > 0) {
+            var html = '<ul style="margin:0;padding-left:20px;">';
+            for (var i = 0; i < files.length; i++) { html += '<li>' + files[i].name + '</li>'; }
+            html += '</ul>';
+            filesContainer.innerHTML = html;
+          } else {
+            filesContainer.innerHTML = '<p class="text-muted">No files attached.</p>';
+          }
+        }
+      }
+
+      // ── Render actors panel ──
+      function renderActorsPanel() {
+        var panel = document.getElementById('pr-actors-panel');
+        if (!panel || !_prActors) {
+          if (panel) panel.innerHTML = '<p class="text-muted">Approval flow not available.</p>';
+          return;
+        }
+
+        var roles = [
+          { key: 'verificador', label: 'Verifier' },
+          { key: 'aprobador', label: 'Approver' },
+          { key: 'firmante', label: 'Signer' },
+          { key: 'operador', label: 'Operator' },
+          { key: 'ejecutor', label: 'Executor' }
+        ];
+
+        var html = '';
+        roles.forEach(function(role) {
+          var actor = _prActors[role.key];
+          if (actor && actor.name && actor.name !== 'N/A') {
+            html += '<div class="pr-actor-row">';
+            html += '<span class="pr-actor-badge">' + role.label + '</span>';
+            html += '<span class="pr-actor-name">' + actor.name + '</span>';
+            html += '</div>';
+          }
+        });
+
+        if (html === '') {
+          html = '<p class="text-muted">No approval actors found.</p>';
+        }
+
+        panel.innerHTML = html;
+        panel.style.display = 'block';
+      }
+
+      // ── Load actors from server ──
+      function loadPrActors() {
+        fetch('/form_hr_personnel_requisition/actors')
+          .then(function(response) { return response.json(); })
+          .then(function(data) {
+            if (data.result === 1) {
+              _prActors = data.actors;
+              _prFlow = data.flow;
+              _prEstado = data.estado;
+            } else {
+              console.error('Failed to load PR actors:', data.error);
+            }
+          })
+          .catch(function(err) {
+            console.error('Error loading PR actors:', err);
+          });
+      }
+
+      // ── checkReason ──
+      function checkReason() {
+        const reasonValue = document.getElementById('reasonForRequisition').value;
+        const replaceWho = document.getElementById('replaceWho');
+        const effectiveDate = document.getElementById('effectiveDate');
+        const supportNotes = document.getElementById('supportOrBussineesNotes');
+        const expectedStartDate = document.getElementById('expectedStartDate');
+
+        const labelSupport = document.querySelector('.floating-label[for="supportOrBussineesNotes"]');
+        const labelReplaceWho = document.querySelector('.floating-label[for="replaceWho"]');
+        const labelEffectiveDate = document.querySelector('.floating-label[for="effectiveDate"]');
+        const labelExpectedStart = document.querySelector('.floating-label[for="expectedStartDate"]');
+
+        function setFieldRequired(el, label, baseText, isRequired) {
+          el.dataset.required = isRequired ? 'true' : 'false';
+          if (label) label.textContent = baseText + (isRequired ? ' *' : '');
+        }
+
+        function setFieldDisabled(el, isDisabled) {
+          var col = el.closest('.col-md-6');
+          if (isDisabled) {
+            el.setAttribute('disabled', 'disabled');
+            el.value = '';
+            el.dataset.required = 'false';
+            el.classList.remove('valid', 'error', 'has-value');
+            if (col) col.style.display = 'none';
+          } else {
+            el.removeAttribute('disabled');
+            if (col) col.style.display = '';
+          }
+          if (col && col.parentElement && col.parentElement.classList.contains('row')) {
+            var row = col.parentElement;
+            var allHidden = Array.from(row.children).every(function(c) { return c.style.display === 'none'; });
+            row.style.display = allHidden ? 'none' : '';
+          }
+        }
+
+        [replaceWho, effectiveDate, supportNotes, expectedStartDate].forEach(el => {
+          setFieldDisabled(el, false);
+          setFieldRequired(el, null, '', false);
+        });
+
+        if (reasonValue === 'New position' || reasonValue === 'Add to Staff') {
+          setFieldDisabled(replaceWho, true);
+          setFieldDisabled(effectiveDate, true);
+          setFieldRequired(supportNotes, labelSupport, 'Justify New Position or Add to Staff', true);
+          setFieldRequired(expectedStartDate, labelExpectedStart, 'Expected Start Date', true);
+          if (labelReplaceWho) labelReplaceWho.textContent = 'Who do we need to replace';
+          if (labelEffectiveDate) labelEffectiveDate.textContent = 'Effective Date (last day of work)';
+        } else if (reasonValue === 'Promotion or Transfer' || reasonValue === 'Retirement' || reasonValue === 'Long Medical Leave') {
+          setFieldRequired(replaceWho, labelReplaceWho, 'Who do we need to replace', true);
+          setFieldRequired(effectiveDate, labelEffectiveDate, 'Effective Date (last day of work)', true);
+          setFieldRequired(expectedStartDate, labelExpectedStart, 'Expected Start Date', true);
+          setFieldDisabled(supportNotes, true);
+          if (labelSupport) labelSupport.textContent = 'Justify New Position or Add to Staff';
+        } else if (reasonValue === 'Termination') {
+          setFieldRequired(effectiveDate, labelEffectiveDate, 'Effective Date (last day of work)', true);
+          setFieldDisabled(replaceWho, true);
+          setFieldDisabled(supportNotes, true);
+          if (labelSupport) labelSupport.textContent = 'Justify New Position or Add to Staff';
+          if (labelExpectedStart) labelExpectedStart.textContent = 'Expected Start Date';
+        }
+      }
+
+      $(document).ready(function() {
+        checkReason();
+
+        // Fetch actors on load
+        loadPrActors();
+
+        $("#expectedStartDate").datepicker({
+          dateFormat: "dd/mm/yy",
+          minDate: 1,
+          onSelect: function() {
+            var w = $(this).closest('.floating-input');
+            w.addClass('has-value valid').removeClass('error');
+          }
+        });
+        $("#effectiveDate").datepicker({
+          dateFormat: "dd/mm/yy",
+          minDate: 1,
+          onSelect: function() {
+            var w = $(this).closest('.floating-input');
+            w.addClass('has-value valid').removeClass('error');
+          }
+        });
+
+        // Submit handler on step 5
+        document.getElementById('submitPersonnelRequest').addEventListener('click', function() {
+          if (!prValidateStep(5)) return;
+
+          // Validate all previous steps as a safety net
+          var allValid = true;
+          for (var s = 1; s <= 4; s++) {
+            if (!prValidateStep(s)) { allValid = false; prCurrentStep = s; prUpdateStepper(); break; }
+          }
+          if (!allValid) return;
+
+          // Guard: ensure actors are loaded
+          if (!_prActors || !_prFlow) {
+            launch_toast('Approval flow is still loading, please wait a moment and try again.', 2);
+            return;
+          }
+
+          var btnApi = window['submitBtn_submitPersonnelRequest'];
+          if (btnApi) btnApi.setSending('Submitting...');
+
+          // Build FormData manually from form fields
+          var formData = new FormData();
+          var frm = document.querySelector('form#form_hr_personnel_requisition');
+          
+          if (frm) {
+            // Get all form fields
+            var inputs = frm.querySelectorAll('input, select, textarea');
+            for (var i = 0; i < inputs.length; i++) {
+              var field = inputs[i];
+              if (field.type === 'checkbox' || field.type === 'radio') {
+                if (field.checked) {
+                  formData.append(field.name, field.value);
+                }
+              } else if (field.type !== 'hidden' || field.value) {
+                formData.append(field.name, field.value);
+              }
+            }
+          }
+
+          // Append actor data resolved from server
+          formData.append('verificador', _prActors.verificador ? _prActors.verificador.name : 'N/A');
+          formData.append('aprobador', _prActors.aprobador ? _prActors.aprobador.name : 'N/A');
+          formData.append('firmante', _prActors.firmante ? _prActors.firmante.name : 'N/A');
+          formData.append('operador', _prActors.operador ? _prActors.operador.name : 'N/A');
+          formData.append('ejecutor', _prActors.ejecutor ? _prActors.ejecutor.name : 'N/A');
+          formData.append('estado', _prEstado || 'Verify');
+
+          fetch('/form_hr_personnel_requisition', {
+            method: 'POST',
+            body: formData
+          })
+          .then(function(response) { return response.json(); })
+          .then(function(data) {
+            var RowID = Number(data.RowID);
+            if (RowID > 0) {
+              if (btnApi) btnApi.setDone('Done');
+              launch_toast('Successfully Created', 1);
+              setTimeout(function() { approval_detalle(RowID); }, 1000);
+            } else {
+              launch_toast(data.error || 'Error creating request', 2);
+              if (btnApi) btnApi.setError();
+            }
+          })
+          .catch(function(err) {
+            launch_toast('Error creating request', 2);
+            if (btnApi) btnApi.setError();
+          });
+        });
+      });

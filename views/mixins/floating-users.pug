@@ -1,0 +1,331 @@
+mixin floating-users(label, name, options=[], selected=[], required=false, placeholder='select an option', className='', containerClass='', attrs={}, orderByDepartment=true, firstDepartment=null, readOnly=false, crm=false)
+  div.floating-users-container(class=containerClass)
+    div.floating-users-wrapper
+      - if (typeof firstDepartment !== 'undefined' && firstDepartment)
+        script.
+          window.floatingUsersFirstDepartment = '#{firstDepartment}';
+      if readOnly
+        //- Read-only mode: show chips without interaction
+        div.floating-users-display.readonly(data-name=name class='has-value' style=crm ===true ? 'padding: 6px 10px; min-height: 25px;' : '')
+          if selected && selected.length
+            each sel in selected
+              - var opt = options.find(o => o.value === sel)
+              if opt
+                span.chip.readonly-chip(data-value=sel)
+                  img(src=`/pic/${opt.value}.png` width="20" height="20" onerror="this.onerror=null;this.src='/pic/default.png';")
+                  span= opt.label
+          else
+            span.placeholder= 'No participants'
+      else
+        //- Editable mode
+        div.floating-users-display(tabindex="0" data-name=name data-options=JSON.stringify(options) data-placeholder=placeholder data-order-by-department=orderByDepartment class=selected && selected.length ? 'has-value' : '' style=crm ===true ? 'padding: 6px 10px; min-height: 25px;' : '')
+          if selected && selected.length
+            each sel in selected
+              - var opt = options.find(o => o.value === sel)
+              if opt
+                span.chip(data-value=sel)
+                  img(src=`/pic/${opt.value}.png` width="20" height="20" onerror="this.onerror=null;this.src='/pic/default.png';")
+                  span= opt.label
+                  button(type="button" class="remove-chip" data-value=sel) &times;
+            each sel in selected
+              input(type="hidden" name=`${name}[]` value=sel)
+          else
+            span.placeholder= placeholder
+          i.fas.fa-chevron-down.dropdown-arrow
+        div.floating-users-dropdown(id=`dropdown_${name}`)
+          input(type="text" class="dropdown-search" placeholder="Search by name..." oninput="filterFloatingDropdownOptions(this, '${name}')")
+          if orderByDepartment
+            - var grouped = {};
+            - options.forEach(function(opt) {
+            -   if (!grouped[opt.department]) grouped[opt.department] = [];
+            -   grouped[opt.department].push(opt);
+            - });
+            - var departments = Object.keys(grouped).sort(function(a, b) {
+            -   if (firstDepartment && a === firstDepartment) return -1;
+            -   if (firstDepartment && b === firstDepartment) return 1;
+            -   return a.localeCompare(b, undefined, {sensitivity: 'base'});
+            - });
+            - departments.forEach(function(dep) {
+            .dropdown-department-label(data-department=dep) #{dep}
+            -   grouped[dep].forEach(function(option) {
+            if !selected.includes(option.value)
+              div.dropdown-option(data-value=option.value data-label=option.label data-department=dep)
+                img(src=`/pic/${option.value}.png` title=`${option.label}` width="20" height="20" onerror="this.onerror=null;this.src='/pic/default.png';")
+                | #{option.label}
+            -   });
+            - });
+          else
+            each option in options
+              if !selected.includes(option.value)
+                div.dropdown-option(data-value=option.value data-label=option.label)
+                  img(src=`/pic/${option.value}.png` title=`${option.label}` width="20" height="20" onerror="this.onerror=null;this.src='/pic/default.png';")
+                  | #{option.label}
+      label.floating-label(for=name)= label + (required ? ' *' : '')
+    span.error-message(data-error-for=name)
+  script.
+    (function() {
+      function initFloatingUsers() {
+        // Initialize all multiselects (guard: skip if already wired by a previous mixin call)
+        document.querySelectorAll('.floating-users-wrapper').forEach(function(wrapper) {
+          var display = wrapper.querySelector('.floating-users-display');
+          if (!display || display.classList.contains('readonly')) return;
+
+          if (wrapper.dataset.fuInit) return;
+          wrapper.dataset.fuInit = '1';
+          var name = display.getAttribute('data-name');
+
+          // Toggle dropdown on click anywhere in wrapper
+          wrapper.addEventListener('click', function(e) {
+            // Don't toggle if clicking remove button
+            if (e.target.closest('.remove-chip')) {
+              e.stopPropagation();
+              return;
+            }
+
+            var dropdown = document.getElementById('dropdown_' + name);
+
+            // Don't toggle if the click originated inside the open dropdown
+            // (search box, options, department labels, etc.)
+            if (dropdown && dropdown.contains(e.target)) return;
+
+            if (dropdown) {
+              dropdown.classList.toggle('show');
+              // Defer the display rebuild so the current event cycle finishes first.
+              // Calling updateFloatingMultiselectDisplay synchronously does
+              // display.innerHTML = '' which detaches e.target; the document-level
+              // "close on outside click" handler then sees wrapper.contains(e.target)
+              // as false (detached node) and immediately closes the dropdown.
+              if (dropdown.classList.contains('show')) {
+                setTimeout(function() {
+                  updateFloatingMultiselectDisplay(name);
+                  var newDropdown = document.getElementById('dropdown_' + name);
+                  var searchInput = newDropdown && newDropdown.querySelector('.dropdown-search');
+                  if (searchInput) { filterFloatingDropdownOptions(searchInput, name); searchInput.focus(); }
+                }, 0);
+              }
+            }
+          });
+
+          // Close dropdown when clicking outside
+          document.addEventListener('click', function(e) {
+            var dropdown = document.getElementById('dropdown_' + name);
+            if (dropdown && dropdown.classList.contains('show')) {
+              if (!wrapper.contains(e.target) && !dropdown.contains(e.target)) {
+                dropdown.classList.remove('show');
+              }
+            }
+          });
+
+          // Handle chip removal
+          wrapper.addEventListener('click', function(e) {
+            if (e.target.closest('.remove-chip')) {
+              e.stopPropagation();
+              var value = e.target.getAttribute('data-value');
+              removeFloatingMultiselectChip(name, value);
+            }
+          });
+        });
+
+        // Handle option selection
+        document.querySelectorAll('.floating-users-dropdown').forEach(function(dropdown) {
+          if (dropdown.dataset.fuInit) return;
+          dropdown.dataset.fuInit = '1';
+          dropdown.addEventListener('click', function(e) {
+            var opt = e.target.closest('.dropdown-option');
+            if (opt) {
+              var name = dropdown.id.replace('dropdown_', '');
+              var value = opt.getAttribute('data-value');
+              selectFloatingMultiselectOption(name, value);
+            }
+          });
+        });
+      }
+      
+      // Execute immediately if DOM is ready, else wait for DOMContentLoaded
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initFloatingUsers);
+      } else {
+        initFloatingUsers();
+      }
+    })();
+    
+    // Filtro de opciones en el dropdown
+    window.filterFloatingDropdownOptions = function(input, name) {
+      var filter = input.value.toLowerCase();
+      var dropdown = document.getElementById('dropdown_' + name);
+      if (!dropdown) return;
+      
+      // Objeto para rastrear departamentos visibles
+      var visibleDepartments = {};
+      
+      dropdown.querySelectorAll('.dropdown-option').forEach(function(opt) {
+        var label = opt.getAttribute('data-label') || '';
+        var department = opt.getAttribute('data-department') || '';
+        var isVisible = label.toLowerCase().includes(filter);
+        
+        opt.style.display = isVisible ? '' : 'none';
+        
+        // Rastrear departamentos con opciones visibles
+        if (isVisible && department) {
+          visibleDepartments[department] = true;
+        }
+      });
+      
+      // Mostrar/ocultar etiquetas de departamento según si tienen opciones visibles
+      dropdown.querySelectorAll('.dropdown-department-label').forEach(function(depLabel) {
+        var department = depLabel.getAttribute('data-department') || '';
+        depLabel.style.display = visibleDepartments[department] ? '' : 'none';
+      });
+    }
+    
+    function selectFloatingMultiselectOption(name, value) {
+      var display = document.querySelector('.floating-users-display[data-name="'+name+'"]');
+      var hiddenInputs = display.querySelectorAll('input[type="hidden"]');
+      var selected = Array.from(hiddenInputs).map(i => i.value);
+      
+      if (!selected.includes(value)) {
+        // Create hidden input
+        var input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = name + '[]';
+        input.value = value;
+        display.appendChild(input);
+        
+        updateFloatingMultiselectDisplay(name);
+      }
+    }
+    
+    function removeFloatingMultiselectChip(name, value) {
+      var display = document.querySelector('.floating-users-display[data-name="'+name+'"]');
+      var hiddenInputs = display.querySelectorAll('input[type="hidden"]');
+      hiddenInputs.forEach(function(input) {
+        if(input.value == value) input.remove();
+      });
+      
+      updateFloatingMultiselectDisplay(name);
+    }
+    
+    function updateFloatingMultiselectDisplay(name) {
+      var display = document.querySelector('.floating-users-display[data-name="'+name+'"]');
+      var dropdown = document.getElementById('dropdown_' + name);
+      var options = JSON.parse(display.getAttribute('data-options'));
+      var placeholder = display.getAttribute('data-placeholder');
+      var selected = Array.from(display.querySelectorAll('input[type="hidden"]')).map(i => i.value);
+      var excluded = (display.getAttribute('data-excluded') || '').split(',').filter(Boolean);
+      var isExcluded = function(val) { return excluded.includes(val); };
+
+      // Sincronizar input hidden global si existe (solo para el formulario de nuevo caso)
+      if (name === 'crm_asignados') {
+        var globalHidden = document.getElementById('newcase_asignados');
+        if (globalHidden) {
+          globalHidden.value = selected.join(';');
+        }
+      }
+      // Store current hidden inputs
+      var hiddenInputs = Array.from(display.querySelectorAll('input[type="hidden"]'));
+      
+      // Clear display content (keep arrow)
+      var arrow = display.querySelector('.dropdown-arrow');
+      display.innerHTML = '';
+      
+      // Add chips or placeholder
+      if(selected.length) {
+        selected.forEach(function(sel) {
+          var opt = options.find(o => o.value == sel);
+          if(opt) {
+            var chip = document.createElement('span');
+            chip.className = 'chip';
+            chip.setAttribute('data-value', sel);
+            chip.innerHTML = `<img src='/pic/${opt.value}.png' title="${opt.label}" width='20' height='20' onerror="this.onerror=null;this.src='/pic/default.png';"> <span>${opt.label}</span>`;
+            
+            var btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'remove-chip';
+            btn.setAttribute('data-value', sel);
+            btn.innerHTML = '&times;';
+            
+            chip.appendChild(btn);
+            display.appendChild(chip);
+          }
+        });
+        display.classList.add('has-value');
+      } else {
+        var placeholderSpan = document.createElement('span');
+        placeholderSpan.className = 'placeholder';
+        placeholderSpan.textContent = placeholder;
+        display.appendChild(placeholderSpan);
+        display.classList.remove('has-value');
+      }
+      
+      // Re-add hidden inputs
+      hiddenInputs.forEach(function(input) {
+        display.appendChild(input);
+      });
+      
+      // Re-add arrow
+      display.appendChild(arrow);
+      
+      // Update dropdown options
+      if(dropdown) {
+        // Guardar el valor actual del filtro si existe
+        var prevSearch = dropdown.querySelector('.dropdown-search');
+        var prevValue = prevSearch ? prevSearch.value : '';
+        dropdown.innerHTML = '';
+        // Reagregar el input de búsqueda
+        var searchInput = document.createElement('input');
+        searchInput.type = 'text';
+        searchInput.className = 'dropdown-search';
+        searchInput.placeholder = 'Buscar...';
+        searchInput.setAttribute('oninput', `filterFloatingDropdownOptions(this, '${name}')`);
+        if (prevValue) searchInput.value = prevValue;
+        dropdown.appendChild(searchInput);
+        // Aplicar filtro si había valor previo
+        if (prevValue) {
+          setTimeout(function() { filterFloatingDropdownOptions(searchInput, name); }, 0);
+        }
+        // Agrupación por departamento si está activo
+        var orderByDepartment = display.getAttribute('data-order-by-department') !== 'false';
+        if(orderByDepartment) {
+          var grouped = {};
+          options.forEach(function(opt) {
+            if (!selected.includes(opt.value) && !isExcluded(opt.value)) {
+              if (!grouped[opt.department]) grouped[opt.department] = [];
+              grouped[opt.department].push(opt);
+            }
+          });
+          // Ordenar departamentos alfabéticamente y priorizar firstDepartment si existe
+          var departments = Object.keys(grouped).sort(function(a, b) {
+            if (window.floatingUsersFirstDepartment && a === window.floatingUsersFirstDepartment) return -1;
+            if (window.floatingUsersFirstDepartment && b === window.floatingUsersFirstDepartment) return 1;
+            return a.localeCompare(b, undefined, {sensitivity: 'base'});
+          });
+          departments.forEach(function(dep) {
+            var depLabel = document.createElement('div');
+            depLabel.className = 'dropdown-department-label';
+            depLabel.setAttribute('data-department', dep);
+            depLabel.textContent = dep;
+            dropdown.appendChild(depLabel);
+            grouped[dep].forEach(function(opt) {
+              var div = document.createElement('div');
+              div.className = 'dropdown-option';
+              div.setAttribute('data-value', opt.value);
+              div.setAttribute('data-label', opt.label);
+              div.setAttribute('data-department', dep);
+              div.innerHTML = `<img src='/pic/${opt.value}.png' width='20' height='20' onerror="this.onerror=null;this.src='/pic/default.png';">${opt.label}`;
+              dropdown.appendChild(div);
+            });
+          });
+        } else {
+          options.forEach(function(opt) {
+            if(!selected.includes(opt.value) && !isExcluded(opt.value)) {
+              var div = document.createElement('div');
+              div.className = 'dropdown-option';
+              div.setAttribute('data-value', opt.value);
+              div.setAttribute('data-label', opt.label);
+              div.innerHTML = `<img src='/pic/${opt.value}.png' width='20' height='20' onerror="this.onerror=null;this.src='/pic/default.png';">${opt.label}`;
+              dropdown.appendChild(div);
+            }
+          });
+        }
+      }
+    }

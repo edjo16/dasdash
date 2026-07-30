@@ -1,0 +1,186 @@
+extends ../layout
+include ../mixins/floating-input
+include ../mixins/floating-textarea
+include ../mixins/floating-file
+include ../mixins/floating-select
+include ../mixins/floating-range
+include ../ui/button-submit
+
+block layout-content
+  div#layoutSidenav_content
+    main
+      div.container-fluid.px-4
+        a(href="/" style="color:#212529")
+            i.fas.fa-chevron-left
+            span(href="/" style="padding-left: 0.5rem;") Home
+        h1#titlename.mt-4 #{title}
+        ol.breadcrumb.mb-4
+          li.breadcrumb-item.active This form is designed to create an evaluation of the performance of the colaborator in the organization.
+    form#form_hr_performance_review(method="post" action="" enctype="multipart/form-data")
+      .section-flex
+        h3 General Information
+        div.row.Not
+                div.col-md-6
+                    label Master Form
+                    input#mform.form-control(type="number" name="mform" value=mform[0].id readonly)
+        div.row.Not
+                div.col-md-4
+                    label Department Start
+                    input#id_dep_inicio.form-control(type="text" name="id_dep_inicio" value=userProfile.Dep)
+                div.col-md-4
+                    label Flow Type
+                    input#ctipo.form-control(type="text" name="ctipo")
+                div.col-md-4
+                    label User
+                    input#xnombre.form-control(type="text" name="xnombre" value=userProfile.UserName)
+                div.col-md-4
+                    label Username
+                    input#username.form-control(type="text" name="username" value=userProfile.UsuarioID)
+                div.col-md-4
+                    label okForm
+                    input#okForm.form-control(type="text" name="okForm" value=okForm)
+                div.col-md-4
+                    label Messaje
+                    input#mensaje.form-control(type="text" name="mensaje" value=mensaje)
+                div.col-md-4
+                    label Status
+                    input#estado.form-control(type="text" name="estado" value="Verify")
+                div.col-md-4
+                    label Compañias
+                    input#ccompania.form-control(type="text" name="ccompania" value=userMenu.compania)
+                div.col-md-4
+                    label Company
+                    select#compania.form-control(name="compania" required)
+                div.col-md-4
+                    label Approvals
+                    select#approvals_select.form-control(name="approvals_select" required)
+                div.col-md-4
+                    label Process
+                    select#proceso.form-control(name="proceso" required)
+                        option(value="")
+                div.row
+                    div.col-md-4
+                        label Beneficiary
+                        input#beneficiario.form-control(type="text" name="beneficiario" maxlength="400" )
+                    div.col-md-4
+                        label Originating bank
+                        select#banco.form-control(type="text" name="banco")
+                            option(value="N/A") N/A
+                div.row
+                    div.col-md-4
+                        label Currency
+                        select#moneda.form-control(name="moneda")
+                    div.col-md-4
+                        label Transaction amount
+                        input#monto.form-control(type="number",min="0.01", step=".01", name="monto")
+                //- hr
+        div.row.Not
+                div.col-md-6
+                    label Verifier
+                    select#verificador.form-control(name="verificador"  readonly)
+                div.col-md-4.Not
+                    label Approver
+                    select#aprobador.form-control(name="aprobador" readonly)
+                div.col-md-4.Not
+                    label Signer
+                    select#firmante.form-control(name="firmante" readonly)
+                div.col-md-4.Not
+                    label Operator
+                    select#operador.form-control(name="operador" readonly)
+                div.col-md-6
+                    label Executor
+                    select#ejecutor.form-control(name="ejecutor" readonly)
+        div.row
+            div.col-md-6
+                +floating-input("Collaborator's name", 'collaboratorName', 'text', false, '', '', '', {value: userMenu.Name}, true)
+            div.col-md-6
+                +floating-input("Collaborator's job Title", 'collabjobTitle', 'text', false, '', '', '', {value: userMenu.xcargo}, true)
+            div.col-md-6
+                +floating-input("Name of direct leader", 'leaderName', 'text', false, '', '', '', {value: userProfile.manager.Name}, true)
+            div.col-md-6
+                +floating-input("Leader's job Title", 'leaderJobTitle', 'text', false, '', '', '', {value: userProfile.manager.xcargo}, true)
+            div.col-md-3
+                +floating-range("Average Goal Achieved", 'averageGoal', true, 0, 100, 50)
+            div.col-md-3
+                +floating-range("Development Goal Achieved", 'developmentGoal', true, 0, 100, 50)
+            div.col-md-6
+                +floating-select("General Result", 'generalResult', [{value: 'Rarely Achieves', label: 'Rarely Achieves'}, {value: 'Sometimes Achieves', label: 'Sometimes Achieves'}, {value: 'Fully Achieves', label: 'Fully Achieves'}, {value: 'Sometimes Exceeds', label: 'Sometimes Exceeds'}, {value: 'Consistently Exceeds', label: 'Consistently Exceeds'}], true)
+        div.row
+            div.col-md-12
+                +floating-textarea("General Observation leader", 'observationsLeader', true, '', '', '', {}, 3)
+            div.col-md-12
+                +floating-textarea("General observations associate", 'observationsAssociate', true, '', '', '', {}, 3)
+      .section
+       h3 Files
+        div.row
+            div.col-md-6
+              +floating-file("Upload Evaluation Form", 'Signingfiles', true, true, true)
+            div.col-md-6
+              +floating-file("Supporting Documents", 'Supportfiles', false, true, true)
+
+        div.row
+            div.col-md-2
+                +submit-button('submitPerformanceRequest', 'Submit')
+    style.
+      h1, h2, h3 {
+      color: rgb(0,88,111);
+      }
+
+      .form-container {
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 20px;
+      }
+
+      .section {
+      margin: 20px;
+      border: 2px solid rgb(0,88,111);
+      padding: 15px;
+      border-radius: 20px;
+      }
+      
+      .form-group {
+        margin: 15px;
+      }
+      .section-flex {
+        margin: 20px;
+        border: 2px solid rgb(0,88,111);
+        padding: 15px;
+        border-radius: 20px;
+        display:"flex";
+        flex-wrap: "wrap";
+        margin-bottom: 15px;
+      }
+      .checkbox-group {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+      .checkbox-group label {
+        display: flex;
+        align-items: center;
+        font-weight: normal;
+      }
+      .checkbox-group input[type="checkbox"] {
+        margin-right: 5px;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      th, td {
+        border: 1px solid #ddd;
+        padding: 8px;
+        text-align: left;
+      }
+      th {
+        background-color: #f2f2f2;
+      }
+
+      @media (max-width: 600px) {
+        .checkbox-group {
+          flex-direction: column;
+        }
+      }
+
+   

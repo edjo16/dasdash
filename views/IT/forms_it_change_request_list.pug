@@ -1,0 +1,210 @@
+extends ../layout
+include ../ui/filter-bar
+include ../mixins/data-table
+include ../mixins/breadcrumb
+
+block layout-content
+
+  //- Hidden system fields for the create modal
+  input#hidden_cusuario(type="hidden" value=userProfile.UsuarioID)
+  input#hidden_department(type="hidden" value=userProfile.Dep)
+  input#hidden_collaborator_department(type="hidden" value=userProfile.department || '')
+  input#hidden_collaborator_name(type="hidden" value=userMenu.Name)
+  input#hidden_collaborator_position(type="hidden" value=userMenu.xcargo)
+  input#hidden_approval_name(type="hidden" value=approvalFlow.nombre)
+  input#hidden_verificador(type="hidden" value=approvalFlow.uverificador)
+  input#hidden_aprobador(type="hidden" value=approvalFlow.uaprobador)
+  input#hidden_firmante(type="hidden" value=approvalFlow.ufirmante)
+  input#hidden_ejecutor(type="hidden" value=approvalFlow.uejecutor)
+  input#hidden_operador(type="hidden" value=approvalFlow.uoperador)
+  div#layoutSidenav_content
+    main
+      div.container-fluid.px-4
+        +app-breadcrumb({
+          homeHref: '/',
+          items: [{ label: title, active: true }]
+        })
+        - const _currentYear = new Date().getFullYear()
+        - const _years = []; for(let y = _currentYear; y >= 2025; y--) _years.push({value: String(y), label: String(y)})
+        +fb-bar
+          a.fb-btn(href="#" onclick="openChangeRequestCreateModal();return false;" style="background:#00586f;color:#fff;border-color:#00586f;")
+            i.fas.fa-plus
+            span Create New
+          +fb-search({id: 'SearchBox', placeholder: 'Search by collaborator, application or title...', onkeyup: 'SearchTableChange()'})
+          +fb-select({id: 'SelectBox', icon: 'fa-desktop', placeholder: 'Application', items: [{value:'Dashboard',label:'Dashboard'},{value:'SIR',label:'SIR'}], placeholderDisabled: false, onchange: 'SelectTableChange()'})
+          +fb-status-select({onchange: 'SelectTableChange()', items: [{value:'Verify',label:'Verify'},{value:'Verified',label:'Verified'},{value:'Approve',label:'Approve'},{value:'Approved',label:'Approved'},{value:'Rejected',label:'Rejected'}]})
+          +fb-select({id: 'SelectBoxYear', icon: 'fa-calendar', placeholder: 'Years', placeholderDisabled: false, items: _years, onchange: 'SelectTableChange()', minWidth: '100px'})
+          +fb-reset-btn
+          +fb-actions
+            +fb-download-btn({onclick: 'downloadExcel(event)'})
+            +fb-page-size({id: 'SelectBoxPages', sizes: [15,25,50,100], onchange: 'SelectTableChange()'})
+            +fb-pagination
+        +fb-info({id: 'totalCount'})
+        +data-table('MainTable', 'totalCount', { internalViewToggle: false })
+          thead
+            tr#header
+              th(style="width:3%;") Id
+              th(style="width:5%;") Approval
+              th(style="width:10%;") Collaborator
+              th Application
+              th Title
+              th Priority
+              th Type
+              th Date Created
+              th(style="width:10%;") Approval Status
+          tbody
+
+    script.
+
+      // Debounce function
+      function debounce(func, wait) {
+        let timeout;
+        return function(...args) {
+          clearTimeout(timeout);
+          timeout = setTimeout(() => func.apply(this, args), wait);
+        };
+      }
+      function formID(id) {
+          var url_string = window.location.href;
+          var url = new URL(url_string);
+        window.location.href = "/get_forms_it_software_change_request/" + id + "?" + url.searchParams
+      }
+
+      let currentPage = 1;
+      const rowsPerPage = document.getElementById("SelectBoxPages").value;
+      const table = document.querySelector('#MainTable tbody');
+      const searchBox = document.querySelector('#SearchBox');
+      const selectBox = document.querySelector('#SelectBox') ;
+      const selectBoxStatus = document.querySelector('#SelectBoxStatus');
+      const selectBoxYear = document.querySelector('#SelectBoxYear');
+        function renderTable(forms) { 
+          table.innerHTML = "";
+
+          if (forms.length === 0) {
+            const row = document.createElement('tr');
+            row.innerHTML = `
+              <td colspan="8" style="text-align: center;">No data found</td>
+            `;
+            table.appendChild(row);
+          } else {
+
+            forms.forEach(form => {
+              let statusTd
+              if(form.approval_status == 'Verify') {
+                statusTd = `<td style="width: 90px; font-size: 10px; margin-top: 4px"><span style="min-width: 90px; width: 90px;border-radius: 10px; padding: 4px; color: white; background-color:rgb(45, 124, 194)"><i class="fas fa-exclamation-circle"></i> Verify</span></td>`
+              }
+              else if(form.approval_status == 'Verified') {
+                statusTd = `<td style="width: 90px; font-size: 10px; margin-top: 4px"><span style="min-width: 90px; width: 90px;border-radius: 10px; padding: 4px; color: white; background-color: #00586f"><i class="fas fa-exclamation-circle"></i> verified</span></td>`
+              }
+              else if(form.approval_status == 'Approve') {
+                statusTd = `<td style="width: 90px; font-size: 10px; margin-top: 4px"><span style="min-width: 90px; width: 90px;border-radius: 10px; padding: 4px; color: white; background-color: #6c757d"><i class="fas fa-exclamation-circle"></i> Approve</span></td>`
+              }
+              else if( form.approval_status == 'Approved') {
+               statusTd = `<td style="width: 90px; font-size: 10px; margin-top: 4px"><span style="min-width: 90px; width: 90px;border-radius: 10px; padding: 4px; color: white; background-color: #ffc107"><i class="fas fa-play-circle"></i> Approved</span></td>`
+              }
+              else{
+               statusTd = `<td style="width: 90px; font-size: 10px; margin-top: 4px"><span style="min-width: 90px; width: 90px;border-radius: 10px; padding: 4px; color: white; background-color:rgb(150, 17, 17)"><i class="fas fa-check-circle"></i> Rejected </span></td>`
+              }
+              const row = document.createElement('tr');
+              row.setAttribute(
+                'onclick',
+                `openChangeRequestViewModal(${form.id});return false;`
+              ) 
+              row.innerHTML = `
+                <td>${form.id}</td>
+                <td>${form.log_id}</td>
+                <td><img style="border-radius:50%" class="icon" src="pic/${form.user_created}.png" title="${form.user_created}"></td>
+                <td>${form.application_name}</td>
+                <td>${form.title}</td>
+                <td>${form.priority}</td>
+                <td>${form.type}</td>
+                <td><i style="padding-right: 3px;" class="fas fa-calendar-check"></i>${form.date_created}</td>
+                ${statusTd? statusTd : ''}
+              `;
+              table.appendChild(row);
+            });
+          }
+        }
+      
+      // Function to render pagination controls
+      function renderPagination(totalRows) {
+        const rowsPerPage = document.getElementById("SelectBoxPages").value;
+        const totalPages = Math.ceil(totalRows / rowsPerPage);
+        const currentPageText = document.querySelector('#totalCount');
+        currentPageText.textContent = `Page ${currentPage} of ${totalPages} — ${totalRows} records`;
+
+        const prevBtn = document.querySelector('.fb-page-btn:first-child');
+        const nextBtn = document.querySelector('.fb-page-btn:last-child');
+        if (prevBtn) prevBtn.disabled = currentPage === 1;
+        if (nextBtn) nextBtn.disabled = currentPage === totalPages;
+      }
+
+      // Function to handle pagination
+      function changePage(pageNumber) {
+        if (pageNumber < 1 || pageNumber > Math.ceil(totalCount / rowsPerPage)) {
+          return;
+        }
+        currentPage = pageNumber;
+        fetchFormsTemporaryChangesLocation();
+      }
+
+      // Function to handle search
+      const debouncedFetchApprovals = debounce(fetchFormsTemporaryChangesLocation, 400);
+
+      function SearchTableChange() {
+        debouncedFetchApprovals();
+      }
+
+      // Function to handle the process filter
+      function SelectTableChange() {
+        fetchFormsTemporaryChangesLocation();
+      }
+      // Function to reset the filters
+      function resetFilters() {
+        searchBox.value = "";
+        selectBox.value = "";
+        selectBoxStatus.value = "";
+        selectBoxYear.value = "";
+        currentPage = 1;
+        fetchFormsTemporaryChangesLocation();
+      }
+
+      
+      
+      // Function to fetch the approvals from the server with filtering and pagination
+      async function fetchFormsTemporaryChangesLocation() {
+        const url = new URL(window.location.href);
+        const searchQuery = searchBox.value.trim();
+        const applicationFilter = selectBox.value;
+        const statusFilter = selectBoxStatus.value;
+        const yearFilter = selectBoxYear.value;
+        const limit = document.getElementById("SelectBoxPages").value;
+        if (searchQuery.length > 1 || applicationFilter.length > 1 || yearFilter.length > 1) currentPage = 1;
+        const request = `/forms_it_software_change_request?page=${currentPage}&limit=${limit.trim()}${searchQuery ? `&search=${searchQuery}` : ''}${applicationFilter ? `&application_name=${applicationFilter}` : ''}${statusFilter ? `&status=${statusFilter}` : ''}${yearFilter ? `&year=${yearFilter}` : ''}`;
+        const response = await fetch(request);
+        const data = await response.json();
+        renderTable(data.formData.recordset);
+        renderPagination(data.totalCount);
+      }
+
+      // Download Excel with active filters
+      function downloadExcel(e) {
+        e.preventDefault();
+        const searchQuery    = searchBox.value.trim();
+        const applicationFilter = selectBox.value;
+        const statusFilter   = selectBoxStatus.value;
+        const yearFilter     = selectBoxYear.value;
+        const params = new URLSearchParams();
+        if (searchQuery)       params.set('search',           searchQuery);
+        if (applicationFilter) params.set('application_name', applicationFilter);
+        if (statusFilter)      params.set('status',           statusFilter);
+        if (yearFilter)        params.set('year',             yearFilter);
+        window.location.href = `/forms_it_software_change_request/download?${params.toString()}`;
+      }
+
+      // Initialize the table on page load
+      document.addEventListener('DOMContentLoaded', () => {
+        fetchFormsTemporaryChangesLocation();
+      });
+
+  include ./forms_it_change_request_modal

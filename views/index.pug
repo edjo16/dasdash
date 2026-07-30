@@ -1,0 +1,241 @@
+extends layout
+block layout-content
+  div#layoutSidenav_content
+    main
+      div.container-fluid.px-4
+        //- Page Header
+        div.dash-pg-hdr
+          div
+            h1.dash-pg-title Dashboard
+            p.dash-pg-sub Welcome back, #{userProfile.UserName}
+          button.btn.btn-sm.dash-btn-new(type="button" onclick="openWhatsNewModal()")
+            i.fas.fa-star.me-2
+            | What's New
+
+        //- Stats Row
+        div.dash-stats-row
+          //- Approvals section
+          div.dash-stats-section
+            div.dash-stats-sec-lbl
+              i.fas.fa-check-circle.me-1
+              | Approvals in which you are involved
+            div.dash-cards-grid
+              div.dash-sc.dash-sc-ongoing(onclick="window.location.href='/approvals-total?key=Ongoing'")
+                div.dash-sc-top
+                  div.dash-sc-ic.dash-sc-ic-ongoing
+                    i.fas.fa-clock
+                div.dash-sc-num#ApprovalsRunning= userProfile.Ejecutando || '-'
+                div.dash-sc-lbl Ongoing
+                a.dash-sc-link(href="/approvals-total?key=Ongoing" onclick="localStorage.removeItem('approvalFilters')")
+                  span View Details
+                  i.fas.fa-chevron-right.ms-1
+              div.dash-sc.dash-sc-pending(onclick="window.location.href='/approvals-total?key=Pending'")
+                div.dash-sc-top
+                  div.dash-sc-ic.dash-sc-ic-pending
+                    i.fas.fa-bell
+                div.dash-sc-num#ApprovalsPending= userProfile.Pendiente || '-'
+                div.dash-sc-lbl Pending
+                a.dash-sc-link(href="/approvals-total?key=Pending" onclick="localStorage.removeItem('approvalFilters')")
+                  span View Details
+                  i.fas.fa-chevron-right.ms-1
+              div.dash-sc.dash-sc-closed(onclick="window.location.href='/approvals-total?key=Closed'")
+                div.dash-sc-top
+                  div.dash-sc-ic.dash-sc-ic-closed
+                    i.fas.fa-check-circle
+                div.dash-sc-num#ApprovalsTotal= userProfile.Total || '-'
+                div.dash-sc-lbl Closed
+                a.dash-sc-link(href="/approvals-total?key=Closed" onclick="localStorage.removeItem('approvalFilters')")
+                  span View Details
+                  i.fas.fa-chevron-right.ms-1
+              div.dash-sc.dash-sc-rejected(onclick="window.location.href='/approvals-total?key=Rejected'")
+                div.dash-sc-top
+                  div.dash-sc-ic.dash-sc-ic-rejected
+                    i.fas.fa-times-circle
+                div.dash-sc-num#ApprovalsRejected= userProfile.Rejected || '-'
+                div.dash-sc-lbl Rejected
+                a.dash-sc-link(href="/approvals-total?key=Rejected" onclick="localStorage.removeItem('approvalFilters')")
+                  span View Details
+                  i.fas.fa-chevron-right.ms-1
+
+          //- CRM section
+          div.dash-crm-section
+            div.dash-stats-sec-lbl
+              i.fas.fa-users.me-1
+              | CRM Cases
+            div.dash-cards-grid.dash-cards-single
+              div.dash-sc.dash-sc-wide.dash-sc-crm(onclick="window.location.href='/crm_main?key=Pending'")
+                div.dash-sc-top
+                  div.dash-sc-ic.dash-sc-ic-crm
+                    i.fas.fa-bell
+                div.dash-sc-num#crm_pending -
+                div.dash-sc-lbl Pending Cases
+                a.dash-sc-link.dash-sc-link-crm(href="/crm_main?key=Pending")
+                  span View Details
+                  i.fas.fa-chevron-right.ms-1
+
+        //- Bottom Grid
+        div.dash-bottom-grid
+          //- Table Panel
+          - var tableColClass = (userMenu.Modules=="All") ? "dash-panel-table" : "dash-panel-table dash-panel-full"
+          div(class=tableColClass + " " + userProfile.TablaUltimos)
+            div.dash-panel
+              div.dash-ph
+                span.dash-pt
+                  i.fas.fa-clipboard-list.me-2
+                  | Last 10 Requested Approvals
+                span.dash-pc #{userProfile.ultimosTop.length} records
+              div.dash-tw
+                table.dash-table
+                  thead
+                    tr
+                      th.ps-3 ID
+                      th Process Details
+                      th Start Date
+                      th Status
+                  tbody
+                    each valtr, i in userProfile.ultimosTop
+                      tr
+                        each valtd, index in valtr
+                          if(index==0)
+                            td.ps-3.dash-id-cell
+                              a(href="#" onclick="approval_detalle("+userProfile.ultimosTopId[i]+");" class="dash-id-link") ##{valtd}
+                          else if(index==2)
+                            td.dash-dt-cell
+                              i.fas.fa-calendar-alt.me-1
+                              = valtd
+                          else if(index==3)
+                            td
+                              if(valtd=='Ongoing')
+                                span.dash-sb-tag.dash-sb-ongoing= valtd
+                              else if(valtd=='Pending')
+                                span.dash-sb-tag.dash-sb-pending= valtd
+                              else if(valtd=='Closed' || valtd=='Approved')
+                                span.dash-sb-tag.dash-sb-closed= valtd
+                              else if(valtd=='Rejected')
+                                span.dash-sb-tag.dash-sb-rejected= valtd
+                              else if(valtd=='Verify' || valtd=='Verified')
+                                span.dash-sb-tag.dash-sb-verify= valtd
+                              else if(valtd=='Signature' || valtd=='Signed')
+                                span.dash-sb-tag.dash-sb-signature= valtd
+                              else if(valtd=='Approve')
+                                span.dash-sb-tag.dash-sb-approve= valtd
+                              else if(valtd=='Execute' || valtd=='Executed')
+                                span.dash-sb-tag.dash-sb-executed= valtd
+                              else if(valtd=='Apply')
+                                span.dash-sb-tag.dash-sb-apply= valtd
+                              else if(valtd=='canceled' || valtd=='Cancelled')
+                                span.dash-sb-tag.dash-sb-cancelled= valtd
+                              else if(valtd=='expired')
+                                span.dash-sb-tag.dash-sb-expired= valtd
+                              else
+                                span.dash-sb-tag.dash-sb-other= valtd
+                          else
+                            td.dash-det-cell= String(valtd).replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/\s+/g, ' ').trim()
+              div.dash-panel-footer
+                a(href="/approvals-total" onclick="localStorage.removeItem('approvalFilters');")
+                  i.fas.fa-list-ul.me-1
+                  | View All Approvals
+
+          //- Department Chart Panel
+          if(userMenu.Modules=="All")
+            div.dash-panel-chart
+              div.dash-panel
+                div.dash-ph
+                  span.dash-pt
+                    i.fas.fa-chart-bar.me-2
+                    | Approvals by Department
+                div.dash-dept-list#resumediv
+
+  //- ── What's New Modal ────────────────────────────────────────────
+  include mixins/modal-container
+  +modal-container('whatsNewModal', 'whatsNewTitle', 'whatsNewClose', 'whatsNewCancel', 'whatsNewSave', "What's New")
+    div#whatsNewCarousel.carousel.slide(data-bs-ride="carousel")
+      div.carousel-indicators
+        button(type="button" data-bs-target="#whatsNewCarousel" data-bs-slide-to="0" class="active" aria-current="true" aria-label="Slide 1")
+        button(type="button" data-bs-target="#whatsNewCarousel" data-bs-slide-to="1" aria-label="Slide 2")
+      div.carousel-inner
+        div.carousel-item.active
+          img.d-block.w-100(src="/banner_1.png" alt="What's new - 1" style="border-radius:6px; max-height:520px; object-fit:contain;")
+        div.carousel-item
+          img.d-block.w-100(src="/banner_2.png" alt="What's new - 2" style="border-radius:6px; max-height:520px; object-fit:contain;")
+      button.carousel-control-prev(type="button" data-bs-target="#whatsNewCarousel" data-bs-slide="prev")
+        span.carousel-control-prev-icon(aria-hidden="true")
+        span.visually-hidden Previous
+      button.carousel-control-next(type="button" data-bs-target="#whatsNewCarousel" data-bs-slide="next")
+        span.carousel-control-next-icon(aria-hidden="true")
+        span.visually-hidden Next
+    //- Pagination
+    div.d-flex.justify-content-center.align-items-center.gap-3.mt-3(style="user-select:none;")
+      button#wnPrev.btn.btn-sm.btn-outline-secondary(type="button")
+        i.fas.fa-chevron-left
+      span#wnPageIndicator(style="font-size:.85rem; color:#6b7280; min-width:60px; text-align:center;") 1 / 2
+      button#wnNext.btn.btn-sm(type="button" style="background-color:#00586f;color:#fff;")
+        i.fas.fa-chevron-right
+
+  script.
+    function openWhatsNewModal() {
+      var modal = document.getElementById('whatsNewModal');
+      if (!modal) return;
+      modal.classList.add('open');
+      document.body.style.overflow = 'hidden';
+    }
+    document.addEventListener('DOMContentLoaded', function() {
+      document.getElementById('whatsNewClose')?.addEventListener('click', function() {
+        document.getElementById('whatsNewModal').classList.remove('open');
+        document.body.style.overflow = '';
+      });
+      document.getElementById('whatsNewCancel')?.addEventListener('click', function() {
+        document.getElementById('whatsNewModal').classList.remove('open');
+        document.body.style.overflow = '';
+      });
+
+      // Pagination buttons sync with Bootstrap carousel
+      var carousel = document.getElementById('whatsNewCarousel');
+      var totalSlides = carousel ? carousel.querySelectorAll('.carousel-item').length : 2;
+      var currentSlide = 0;
+
+      function updatePagination() {
+        var indicator = document.getElementById('wnPageIndicator');
+        var prevBtn = document.getElementById('wnPrev');
+        var nextBtn = document.getElementById('wnNext');
+        if (indicator) indicator.textContent = (currentSlide + 1) + ' / ' + totalSlides;
+        if (prevBtn) prevBtn.disabled = currentSlide === 0;
+        if (nextBtn) nextBtn.disabled = currentSlide === totalSlides - 1;
+      }
+
+      document.getElementById('wnPrev')?.addEventListener('click', function() {
+        if (carousel && window.bootstrap) {
+          bootstrap.Carousel.getInstance(carousel)?.prev();
+        }
+      });
+
+      document.getElementById('wnNext')?.addEventListener('click', function() {
+        if (carousel && window.bootstrap) {
+          bootstrap.Carousel.getInstance(carousel)?.next();
+        }
+      });
+
+      if (carousel) {
+        carousel.addEventListener('slid.bs.carousel', function(e) {
+          currentSlide = e.to;
+          updatePagination();
+        });
+      }
+
+      updatePagination();
+    });
+
+  style.
+    .carousel-control-prev:hover, .carousel-control-next:hover {
+      color:#9e9e9e;
+    }
+    #whatsNewModal .app-modal-dialog {
+      max-width: 860px;
+    }
+    #whatsNewModal .app-modal-body {
+      padding: 1rem;
+    }
+    .carousel-control-prev-icon,
+    .carousel-control-next-icon {
+      filter: none;
+    }

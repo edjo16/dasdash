@@ -1,0 +1,9 @@
+p#Form(style="display: none;")=Form
+p#UserID(style="display: none;")=UsuarioID
+p#Result(style="display: none;")=ResultForm
+p#dbdevteam(style="display: none;")=dbdevteam
+script.
+    form=document.getElementById('Form').innerHTML;
+    p=document.getElementById('UserID').innerHTML;
+    result=document.getElementById('Result').innerHTML;
+    window.location.href="/"+form+"?result="+result;

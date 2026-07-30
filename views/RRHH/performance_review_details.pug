@@ -1,0 +1,293 @@
+extends ../layout
+block layout-content
+  div#layoutSidenav_content(style="justify-content: start;")
+    main
+      div.container-fluid.px-4
+        a(href=`/approvals-detalle?RowID=${details.log_id}` style="color:#212529")
+            i.fas.fa-chevron-left
+            span(href=`/approvals-detalle?RowID=${details.log_id}` style="padding-left: 0.5rem;") Back
+        h1.mt-4 #{title}
+        ol.breadcrumb.mb-4
+          li.breadcrumb-item.active This form is designed to create an evaluation of the performance of the colaborator in the organization.
+    form#performance_review_details(method="put" action=`/forms_hr_performance_review/${details.id}` enctype="multipart/form-data")
+      .section-flex
+        h3 General Information
+        div.row.Not
+                div.col-md-4
+                    label id
+                    p#performance_review_details_id.form-control #{details.id}
+                div.col-md-3
+                  label(for="userUpdated") userUpdated:
+                  p #{userProfile.UsuarioID}
+        div.row
+            div.col-md-3
+                label(for="collaboratorName") Collaborator's name:
+                p #{details.collaboratorName}
+            div.col-md-3
+                label(for="collabjobTitle") Collaborator's job Tittle:
+                p #{details.collabjobTitle}
+            div.col-md-3
+                label(for="leaderName") Name of direct leader:
+                p #{details.leaderName}
+            div.col-md-3
+                label(for="leaderJobTitle") leader's job Tittle :
+                p #{details.leaderJobTitle}
+        div.row.results
+            div.col-md-3
+                label(for="averageGoal") Average Goal Achieved:
+                if read == "true"
+                    input#averageGoal(type="range", name="averageGoal", min="0", max="100", value=details.averageGoal, oninput="rangeOutput.value = averageGoal.value + ' %'", disabled)
+                    output(for="averageGoal" id="rangeOutput") #{details.averageGoal} %
+                else
+                    input#averageGoal(type="range", name="averageGoal", min="0", max="100", value=details.averageGoal, oninput="rangeOutput.value = averageGoal.value + ' %'")
+                    output(for="averageGoal" id="rangeOutput") #{details.averageGoal} %
+            div.col-md-3
+                label(for="developmentGoal") Development goal Achived:
+                if read == "true"
+                    input#developmentGoal(type="range", name="developmentGoal" min="0" max="100", value=details.developmentGoal oninput="devRangeOutput.value = developmentGoal.value + ' %'" disabled)
+                    output(for="developmentGoal" id="devRangeOutput") #{details.developmentGoal} %
+                else
+                    input#developmentGoal(type="range", name="developmentGoal" min="0" max="100", value=details.developmentGoal oninput="devRangeOutput.value = developmentGoal.value + ' %'" )
+                    output(for="developmentGoal" id="devRangeOutput") #{details.developmentGoal} %
+            div.col-md-6
+                label(for="generalResult") General Result:
+                if read == "true"
+                  select#generalResult(name="generalResult", disabled)
+                    option(value=details.generalResult, selected=details.generalResult === 'rarely') #{details.generalResult}
+                else
+                  select#generalResult(name="generalResult")
+                    option(value="Rarely Achieves", selected=details.generalResult === 'Rarely Achieves') Rarely Achieves
+                    option(value="Sometimes Achieves", selected=details.generalResult === 'Sometimes Achieves') Sometimes Achieves
+                    option(value="Fully Achieves", selected=details.generalResult === 'Fully Achieves') Fully Achieves
+                    option(value="Sometimes Exceeds", selected=details.generalResult === 'Sometimes Exceeds') Sometimes Exceeds
+                    option(value="Consistently Exceeds", selected=details.generalResult === 'Consistently Exceeds') Consistently Exceeds
+        div.row
+            div.col-md-12
+                label(for="observationsLeader") General Observation leader:
+                if read == "true"
+                    textarea#observationsLeader(name="observationsLeader", rows="3" readonly) #{details.observationsLeader}
+                else 
+                    textarea#observationsLeader(name="observationsLeader", rows="3") #{details.observationsLeader}
+            div.col-md-12
+                label(for="observationsAssociate" ) General observations associate:
+                if read === "true"
+                    textarea#observationsAssociate(name="observationsAssociate", rows="3" readonly ) #{details.observationsAssociate}
+                else
+                    textarea#observationsAssociate(name="observationsAssociate", rows="3" ) #{details.observationsAssociate}
+
+        div.row
+            div.col-md-2
+                if read !== "true"
+                  button#updatePerformanceRequest.form-control(style="background-color: #00586f;color: #e9ecef;") Update
+    style.
+      h1, h2, h3 {
+      color: rgb(0,88,111);
+      }
+      div.row.results{
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        background-color: #e9ecef;
+        padding: 15px;
+        border-radius: 20px;
+        margin-top: 20px;
+        margin-bottom: 20px;
+      }
+
+      .form-container {
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 20px;
+      }
+
+      .section {
+      margin: 20px;
+      border: 2px solid rgb(0,88,111);
+      padding: 15px;
+      border-radius: 20px;
+      }
+      .dropzone {     
+      border: 2px dashed rgb(0,88,111);
+      border-radius: 10px;
+      text-align: center;
+      cursor: pointer;
+      width: "300px"
+      }
+      .dropzone img {
+        display: block;
+        margin: 0 auto;
+        width: "100px";
+        height: "100px";
+      }
+      .dropzone.dragover {
+        background-color: #85C8D5;
+      }
+      .file-list {
+        margin-top: 20px;
+      }
+      .file-item {
+        display: flex;
+        align-items: center;
+        margin-bottom: 10px;
+      }
+      .file-item img {
+        width: 24px;
+        height: 24px;
+        margin-right: 10px;
+      }
+      .file-item button {
+      margin-left: 10px;
+      background-color: red;
+      color: white;
+      border: none;
+      cursor: pointer;
+      font-size: 1rem;
+      }
+
+      .form-group {
+        margin: 15px;
+      }
+      .section-flex {
+        margin: 20px;
+        border: 2px solid rgb(0,88,111);
+        padding: 15px;
+        border-radius: 20px;
+        display:"flex";
+        flex-wrap: "wrap";
+        margin-bottom: 15px;
+      }
+      label {
+        display: block;
+        margin-bottom: 5px;
+        font-weight: bold;
+        font-size: 1rem;
+        color: black;
+      }
+      input[type="text"], input[type="number"], textarea {
+        width: 100%;
+        padding: 8px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        box-sizing: border-box;
+      }
+      input[type="text"], select{
+        padding: 8px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        box-sizing: border-box;
+      }
+      .checkbox-group {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+      .checkbox-group label {
+        display: flex;
+        align-items: center;
+        font-weight: normal;
+      }
+      .checkbox-group input[type="checkbox"] {
+        margin-right: 5px;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      th, td {
+        border: 1px solid #ddd;
+        padding: 8px;
+        text-align: left;
+      }
+      th {
+        background-color: #f2f2f2;
+      }
+      span {
+        font-size: .8rem;
+      }
+
+      @media (max-width: 600px) {
+        .checkbox-group {
+          flex-direction: column;
+        }
+      }
+
+    //- script.
+        document.addEventListener('DOMContentLoaded', () => {
+          const dateInput = document.getElementById('date');
+          const now = new Date();
+          const formattedDateTime = now.toISOString().slice(0, 16);
+          dateInput.value = formattedDateTime;
+
+      });
+
+      function setupDropzone(dropzoneId, fileInputId, fileListId) {
+          const dropzone = document.getElementById(dropzoneId);
+          const fileInput = document.getElementById(fileInputId);
+          const fileList = document.getElementById(fileListId);
+  
+          let filesArray = [];
+
+          dropzone.addEventListener('click', () => fileInput.click());
+
+          dropzone.addEventListener('dragover', (event) => {
+              event.preventDefault();
+              dropzone.classList.add('dragover');
+          });
+
+          dropzone.addEventListener('dragleave', () => {
+              dropzone.classList.remove('dragover');
+          });
+
+          dropzone.addEventListener('drop', (event) => {
+              event.preventDefault();
+              dropzone.classList.remove('dragover');
+              const files = Array.from(event.dataTransfer.files);
+              handleFiles(files, fileList, filesArray);
+          });
+
+          fileInput.addEventListener('change', (event) => {
+              const files = Array.from(event.target.files);
+              handleFiles(files, fileList, filesArray);
+          });
+
+          function handleFiles(files, fileList, filesArray) {
+              filesArray = [...filesArray, ...files]; // Add new files to the array
+              updateFileList(filesArray, fileList, filesArray);
+          }
+
+          function updateFileList(files, fileList, filesArray) {
+              fileList.innerHTML = '';
+              files.forEach((file, index) => {
+                  const fileItem = document.createElement('div');
+                  fileItem.className = 'file-item';
+                  const fileIcon = document.createElement('img');
+                  fileIcon.src = '/icons/pdf.png';
+                  const fileName = document.createElement('span');
+                  fileName.textContent = file.name;
+                  const removeButton = document.createElement('button');
+                  removeButton.textContent = 'Remove';
+                  removeButton.addEventListener('click', () => {
+                      filesArray.splice(index, 1);
+                      updateFileList(filesArray, fileList, filesArray);
+                  });
+                  fileItem.appendChild(fileIcon);
+                  fileItem.appendChild(fileName);
+                  fileItem.appendChild(removeButton);
+                  fileList.appendChild(fileItem);
+              });
+          }
+      }
+      setupDropzone('dropzone1', 'files1', 'fileList1');
+      setupDropzone('dropzone2', 'files2', 'fileList2');
+      
+      fileInput.addEventListener('change', () => {
+        // Aquí puedes manejar los archivos seleccionados
+        console.log(fileInput.files);
+      });
+      document.getElementById('requestorNameValue').textContent = userMenu.Name;
+      console.log("companies",companies)
+      let currentStep = 1;
+      const totalSteps = 4;
+
+      // Initialize
+      showStep(currentStep);

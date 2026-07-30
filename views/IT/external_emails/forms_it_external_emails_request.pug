@@ -1,0 +1,248 @@
+extends ../../layout
+include ../../mixins/floating-input
+include ../../mixins/floating-select
+include ../../ui/button-submit
+include ../../mixins/breadcrumb
+
+block layout-content
+  link(rel="stylesheet" href="/css/personal-time-off.css")
+  div#layoutSidenav_content
+    main
+      div.container-fluid.px-4
+        +app-breadcrumb({
+          homeHref: '/',
+          items: [{ label: title, active: true }]
+        })
+
+        //- Language Toggle
+        div.pto-lang-toggle
+          span(style="font-size:0.85rem;color:#666;" data-i18n="lang_hint") You may change the language of the form
+          button#btn-lang-en.pto-lang-btn.active(type="button" onclick="switchLang('en')") EN
+          button#btn-lang-es.pto-lang-btn(type="button" onclick="switchLang('es')") ES
+
+        div.pto-form-section
+          h4(data-i18n="details_title") External Emails Request
+          div.pto-info-alert
+            i.fas.fa-envelope-open-text
+            span(data-i18n="intro_hint") Use this form to request the unblocking of an external email address. Indicate the contact name, the email address to unblock and the reason for the request.
+
+          form#form_it_external_emails_request(method="post" autocomplete="off")
+            div.row
+              div.col-md-6
+                +floating-input("Name", "contact_name", "text", true, "Contact name", "", "", {maxlength: "150"})
+              div.col-md-6
+                +floating-input("Email", "email", "email", true, "name@domain.com", "", "", {maxlength: "150"})
+            div.row
+              div.col-md-6
+                - var reasonOptions = [{value:'provider',label:'Provider'},{value:'temporal',label:'Temporal'}]
+                +floating-select("Reason for Request", "reason", reasonOptions, true, "Select a reason")
+
+        //- Approval Flow
+        div.pto-form-section(style="margin-top:16px;")
+          h4
+            span(data-i18n="review_actors") Approval Flow
+          div#eer-actors-panel(style="display:none;")
+
+        div.pto-confirm-row
+          input#confirmSubmit(type="checkbox")
+          label(for="confirmSubmit" data-i18n="confirm_label") Are you sure you want to submit this request?
+
+        div.pto-nav-buttons
+          div
+          div.pto-btn-container
+            +submit-button('btnSubmitEer', 'Submit', '', 'fas fa-paper-plane')
+
+  script.
+    // ============================================================
+    // Internationalization (i18n)
+    // ============================================================
+    var currentLang = 'en';
+    var i18n = {
+      en: {
+        lang_hint: 'You may change the language of the form',
+        details_title: 'External Emails Request',
+        intro_hint: 'Use this form to request the unblocking of an external email address. Indicate the contact name, the email address to unblock and the reason for the request.',
+        review_actors: 'Approval Flow',
+        confirm_label: 'Are you sure you want to submit this request?',
+        btn_submit: 'Submit',
+        toast_fill_fields: 'Please fill all required fields',
+        toast_confirm: 'Please confirm before submitting',
+        toast_success: 'Request submitted successfully',
+        toast_error: 'Error submitting request',
+        no_actors: 'No actors resolved'
+      },
+      es: {
+        lang_hint: 'Puede cambiar el idioma del formulario',
+        details_title: 'Solicitud de Desbloqueo de Correos Externos',
+        intro_hint: 'Utilice este formulario para solicitar el desbloqueo de una dirección de correo externa. Indique el nombre del contacto, el correo a desbloquear y el motivo de la solicitud.',
+        review_actors: 'Flujo de Aprobación',
+        confirm_label: '¿Está seguro de que desea enviar esta solicitud?',
+        btn_submit: 'Enviar',
+        toast_fill_fields: 'Por favor complete todos los campos obligatorios',
+        toast_confirm: 'Por favor confirme antes de enviar',
+        toast_success: 'Solicitud enviada exitosamente',
+        toast_error: 'Error al enviar la solicitud',
+        no_actors: 'No se resolvieron actores'
+      }
+    };
+
+    function switchLang(lang) {
+      currentLang = lang;
+      document.getElementById('btn-lang-en').classList.toggle('active', lang === 'en');
+      document.getElementById('btn-lang-es').classList.toggle('active', lang === 'es');
+
+      document.querySelectorAll('[data-i18n]').forEach(function(el) {
+        var key = el.getAttribute('data-i18n');
+        if (i18n[lang][key]) {
+          el.textContent = i18n[lang][key];
+        }
+      });
+
+      updateFloatingLabels(lang);
+      renderActorsPanel();
+    }
+
+    function updateFloatingLabels(lang) {
+      var labelMap = {
+        contact_name: lang === 'es' ? 'Nombre *' : 'Name *',
+        email: lang === 'es' ? 'Correo *' : 'Email *',
+        reason: lang === 'es' ? 'Motivo de la Solicitud *' : 'Reason for Request *'
+      };
+      Object.keys(labelMap).forEach(function(fieldName) {
+        var lbl = document.querySelector('.floating-label[for="' + fieldName + '"]');
+        if (lbl) lbl.textContent = labelMap[fieldName];
+      });
+    }
+
+    // Approval flow actors
+    var _eerActors = null;
+    var _eerFlow = null;
+    var _eerEstado = null;
+
+    document.addEventListener('DOMContentLoaded', function() {
+      var confirmCb = document.getElementById('confirmSubmit');
+      var submitBtn = document.getElementById('btnSubmitEer');
+
+      submitBtn.disabled = true;
+      submitBtn.addEventListener('click', submitExternalEmailsRequest);
+
+      confirmCb.addEventListener('change', function() {
+        submitBtn.disabled = !confirmCb.checked;
+      });
+
+      loadEerActors();
+    });
+
+    function loadEerActors() {
+      fetch('/forms_it_external_emails_request/actors')
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          if (data.result === 1) {
+            _eerActors = data.actors;
+            _eerFlow = data.flow;
+            _eerEstado = data.estado;
+            renderActorsPanel();
+          } else {
+            console.error('Could not load External Emails Request actors:', data.error);
+          }
+        })
+        .catch(function(err) {
+          console.error('Error loading External Emails Request actors:', err);
+        });
+    }
+
+    function renderActorsPanel() {
+      var panel = document.getElementById('eer-actors-panel');
+      if (!panel || !_eerActors) return;
+
+      var roles = [
+        { key: 'verificador', label: 'Verifier', labelEs: 'Verificador' },
+        { key: 'aprobador',   label: 'Approver', labelEs: 'Aprobador'  },
+        { key: 'firmante',    label: 'Signer',   labelEs: 'Firmante'   },
+        { key: 'operador',    label: 'Operator', labelEs: 'Operador'   },
+        { key: 'ejecutor',    label: 'Executor', labelEs: 'Ejecutor'   }
+      ];
+
+      var html = '';
+      roles.forEach(function(role) {
+        var actor = _eerActors[role.key];
+        if (actor && actor.name && actor.name !== 'N/A') {
+          var roleLabel = currentLang === 'es' ? role.labelEs : role.label;
+          var photoSrc = actor.userId ? 'pic/' + actor.userId + '.png' : 'pic/default.png';
+          html += '<div class="pto-actor-card">';
+          html += '  <img class="pto-actor-avatar" src="' + photoSrc + '" onerror="this.onerror=null;this.src=\'pic/default.png\'" alt="' + actor.name + '">';
+          html += '  <div class="pto-actor-info">';
+          html += '    <span class="pto-actor-role">' + roleLabel + '</span>';
+          html += '    <span class="pto-actor-name">' + actor.name + '</span>';
+          html += '  </div>';
+          html += '</div>';
+        }
+      });
+
+      if (html === '') {
+        html = '<p style="color:#999;font-size:.85rem;">' + i18n[currentLang].no_actors + '</p>';
+      }
+
+      panel.innerHTML = html;
+      panel.style.display = 'block';
+    }
+
+    // Validation & Submit
+    function validateForm() {
+      var allValid = true;
+      ['contact_name', 'email'].forEach(function(field) {
+        var fn = window['validateInput_' + field];
+        if (fn && !fn()) allValid = false;
+      });
+      var fnReason = window['validateSelect_reason'];
+      if (fnReason && !fnReason()) allValid = false;
+      return allValid;
+    }
+
+    function submitExternalEmailsRequest() {
+      if (!document.getElementById('confirmSubmit').checked) {
+        launch_toast(i18n[currentLang].toast_confirm, 2);
+        return;
+      }
+
+      if (!validateForm()) {
+        launch_toast(i18n[currentLang].toast_fill_fields, 2);
+        return;
+      }
+
+      if (!_eerActors || !_eerFlow) {
+        launch_toast(currentLang === 'es' ? 'Error: no se pudieron cargar los actores del flujo' : 'Error: could not load flow actors', 2);
+        return;
+      }
+
+      var payload = {
+        contact_name: document.getElementById('contact_name').value.trim(),
+        email: document.getElementById('email').value.trim(),
+        reason: document.getElementById('reason').value
+      };
+
+      var _btn = window['submitBtn_btnSubmitEer'];
+      if (_btn) _btn.setSending(currentLang === 'es' ? 'Enviando...' : 'Submitting...');
+
+      fetch('/forms_it_external_emails_request', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      })
+      .then(function(response) { return response.json(); })
+      .then(function(data) {
+        if (data.result === 1 && data.RowID) {
+          launch_toast(i18n[currentLang].toast_success, 1);
+          setTimeout(function() {
+            window.location.href = '/approvals-detalle?RowID=' + data.RowID;
+          }, 1500);
+        } else {
+          launch_toast(data.error || i18n[currentLang].toast_error, 2);
+          if (_btn) _btn.reset(i18n[currentLang].btn_submit);
+        }
+      })
+      .catch(function(err) {
+        launch_toast(i18n[currentLang].toast_error, 2);
+        if (_btn) _btn.reset(i18n[currentLang].btn_submit);
+      });
+    }

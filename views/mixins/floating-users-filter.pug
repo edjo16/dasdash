@@ -1,0 +1,395 @@
+mixin floating-users-filter(name, options=[], selected=[], placeholder='Select…', orderByDepartment=true)
+  div.floating-users-filter-container
+    div.floating-users-filter-wrapper
+      //- Filter display: shows only avatars (no names)
+      div.floating-users-filter-display(tabindex="0" data-name=name data-options=JSON.stringify(options) data-placeholder=placeholder data-order-by-department=orderByDepartment)
+        if selected && selected.length
+          each sel in selected
+            - var opt = options.find(o => o.value === sel)
+            if opt
+              span.filter-chip(data-value=sel)
+                img(src=`/pic/${opt.value}.png` width="24" height="24" title=opt.label style="border-radius:50%;object-fit:cover;cursor:pointer;" onerror="this.onerror=null;this.src='/pic/default.png';")
+                button(type="button" class="remove-chip-filter" data-value=sel) &times;
+            each sel in selected
+              input(type="hidden" name=`${name}[]` value=sel)
+        else
+          span.placeholder-filter= placeholder
+        i.fas.fa-chevron-down.dropdown-arrow-filter
+      //- Filter dropdown: shows image + name
+      div.floating-users-filter-dropdown(id=`dropdown_filter_${name}`)
+        input(type="text" class="dropdown-search-filter" placeholder="Search by name..." oninput=`filterFloatingFilterOptions(this, '${name}')`)
+        if orderByDepartment
+          - var grouped = {};
+          - options.forEach(function(opt) {
+          -   if (!grouped[opt.department]) grouped[opt.department] = [];
+          -   grouped[opt.department].push(opt);
+          - });
+          - var departments = [];
+          - options.forEach(function(opt) { if (departments.indexOf(opt.department) === -1) departments.push(opt.department); });
+          - departments.forEach(function(dep) {
+          .dropdown-department-label-filter(data-department=dep style="font-weight:bold;padding:4px 10px 2px 10px;color:#6b7280;") #{dep}
+          -   grouped[dep].forEach(function(option) {
+          if !selected.includes(option.value)
+            div.dropdown-option-filter(data-value=option.value data-label=option.label data-department=dep)
+              img(src=`/pic/${option.value}.png` title=`${option.label}` width="20" height="20" style="vertical-align:middle;border-radius:50%;margin-right:6px;" onerror="this.onerror=null;this.src='/pic/default.png';")
+              | #{option.label}
+          -   });
+          - });
+        else
+          each option in options
+            if !selected.includes(option.value)
+              div.dropdown-option-filter(data-value=option.value data-label=option.label)
+                img(src=`/pic/${option.value}.png` title=`${option.label}` width="20" height="20" style="vertical-align:middle;border-radius:50%;margin-right:6px;" onerror="this.onerror=null;this.src='/pic/default.png';")
+                | #{option.label}
+
+  script.
+    (function() {
+      function initFloatingFilterUsers() {
+        // Initialize filter multiselects (guard: skip if already wired)
+        document.querySelectorAll('.floating-users-filter-display').forEach(function(display) {
+          if (display.dataset.ffInit) return;
+          display.dataset.ffInit = '1';
+          var name = display.getAttribute('data-name');
+          var wrapper = display.parentElement;
+        
+        // Toggle dropdown on click anywhere in the display area
+        display.addEventListener('click', function(e) {
+          var dropdown = document.getElementById('dropdown_filter_' + name);
+
+          // Handle chip removal
+          if (e.target.classList.contains('remove-chip-filter')) {
+            e.stopPropagation();
+            var value = e.target.getAttribute('data-value');
+            removeFloatingFilterChip(name, value);
+            return;
+          }
+
+          if (dropdown) {
+            dropdown.classList.toggle('show-filter');
+            if (dropdown.classList.contains('show-filter')) {
+              updateFloatingFilterDisplay(name);
+              var searchInput = dropdown.querySelector('.dropdown-search-filter');
+              if (searchInput) { filterFloatingFilterOptions(searchInput, name); searchInput.focus(); }
+            }
+          }
+        });
+        
+        // Close dropdown when clicking outside
+        document.addEventListener('click', function(e) {
+          var dropdown = document.getElementById('dropdown_filter_' + name);
+          if (dropdown && dropdown.classList.contains('show-filter')) {
+            if (!wrapper.contains(e.target) && !dropdown.contains(e.target)) {
+              dropdown.classList.remove('show-filter');
+            }
+          }
+        });
+      });
+      
+      // Handle option selection
+      document.querySelectorAll('.floating-users-filter-dropdown').forEach(function(dropdown) {
+        if (dropdown.dataset.ffInit) return;
+        dropdown.dataset.ffInit = '1';
+        dropdown.addEventListener('click', function(e) {
+          if (e.target.classList.contains('dropdown-option-filter')) {
+            var name = dropdown.id.replace('dropdown_filter_', '');
+            var value = e.target.getAttribute('data-value');
+            selectFloatingFilterOption(name, value);
+          }
+        });
+      });
+      }
+      
+      // Execute immediately if DOM is ready, else wait for DOMContentLoaded
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initFloatingFilterUsers);
+      } else {
+        initFloatingFilterUsers();
+      }
+    })();
+    
+    // Filter search options
+    window.filterFloatingFilterOptions = function(input, name) {
+      var filter = input.value.toLowerCase();
+      var dropdown = document.getElementById('dropdown_filter_' + name);
+      if (!dropdown) return;
+      
+      var visibleDepartments = {};
+      
+      dropdown.querySelectorAll('.dropdown-option-filter').forEach(function(opt) {
+        var label = opt.getAttribute('data-label') || '';
+        var department = opt.getAttribute('data-department') || '';
+        var isVisible = label.toLowerCase().includes(filter);
+        
+        opt.style.display = isVisible ? '' : 'none';
+        
+        if (isVisible && department) {
+          visibleDepartments[department] = true;
+        }
+      });
+      
+      dropdown.querySelectorAll('.dropdown-department-label-filter').forEach(function(depLabel) {
+        var department = depLabel.getAttribute('data-department') || '';
+        depLabel.style.display = visibleDepartments[department] ? '' : 'none';
+      });
+    }
+    
+    function selectFloatingFilterOption(name, value) {
+      var display = document.querySelector('.floating-users-filter-display[data-name="'+name+'"]');
+      var hiddenInputs = display.querySelectorAll('input[type="hidden"]');
+      var selected = Array.from(hiddenInputs).map(i => i.value);
+      
+      if (!selected.includes(value)) {
+        var input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = name + '[]';
+        input.value = value;
+        display.appendChild(input);
+        
+        updateFloatingFilterDisplay(name);
+      }
+    }
+    
+    function removeFloatingFilterChip(name, value) {
+      var display = document.querySelector('.floating-users-filter-display[data-name="'+name+'"]');
+      var hiddenInputs = display.querySelectorAll('input[type="hidden"]');
+      hiddenInputs.forEach(function(input) {
+        if(input.value == value) input.remove();
+      });
+      
+      updateFloatingFilterDisplay(name);
+    }
+    
+    function updateFloatingFilterDisplay(name) {
+      var display = document.querySelector('.floating-users-filter-display[data-name="'+name+'"]');
+      var dropdown = document.getElementById('dropdown_filter_' + name);
+      var options = JSON.parse(display.getAttribute('data-options'));
+      var placeholder = display.getAttribute('data-placeholder');
+      var selected = Array.from(display.querySelectorAll('input[type="hidden"]')).map(i => i.value);
+      
+      // Sync with global hidden input (filter_asignados_value)
+      var globalHidden = document.getElementById(name + '_value');
+      if (globalHidden) {
+        globalHidden.value = selected.join(';');
+      }
+      
+      // Store current hidden inputs
+      var hiddenInputs = Array.from(display.querySelectorAll('input[type="hidden"]'));
+      
+      // Clear display (keep arrow)
+      var arrow = display.querySelector('.dropdown-arrow-filter');
+      display.innerHTML = '';
+      
+      // Add only avatars (no names)
+      if(selected.length) {
+        selected.forEach(function(sel) {
+          var opt = options.find(o => o.value == sel);
+          if(opt) {
+            var chip = document.createElement('span');
+            chip.className = 'filter-chip';
+            chip.setAttribute('data-value', sel);
+            chip.innerHTML = `<img src='/pic/${opt.value}.png' width='24' height='24' title="${opt.label}" style='border-radius:50%;object-fit:cover;cursor:pointer;' onerror="this.onerror=null;this.src='/pic/default.png';">`;
+            
+            var btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'remove-chip-filter';
+            btn.setAttribute('data-value', sel);
+            btn.innerHTML = '&times;';
+            
+            chip.appendChild(btn);
+            display.appendChild(chip);
+          }
+        });
+      } else {
+        var placeholderSpan = document.createElement('span');
+        placeholderSpan.className = 'placeholder-filter';
+        placeholderSpan.textContent = placeholder;
+        display.appendChild(placeholderSpan);
+      }
+      
+      // Re-add hidden inputs
+      hiddenInputs.forEach(function(input) {
+        display.appendChild(input);
+      });
+      
+      // Re-add arrow
+      if (arrow) display.appendChild(arrow);
+      
+      // Update dropdown options
+      if(dropdown) {
+        var prevSearch = dropdown.querySelector('.dropdown-search-filter');
+        var prevValue = prevSearch ? prevSearch.value : '';
+        dropdown.innerHTML = '';
+        
+        var searchInput = document.createElement('input');
+        searchInput.type = 'text';
+        searchInput.className = 'dropdown-search-filter';
+        searchInput.placeholder = 'Search by name...';
+        searchInput.setAttribute('oninput', `filterFloatingFilterOptions(this, '${name}')`);
+        if (prevValue) searchInput.value = prevValue;
+        dropdown.appendChild(searchInput);
+        
+        if (prevValue) {
+          setTimeout(function() { filterFloatingFilterOptions(searchInput, name); }, 0);
+        }
+        
+        var orderByDepartment = display.getAttribute('data-order-by-department') !== 'false';
+        if(orderByDepartment) {
+          var grouped = {};
+          options.forEach(function(opt) {
+            if (!selected.includes(opt.value)) {
+              if (!grouped[opt.department]) grouped[opt.department] = [];
+              grouped[opt.department].push(opt);
+            }
+          });
+          
+          var departments = Object.keys(grouped).sort(function(a, b) {
+            return a.localeCompare(b, undefined, {sensitivity: 'base'});
+          });
+          
+          departments.forEach(function(dep) {
+            var depLabel = document.createElement('div');
+            depLabel.className = 'dropdown-department-label-filter';
+            depLabel.setAttribute('data-department', dep);
+            depLabel.style = 'font-weight:bold;padding:4px 10px 2px 10px;color:#6b7280;';
+            depLabel.textContent = dep;
+            dropdown.appendChild(depLabel);
+            
+            grouped[dep].forEach(function(opt) {
+              var div = document.createElement('div');
+              div.className = 'dropdown-option-filter';
+              div.setAttribute('data-value', opt.value);
+              div.setAttribute('data-label', opt.label);
+              div.setAttribute('data-department', dep);
+              div.innerHTML = `<img src='/pic/${opt.value}.png' width='20' height='20' style='vertical-align:middle;border-radius:50%;margin-right:6px;' onerror="this.onerror=null;this.src='/pic/default.png';">${opt.label}`;
+              dropdown.appendChild(div);
+            });
+          });
+        } else {
+          options.forEach(function(opt) {
+            if(!selected.includes(opt.value)) {
+              var div = document.createElement('div');
+              div.className = 'dropdown-option-filter';
+              div.setAttribute('data-value', opt.value);
+              div.setAttribute('data-label', opt.label);
+              div.innerHTML = `<img src='/pic/${opt.value}.png' width='20' height='20' style='vertical-align:middle;border-radius:50%;margin-right:6px;' onerror="this.onerror=null;this.src='/pic/default.png';">${opt.label}`;
+              dropdown.appendChild(div);
+            }
+          });
+        }
+      }
+    }
+
+  style.
+    .floating-users-filter-container { display: inline-block; width:180px}
+    .floating-users-filter-wrapper { position: relative; }
+    .floating-users-filter-display {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 10px;
+      border: 1px solid #d1d5db;
+      border-radius: 0.375rem;
+      background: var(--surface-1);
+      cursor: pointer;
+      min-height: 36px;
+      flex-wrap: wrap;
+      font-size: 0.875rem;
+    }
+    .floating-users-filter-display:hover {
+      border-color: #9ca3af;
+    }
+
+    .filter-chip {
+      display: inline-flex;
+      align-items: center;
+      position: relative;
+    }
+    .filter-chip img {
+      border-radius: 50%;
+      object-fit: cover;
+    }
+    .remove-chip-filter {
+      display: none;
+      position: absolute;
+      top: -5px;
+      right: -5px;
+      width: 16px;
+      height: 16px;
+      padding: 0;
+      background: #ef4444;
+      color: #fff;
+      border: none;
+      border-radius: 50%;
+      font-size: 10px;
+      line-height: 1;
+      cursor: pointer;
+      align-items: center;
+      justify-content: center;
+      z-index: 2;
+    }
+    .filter-chip:hover .remove-chip-filter {
+      display: inline-flex;
+    }
+    .placeholder-filter {
+      font-size: 0.875rem;
+    }
+    .dropdown-arrow-filter {
+      margin-left: auto;
+      font-size: 0.75rem;
+      color: #6b7280;
+      pointer-events: none;
+    }
+    .floating-users-filter-dropdown {
+      display: none;
+      position: absolute;
+      top: 100%;
+      left: 0;
+      right: 0;
+      background: var(--surface-1);
+      border: 1px solid var(--border-default);
+      border-top: none;
+      border-radius: 0 0 4px 4px;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+      z-index: 1000;
+      max-height: 300px;
+      overflow-y: auto;
+      margin-top: 2px;
+    }
+    .floating-users-filter-dropdown.show-filter {
+      display: block;
+    }
+    .dropdown-search-filter {
+      display: block;
+      width: 100%;
+      padding: 8px 10px;
+      border: none;
+      border-bottom: 1px solid #e5e7eb;
+      font-size: 0.875rem;
+      box-sizing: border-box;
+    }
+    .dropdown-search-filter:focus {
+      outline: none;
+      background: #f9fafb;
+    }
+    .dropdown-department-label-filter {
+      font-weight: bold;
+      padding: 4px 10px 2px 10px;
+      color: #6b7280;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+    }
+    .dropdown-option-filter {
+      padding: 8px 10px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.875rem;
+    }
+    .dropdown-option-filter:hover {
+      background: var(--surface-2);
+    }
+    .dropdown-option-filter img {
+      border-radius: 50%;
+      object-fit: cover;
+    }

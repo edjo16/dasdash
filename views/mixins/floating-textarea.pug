@@ -1,0 +1,102 @@
+mixin floating-textarea(label, name, required=false, placeholder='', className='', containerClass='', attrs={}, rows=3, value='')
+  div.floating-input-container(class=containerClass)
+    div.floating-input-wrapper
+      textarea(
+        id=name
+        name=name
+        class=`floating-textarea ${className}`
+        placeholder=placeholder
+        data-required=required
+        rows=rows
+        autocomplete='off'
+      )&attributes(attrs)= value
+      label.floating-label(for=name)= label + (required ? ' *' : '')
+
+      include ./validation-icons.pug
+      +successIcon()
+      +errorIcon()
+
+    span.error-message(data-error-for=name)
+  script.
+    function validateSafeTextarea(input) {
+      // Solo permite letras, números, espacios, puntos, comas, guiones, guion bajo y acentos básicos
+      const safePattern = /^[\w\s.,áéíóúÁÉÍÓÚüÜñÑ-]*$/;
+      if (!safePattern.test(input.value)) {
+        input.value = input.value.replace(/[^\w\s.,áéíóúÁÉÍÓÚüÜñÑ-]/g, '');
+      }
+    }
+    document.addEventListener('DOMContentLoaded', function() {
+      document.querySelectorAll('.floating-textarea').forEach(function(el) {
+        el.addEventListener('input', function() { validateSafeTextarea(this); });
+      });
+    });
+  script.
+    document.addEventListener('DOMContentLoaded', function() {
+      const textarea = document.getElementById('#{name}');
+      if (!textarea) return;
+      function validateTextarea() {
+        const value = textarea.value.trim();
+        const isRequired = textarea.dataset.required === 'true';
+        const errorMsg = document.querySelector(`[data-error-for="#{name}"]`);
+        textarea.classList.remove('valid', 'error', 'has-value');
+        errorMsg?.classList.remove('show');
+        if (value) textarea.classList.add('has-value');
+        if (isRequired && !value) {
+          if (textarea === document.activeElement || textarea.dataset.touched === 'true') {
+            textarea.classList.add('error');
+            if (errorMsg) {
+              errorMsg.textContent = '#{label} is required';
+              errorMsg.classList.add('show');
+            }
+          }
+          return false;
+        } else if (value) {
+          const maxLen = textarea.getAttribute('maxlength');
+          if (maxLen && textarea.value.length > parseInt(maxLen)) {
+            textarea.classList.add('error');
+            if (errorMsg) {
+              errorMsg.textContent = `Maximum ${maxLen} characters allowed (${textarea.value.length}/${maxLen})`;
+              errorMsg.classList.add('show');
+            }
+            return false;
+          }
+          textarea.classList.add('valid');
+          return true;
+        }
+        return true;
+      }
+      textarea.addEventListener('input', validateTextarea);
+      textarea.addEventListener('blur', function() {
+        textarea.dataset.touched = 'true';
+        validateTextarea();
+      });
+      if (textarea.value) {
+        textarea.classList.add('has-value');
+        validateTextarea();
+      }
+      const textareaId = '#{name}';
+      window['validateInput_' + textareaId] = function() {
+        textarea.dataset.touched = 'true';
+        return validateTextarea();
+      };
+      window['setInputError_' + textareaId] = function(message) {
+        const errorMsg = document.querySelector(`[data-error-for="#{name}"]`);
+        textarea.classList.remove('valid');
+        textarea.classList.add('error');
+        if (errorMsg) {
+          errorMsg.textContent = message || '#{label} is required';
+          errorMsg.classList.add('show');
+        }
+        return false;
+      };
+      window['clearInputError_' + textareaId] = function() {
+        const errorMsg = document.querySelector(`[data-error-for="#{name}"]`);
+        textarea.classList.remove('error');
+        if (errorMsg) {
+          errorMsg.classList.remove('show');
+        }
+        if (textarea.value.trim()) {
+          textarea.classList.add('valid');
+        }
+      };
+    });

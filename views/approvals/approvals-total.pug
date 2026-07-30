@@ -1,0 +1,438 @@
+extends ../layout
+include ../ui/filter-bar
+include ../mixins/data-table
+include ../mixins/breadcrumb
+
+block layout-content
+  div#layoutSidenav_content
+    main
+      div.container-fluid.px-4
+        +app-breadcrumb({
+          homeHref: '/',
+          items: [{ label: title, active: true }]
+        })
+        - const _deptList = (typeof managerDepartments !== 'undefined' && managerDepartments && managerDepartments.length > 0) ? managerDepartments : null
+                +filter-bar({id: 'approvals', searchPlaceholder: 'Search by id, requester, process or details', processes: process, departments: _deptList, showType: true, showStatus: true, showDate: true, showDownload: true, showViewToggle: true, viewTableId: 'MainTable', viewToggleId: 'approvalsViewMode'})
+                +data-table('MainTable', '_approvalsCount', { internalViewToggle: false })
+                    thead
+                        tr#header(style=" max-height: 60px;overflow-y: auto;")
+                            th(style="width:4%;") ID
+                            th(style="width:6%;") Requester
+                            th(style="width:12%;") Process
+                            th(style="width:32%;") Process Details
+                            th(style="width:10%;") Start Date
+                            th(style="width:10%; text-align: center;") Status
+                            th(style="text-align: center;") Pending
+                            if(userMenu.Modules.includes("Accounting") ||  userMenu.Modules=="All")
+                                th#thBank Bank
+                            if(userMenu.Modules.includes("Accounting") || userMenu.Modules=="All")
+                                th#thPaid Paid
+                    tbody
+    style.
+      .table { min-width: 900px; }
+            #MainTable thead th {
+                font-size: .82rem;
+                line-height: 1.2;
+            }
+            #MainTable tbody td {
+                font-size: .8rem;
+                line-height: 1.2;
+            }
+            #MainTable > thead,
+            #MainTable thead tr,
+            #MainTable thead th {
+                background-color: #00586f !important;
+                color: #ffffff !important;
+            }
+            .approval-id-link {
+                color: #212529;
+            }
+            [data-theme="dark"] .approval-id-link {
+                color: var(--text-primary);
+            }
+      .shadow-table { box-shadow: 0 4px 8px rgba(0,0,0,.1); border-radius: 5px; }
+    script.
+      let banks = [];
+      let approvalsFetched = null;
+      let totalCount = 0;
+
+      // Debounce
+      function debounce(func, wait) {
+          let timeout;
+          return function(...args) {
+              clearTimeout(timeout);
+              timeout = setTimeout(() => func.apply(this, args), wait);
+          };
+      }
+
+      let currentPage = 1;
+      const rowsPerPage = document.getElementById("SelectBoxPages").value;
+      const table = document.querySelector('#MainTable tbody');
+      const searchBox = document.querySelector('#SearchBox');
+      const selectBox = document.querySelector('#SelectBox');
+      const solicitanteFechaBox = document.querySelector('#solicitante_fecha');
+      const cierreFechaBox = document.querySelector('#cierre_fecha');
+      const selectBoxStatus = document.querySelector('#SelectBoxStatus');
+      const checkBoxPayments = document.querySelector('#justPayments');
+      const selectThPaid = document.getElementById('thPaid');
+      const selectThBank = document.getElementById('thBank');
+      // getBankName()
+      function getBankName(banco) {
+        if (!banco) return "N/A";
+        if (!isNaN(Number(banco))) {
+          const bank = banks.find(b => b.id === Number(banco));
+          return bank ? bank.xnombre : "N/A";
+        }
+        return banco;
+      }
+
+            function buildStatusCell(label, type, iconClass) {
+                const safeType = type || 'neutral';
+                const safeLabel = label || '-';
+                const safeIcon = iconClass || 'fas fa-exclamation-circle';
+                return `<td class="app-status-cell"><span class="app-status-pill app-status-pill-${safeType}"><i class="${safeIcon}"></i> ${safeLabel}</span></td>`;
+            }
+
+      // renderTable()
+      function renderTable(username, approvals, estado) {
+          table.innerHTML = "";
+
+          if (approvals.length === 0) {
+              const row = document.createElement('tr');
+              row.innerHTML = `
+                  <td colspan="8" class="text-center">No data found</td>
+              `;
+              table.appendChild(row);
+              return;
+          }
+
+          approvals.forEach(approval => {
+                  let userRole = "None";
+                if (approval.estado === 'Verify') {
+                    userRole =  `<img class="icon" src="pic/${approval.verificador_imagen}.png" title="${approval.verificador}" style="border-radius: 50%;" onerror="this.onerror=null;this.src='pic/default.png';">`;
+                } else if (approval.estado === 'Approve') {
+                    userRole =  `<img class="icon" src="pic/${approval.aprobador_imagen}.png" title="${approval.approvador}" style="border-radius: 50%;" onerror="this.onerror=null;this.src='pic/default.png';">`;
+                } else if (approval.estado === 'Apply') {
+                    userRole =  `<img class="icon" src="pic/${approval.operador_imagen}.png" title="${approval.operador}" style="border-radius: 50%;" onerror="this.onerror=null;this.src='pic/default.png';">`;
+                } else if (approval.estado === 'Signature') {
+                    userRole =  `<img class="icon" src="pic/${approval.firmante_imagen}.png" title="${approval.firmante}" style="border-radius: 50%;" onerror="this.onerror=null;this.src='pic/default.png';">`;
+                } else if (approval.estado === 'Execute') {
+                    userRole = `<img class="icon" src="pic/${approval.ejecutor_imagen}.png" title="${approval.ejecutor}" style="border-radius: 50%;" onerror="this.onerror=null;this.src='pic/default.png';">`;
+                }else{
+                    userRole = `${userRole}</td>`;
+                }
+                const row = document.createElement('tr');
+              if (approval.pending === true) {
+                  row.style.borderLeft = '5px solid #dc3545';
+              }
+              let statusTd
+              if(estado == 'Ongoing') {
+                             statusTd = buildStatusCell('Ongoing', 'ongoing', 'fas fa-play-circle')
+              }
+              else if(estado == 'Pending') {
+                             statusTd = buildStatusCell('Pending', 'pending', 'fas fa-exclamation-circle')
+              }
+              else if(approval.estado === 'Apply' && approval.operador === username ||approval.estado === 'Verify' && approval.verificador === username || approval.estado === 'Approve' && approval.approvador === username || approval.estado === 'Execute' && approval.ejecutor === username || approval.estado === 'Signature' && approval.firmante === username  ) {
+                             statusTd = buildStatusCell('Pending', 'pending', 'fas fa-exclamation-circle')
+              }
+              else if(approval.estado == 'Verify' || approval.estado == 'Approve' || approval.estado == 'Execute' || approval.estado == 'Apply' || approval.estado == 'Signature') {
+                             statusTd = buildStatusCell('Ongoing', 'ongoing', 'fas fa-play-circle')
+              }
+              else if( approval.estado == 'Approved' || approval.estado == 'Executed' || approval.estado == 'Applied' || approval.estado == 'Signed') {
+                             statusTd = buildStatusCell('Closed', 'closed', 'fas fa-check-circle')
+              }
+              else if(approval.estado == 'Rejected') {
+                                statusTd = buildStatusCell('Rejected', 'neutral', 'fas fa-times-circle')
+              }
+              else if(approval.estado == 'Cancelled') {
+                                statusTd = buildStatusCell('Rejected', 'neutral', 'fas fa-times-circle')
+              }
+              else{
+
+                                statusTd = buildStatusCell(approval.estado, 'neutral', 'fas fa-exclamation-circle')
+              }
+            row.innerHTML = `
+                            <td><a href="#" onclick="approval_detalle(${approval.id});" class="approval-id-link">${approval.id}</a></td>
+                            <td class="text-center"><img class="icon rounded-circle" src="pic/${approval.solicitante_imagen}.png" title="${approval.solicitante}" onerror="this.onerror=null;this.src='pic/default.png';"></td>
+                            <td style="max-height:60px; overflow-y:auto;">${approval.proceso.length > 30 ? approval.proceso.slice(0, 27) +"..." : approval.proceso}</td>
+              <td>${approval.detalle_proceso ? approval.detalle_proceso.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 100) : ''}${approval.detalle_proceso && approval.detalle_proceso.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim().length > 100 ? '...' : ''}</td>
+              <td><i style="padding-right: 3px;" class="fas fa-calendar-alt"></i>${approval.s_fecha}</td>
+                            ${approval.pending === true  || selectBoxStatus.value == 'Pending' ? buildStatusCell('Pending', 'pending', 'fas fa-exclamation-circle') : statusTd}
+                            <td class="text-center">${userRole}</td>
+              ${selectThBank ? `<td>${getBankName(approval.banco)}</td>` : ''}
+              ${selectThPaid ? `<td><input type="checkbox" id="chk-${approval.id}" ${approval.pago ? "checked" : ""} onclick="UpdatePaid(this)"></td>` : ''}
+              `;
+            table.appendChild(row);
+          });
+      }
+
+      // renderPagination()
+      function renderPagination(totalRows) {
+          const rowsPerPage = document.getElementById("SelectBoxPages").value;
+          const totalPages = Math.ceil(totalRows / rowsPerPage);
+          const currentPageText = document.querySelector('#totalCount');
+
+          currentPageText.textContent = `${totalRows.toLocaleString('en-US')} records — page ${currentPage} of ${totalPages}`;
+
+          const prevBtn = document.querySelector('.fb-page-btn[aria-label="Previous"]');
+          const nextBtn = document.querySelector('.fb-page-btn[aria-label="Next"]');
+
+          if (prevBtn) prevBtn.classList.toggle('disabled', currentPage === 1);
+          if (nextBtn) nextBtn.classList.toggle('disabled', currentPage >= totalPages);
+      }
+
+      // changePage()
+      function changePage(pageNumber) {
+          if (pageNumber < 1 || pageNumber > Math.ceil(totalCount / rowsPerPage)) return;
+          currentPage = pageNumber;
+          fetchApprovals();
+          saveFiltersToStorage();
+      }
+
+      // Search debounce
+      const debouncedFetchApprovals = debounce(() => {
+          fetchApprovals();
+          saveFiltersToStorage();
+      }, 400);
+
+      function SearchTableApproval() {
+          debouncedFetchApprovals();
+      }
+
+      function SelectTable() {
+          fetchApprovals();
+          saveFiltersToStorage();
+      }
+
+      function SelectFetch() {
+          const url = new URL(window.location.href);
+          const params = new URLSearchParams(url.search);
+          const key = document.getElementById('SelectBoxStatus').value;
+
+          if (key) params.set('key', key);
+
+          window.history.replaceState({}, '', `${url.pathname}?${params}`);
+
+          fetchApprovals();
+          saveFiltersToStorage();
+      }
+
+      // saveFiltersToStorage()
+      function saveFiltersToStorage() {
+          const filters = {
+              search: searchBox.value,
+              process: selectBox.value,
+              status: selectBoxStatus.value,
+              startDate: solicitanteFechaBox.value,
+              endDate: cierreFechaBox.value,
+              payments: checkBoxPayments.value,
+              department: document.getElementById('SelectBoxDepartment')
+                  ? document.getElementById('SelectBoxDepartment').value
+                  : 'All',
+              page: currentPage,
+              limit: document.getElementById("SelectBoxPages").value,
+              dateFilterStart: document.querySelector("input[name='dateFilterStart']:checked").value,
+              _savedAt: Date.now()
+          };
+
+          localStorage.setItem('approvalFilters', JSON.stringify(filters));
+      }
+
+      // loadFiltersFromStorage()
+      function loadFiltersFromStorage() {
+          const savedFilters = localStorage.getItem('approvalFilters');
+          if (!savedFilters) return;
+
+          const filters = JSON.parse(savedFilters);
+          const MAX_AGE_MS = 30 * 60 * 1000;
+
+          if (filters._savedAt && (Date.now() - filters._savedAt) > MAX_AGE_MS) {
+              localStorage.removeItem('approvalFilters');
+              return;
+          }
+
+          searchBox.value = filters.search || "";
+          selectBox.value = filters.process || "";
+          selectBoxStatus.value = filters.status || "";
+          solicitanteFechaBox.value = filters.startDate || "";
+          cierreFechaBox.value = filters.endDate || "";
+          checkBoxPayments.value = filters.payments || "";
+
+          const selectBoxDepartment = document.getElementById('SelectBoxDepartment');
+          if (selectBoxDepartment) {
+              selectBoxDepartment.value = filters.department || "All";
+          }
+
+          currentPage = filters.page || 1;
+          document.getElementById("SelectBoxPages").value = filters.limit || 10;
+
+          if (filters.dateFilterStart) {
+              document.querySelectorAll("input[name='dateFilterStart']").forEach(radio => {
+                  radio.checked = (radio.value === filters.dateFilterStart);
+              });
+          }
+      }
+
+      // resetFilters()
+      function resetFilters() {
+          searchBox.value = "";
+          selectBox.value = "";
+          selectBoxStatus.value = "";
+          solicitanteFechaBox.value = "";
+          cierreFechaBox.value = "";
+          checkBoxPayments.value = "";
+
+          const selectBoxDepartment = document.getElementById('SelectBoxDepartment');
+          if (selectBoxDepartment) selectBoxDepartment.value = "All";
+
+          currentPage = 1;
+
+          const url = new URL(window.location.href);
+          const params = new URLSearchParams(url.search);
+
+          params.set('key', "All");
+
+          window.history.replaceState({}, '', `${url.pathname}?${params}`);
+
+          localStorage.removeItem('approvalFilters');
+          fetchApprovals();
+      }
+
+      // ✅ FIX: SE ELIMINÓ EL RESET DE currentPage CUANDO HAY BÚSQUEDA
+
+      // fetchApprovals()
+      async function fetchApprovals() {
+          const url = new URL(window.location.href);
+          const searchQuery = searchBox.value.trim();
+          const params = new URLSearchParams(url.search);
+
+          const userName = params.get('p');
+          const key = params.get('key');
+
+          if (key) {
+              document.getElementById('SelectBoxStatus').value = key;
+          }
+
+          const processFilter = selectBox.value;
+          const statusFilter = selectBoxStatus.value;
+          const solicitanteFecha = solicitanteFechaBox.value;
+          const cierreFecha = cierreFechaBox.value;
+          const limit = document.getElementById("SelectBoxPages").value;
+          const dateFilterStart = document.querySelector("input[name='dateFilterStart']:checked").value;
+          const justPayments = document.getElementById("justPayments").value;
+
+          const selectBoxDepartment = document.getElementById('SelectBoxDepartment');
+          const departmentFilter = selectBoxDepartment ? selectBoxDepartment.value : null;
+
+          let request = `/all-approvals?page=${currentPage}&limit=${limit}`;
+
+          if (searchQuery !== '') request += `&search=${searchQuery}`;
+          if (processFilter !== '') request += `&process=${processFilter}`;
+          if (justPayments) request += `&type=${justPayments}`;
+          if (departmentFilter && departmentFilter !== 'All') request += `&departamento=${encodeURIComponent(departmentFilter)}`;
+          if (statusFilter !== '' || key !== null) {
+              const status = statusFilter || key;
+              request += `&status=${status}`;
+          }
+
+          if (solicitanteFecha !== '' && cierreFecha !== '') {
+              request += `&solicitante_fecha=${solicitanteFecha}&cierre_fecha=${cierreFecha}`;
+              request += `&only_start=${dateFilterStart}`;
+          }
+
+          const response = await fetch(request);
+          const data = await response.json();
+
+          totalCount = data.totalCount;   // ✅ FIX: AHORA ES GLOBAL
+
+          approvalsFetched = data.approvalData;
+
+          if (data.banks) banks = data.banks;
+
+          renderTable(data.username, data.approvalData, data.estado);
+          renderPagination(totalCount);
+          saveFiltersToStorage();
+      }
+
+      $(document).ready(function(){
+          $("#solicitante_fecha").datepicker({ format: "dd/mm/yyyy" });
+          $("#cierre_fecha").datepicker({ format: "dd/mm/yyyy" });
+      });
+
+      function datemins(objeto) {
+          let date = $(objeto).datepicker('getDate');
+
+          if (date) {
+              let day = String(date.getDate()).padStart(2,'0');
+              let month = String(date.getMonth()+1).padStart(2,'0');
+              let year = date.getFullYear();
+              objeto.value = `${day}/${month}/${year}`;
+          }
+
+          fetchApprovals();
+          saveFiltersToStorage();
+      }
+
+      function downloadExcel(e) {
+          e.preventDefault();
+
+          const url = new URL(window.location.href);
+          const searchQuery = searchBox.value.trim();
+          const params = new URLSearchParams(url.search);
+          const userName = params.get('p');
+
+          const key = params.get('key');
+          if (key) {
+              document.getElementById('SelectBoxStatus').value = key;
+          }
+
+          const processFilter = selectBox.value;
+          const statusFilter = selectBoxStatus.value;
+          const solicitanteFecha = solicitanteFechaBox.value;
+          const cierreFecha = cierreFechaBox.value;
+          const dateFilterStart = document.querySelector("input[name='dateFilterStart']:checked").value;
+
+          const typeApprovals = document.getElementById("justPayments").value;
+          const selectBoxDepartment = document.getElementById('SelectBoxDepartment');
+          const departmentFilter = selectBoxDepartment ? selectBoxDepartment.value : null;
+
+          const datatoSend = {
+              'p': userName,
+              'process': processFilter,
+              'status': statusFilter,
+              'solicitante_fecha': solicitanteFecha,
+              'cierre_fecha': cierreFecha,
+              'dateFilterStart': dateFilterStart,
+              'search': searchQuery,
+              'type': 'excel',
+              'type_approval': typeApprovals,
+              'departamento': departmentFilter
+          };
+          const date = new Date().toISOString();
+          $.ajax({
+              url: '/download-excel',
+              type: 'POST',
+              contentType: 'application/json',
+              data: JSON.stringify({
+                  'data': datatoSend,
+                  'type': 'excel'
+              }),
+              xhrFields: { responseType: 'blob' },
+              success: function(response) {
+                  const link = document.createElement('a');
+                  link.href = URL.createObjectURL(response);
+                  link.download = 'approvals-' + date + '.xlsx';
+                  document.body.appendChild(link);
+                  link.click(); 
+                  document.body.removeChild(link);
+              },
+              error: function(xhr, status, error) {
+                  launch_toast('Error generating the Excel file.', 2);
+              }
+          });
+      }
+
+      document.addEventListener('DOMContentLoaded', () => {
+        loadFiltersFromStorage();
+        fetchApprovals();
+      });

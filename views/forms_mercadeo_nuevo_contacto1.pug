@@ -1,0 +1,86 @@
+﻿extends layout
+block layout-content
+  div#layoutSidenav_content
+    main
+      div.container-fluid.px-4
+        a(href="#" onclick="goBack()" style="color:#212529")
+            i.fas.fa-chevron-left
+            span(href="#" onclick="goBack()" style="padding-left: 0.5rem;") Back
+        h1.mt-4 #{title}
+        ol.breadcrumb.mb-4
+          li.breadcrumb-item.active Description
+        form#form_mercadeo_nuevo_contacto(method="post" action="" enctype="multipart/form-data")
+            .row.Not
+                input#UserID(type="text" name="UserID" value=userProfile.UserID)
+            h3 Company
+            div.row
+                div.col-md-3
+                    label Company
+                    input#compania.form-control(type="text" name="compania" maxlength="400" required)
+                div.col-md-3
+                    label Type
+                    select#tipo.form-control(name="tipo")
+                        each linea, i in tipos
+                            option(value=linea[0])= linea[1]
+                div.col-md-3
+                    label Region
+                    select#region.form-control(name="region")
+                        each linea, i in region
+                            option(value=linea)= linea
+                div.col-md-3
+                    label Country
+                    select#pais.form-control(name="pais")
+                        each linea, i in pais
+                            option(value=linea[0])= linea[1]
+                div.col-md-3
+                    label City
+                    input#ciudad.form-control(type="text" name="ciudad" maxlength="400" required)
+                div.col-md-3
+                    label Address
+                    input#direccion.form-control(type="text" name="direccion" maxlength="400")
+                div.col-md-3
+                    label Phone
+                    input#telefono.form-control(type="text" name="telefono" maxlength="400" required)
+                div.col-md-3
+                    label Web Site
+                    input#web.form-control(type="text" name="web" maxlength="400" required)
+                div.col-md-3
+                    label Linkedin
+                    input#linkedin.form-control(type="text" name="linkedin" maxlength="400")
+            br
+            h3 Person
+            div.row
+                div.col-md-3
+                    label Contact Name
+                    input#nombre.form-control(type="text" name="nombre" maxlength="100" required)
+                div.col-md-3
+                    label Email
+                    input#email.form-control(type="text" name="email" maxlength="50" required)
+                div.col-md-3
+                    label Position
+                    input#cargo.form-control(type="text" name="cargo" maxlength="400" required)
+                div.col-md-3
+                    label Cell Phone
+                    input#celular.form-control(type="text" name="celular" maxlength="400" required)
+                div.col-md-3
+                    label Active Re Contact
+                    select#active_contacto.form-control(name="active_contacto")
+                        each linea, i in grupousuarios_active
+                            option(value=linea[0])= linea[1]
+                div.col-md-3
+                    label Reference
+                    input#referencia.form-control(type="text" name="referencia" maxlength="400")
+                div.col-md-3
+                    label Linkedin
+                    input#linkedin_persona.form-control(type="text" name="linkedin_persona" maxlength="400")
+            //- hr
+            //- div.row
+            //-     div.col-md-8
+            //-         div.form-check
+            //-             input#SummitCheck.form-check-input(type="checkbox", name="SummitCheck" required)
+            //-             label.form-check-label Are you sure you want to save this new contact?
+            div.row
+                div.col-md-2
+                    button#mercadeo_add_contact.form-control( style="background-color: #00586f;color: #e9ecef;") Submit
+            div
+                p#mensaje

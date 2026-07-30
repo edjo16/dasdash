@@ -1,0 +1,218 @@
+
+doctype html
+html
+    head
+        meta(name="viewport" content="width=device-width, initial-scale=1")
+        link(rel="stylesheet" href="/login-v2.css")
+        script(src='/js/FontAwesomeFree5.15.4.js')
+        title #{title} | Active Re
+    body
+        div.login-wrapper
+            //- Left panel - Form
+            div.login-panel-left
+                div.login-form-container
+                    div.login-form-logo
+                        img(src="/ACRE_LOGO-02.svg" alt="Active Re")
+
+                    h1.login-title Change Password
+                    p.login-subtitle Create a new secure password for your account
+
+                    //- Errors
+                    if(act==0)
+                        div.login-error
+                            i.fas.fa-exclamation-circle
+                            span Wrong old password
+                    if(igual==0)
+                        div.login-error
+                            i.fas.fa-exclamation-circle
+                            span Password cannot be the same as the previous one.
+                    if(nuevanoigual==0)
+                        div.login-error
+                            i.fas.fa-exclamation-circle
+                            span Error, new password was not typed correctly.
+
+                    form.login-form(method="POST" action="weblogincambio" enctype="multipart/form-data")
+                        div(style="display:none;")
+                            input#tipocambio(type="text" name="tipocambio" value=OldPasswordPlaceHolder)
+                        input#UserEmail(name="UserEmail" style="display:none;" value=UserEmail)
+
+                        div.login-field
+                            label.login-field-label Current Password
+                            i.login-field-icon.fas.fa-lock
+                            input#codeold.login-field-input(name="codeold" type="password" placeholder=OldPasswordPlaceHolder required onkeyup="passold()" autocomplete="current-password")
+                            button.login-password-toggle(type="button" onclick="togglePassword('codeold', this)" tabindex="-1")
+                                i.fas.fa-eye
+
+                        div.login-field
+                            label.login-field-label New Password
+                            i.login-field-icon.fas.fa-key
+                            input#code1.login-field-input(name="code1" type="password" placeholder="Enter new password" required onkeyup="pass1()" minlength="7" autocomplete="new-password")
+                            button.login-password-toggle(type="button" onclick="togglePassword('code1', this)" tabindex="-1")
+                                i.fas.fa-eye
+
+                        //- Password rules
+                        ul.login-password-rules
+                            li#pass1.rule-pending
+                                i.fas
+                                span At least 7 characters
+                            li#pass2.rule-pending
+                                i.fas
+                                span Uppercase and lowercase letters
+                            li#pass3.rule-pending
+                                i.fas
+                                span Contains numbers
+                            li#pass4.rule-pending
+                                i.fas
+                                span Different from current password
+
+                        div.login-field
+                            label.login-field-label Confirm New Password
+                            i.login-field-icon.fas.fa-check-double
+                            input#code2.login-field-input(name="code2" type="password" placeholder="Re-enter new password" required onkeyup="pass2()" minlength="7" autocomplete="new-password")
+                            button.login-password-toggle(type="button" onclick="togglePassword('code2', this)" tabindex="-1")
+                                i.fas.fa-eye
+                        div#passwordMatch.login-password-match
+                            i.fas
+                            span
+
+                        button#login__submit.login-btn.login-btn-primary(type="submit" disabled)
+                            i.fas.fa-shield-alt
+                            span Change Password
+
+                    div.login-footer
+                        | &copy; #{new Date().getFullYear()} Active Re. All rights reserved.
+
+            //- Right panel - Branding
+            div.login-panel-right
+                div.login-waves
+                    div.login-wave.login-wave-1
+                    div.login-wave.login-wave-2
+                    div.login-wave.login-wave-3
+                    div.login-wave.login-wave-4
+                div.login-svg-waves
+                    svg(xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 320" preserveAspectRatio="none" style="width:100%;height:120px;")
+                        path(fill="rgba(255,255,255,0.06)" d="M0,224L48,213.3C96,203,192,181,288,186.7C384,192,480,224,576,218.7C672,213,768,171,864,165.3C960,160,1056,192,1152,197.3C1248,203,1344,181,1392,170.7L1440,160L1440,320L1392,320C1344,320,1248,320,1152,320C1056,320,960,320,864,320C768,320,672,320,576,320C480,320,384,320,288,320C192,320,96,320,48,320L0,320Z")
+                        path(fill="rgba(255,255,255,0.04)" d="M0,288L48,272C96,256,192,224,288,218.7C384,213,480,235,576,245.3C672,256,768,256,864,234.7C960,213,1056,171,1152,165.3C1248,160,1344,192,1392,208L1440,224L1440,320L1392,320C1344,320,1248,320,1152,320C1056,320,960,320,864,320C768,320,672,320,576,320C480,320,384,320,288,320C192,320,96,320,48,320L0,320Z")
+                div.login-brand
+                    img(src="/ACRE_LOGO-02.svg" alt="Active Re")
+                    div.login-brand-tagline Dashboard
+
+    script.
+        function togglePassword(inputId, btn) {
+            var input = document.getElementById(inputId);
+            var icon = btn.querySelector('i');
+            if (input.type === 'password') {
+                input.type = 'text';
+                icon.classList.remove('fa-eye');
+                icon.classList.add('fa-eye-slash');
+            } else {
+                input.type = 'password';
+                icon.classList.remove('fa-eye-slash');
+                icon.classList.add('fa-eye');
+            }
+        }
+
+        function checkSubmit() {
+            var codeoldEl = document.getElementById('codeold');
+            var code1El   = document.getElementById('code1');
+            var code2El   = document.getElementById('code2');
+
+            if (!codeoldEl || !code1El || !code2El) return;
+
+            var codeold = codeoldEl.value;
+            var code1   = code1El.value;
+            var code2   = code2El.value;
+
+            var allRulesPass =
+                code1.length >= 7 &&
+                /[A-Z]/.test(code1) &&
+                /[a-z]/.test(code1) &&
+                /\d/.test(code1) &&
+                code1 !== codeold &&
+                codeold !== '';
+
+            var passwordsMatch = code1 === code2 && code2 !== '';
+
+            if (allRulesPass && passwordsMatch) {
+                document.getElementById('login__submit')?.removeAttribute('disabled');
+            } else {
+                document.getElementById('login__submit')?.setAttribute('disabled', 'disabled');
+            }
+        }
+
+
+        function passold() {
+            var b = document.getElementById('codeold');
+            b.style.borderColor = b.value === '' ? 'var(--login-error)' : 'var(--login-border)';
+
+            // Re-evaluate rule 4 and button when current password changes
+            var a = document.getElementById('code1').value;
+            updateRule('pass4', a !== b.value && b.value !== '');
+            checkSubmit();
+        }
+
+        function pass1() {
+            var a = document.getElementById('code1').value;
+            var b = document.getElementById('codeold');
+            var c = document.getElementById('code2');
+
+            updateRule('pass1', a.length >= 7);
+            updateRule('pass2', /[A-Z]/.test(a) && /[a-z]/.test(a));
+            updateRule('pass3', /\d/.test(a));
+            updateRule('pass4', a !== b.value && b.value !== '');
+
+            b.style.borderColor = b.value === '' ? 'var(--login-error)' : 'var(--login-border)';
+
+            if (c.value !== '') {
+                updateMatch(a === c.value);
+            }
+
+            checkSubmit();
+        }
+
+        function pass2() {
+            var a = document.getElementById('code1').value;
+            var b = document.getElementById('code2').value;
+            updateMatch(a === b);
+            checkSubmit();
+        }
+
+        function updateRule(id, passed) {
+            var el = document.getElementById(id);
+            el.className = passed ? 'rule-pass' : 'rule-fail';
+        }
+
+        function updateMatch(match) {
+            var el = document.getElementById('passwordMatch');
+            if (!el) return;
+            var icon = el.querySelector('i');
+            var text = el.querySelector('span');
+
+            el.classList.add('show');
+
+            if (match) {
+                el.className = 'login-password-match show match';
+                if (icon) icon.className = 'fas fa-check-circle';
+                if (text) text.textContent = 'Passwords match';
+            } else {
+                el.className = 'login-password-match show no-match';
+                if (icon) icon.className = 'fas fa-times-circle';
+                if (text) text.textContent = 'Passwords do not match';
+            }
+        }
+
+        window.addEventListener('DOMContentLoaded', function() {
+            document.getElementById('codeold').focus();
+        });
+
+        // Auto-dismiss errors
+        var errors = document.querySelectorAll('.login-error');
+        if (errors.length) {
+            setTimeout(function() {
+                errors.forEach(function(err) {
+                    err.style.transition = 'opacity 0.4s';
+                    err.style.opacity = '0';
+                    setTimeout(function() { err.remove(); }, 400);
+                });
+            }, 8000);
+        }

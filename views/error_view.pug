@@ -1,0 +1,15 @@
+extends layout
+block layout-content
+  div#layoutSidenav_content
+    main
+      div.container-fluid.px-4
+        a(href="/" style="color:#212529")
+            i.fas.fa-chevron-left
+            span(href="/" style="padding-left: 0.5rem;") Back
+      div.container-fluid.px-4(style="text-align:center;")
+        h2.mt-4(style="text-align:center;") #{title}
+        h3.text-danger(style="text-align:center;") ERROR ##{logError}
+        img( src="/error_image.png" alt="upload icon"  style="width:300px;")
+        h4.text-danger Please contact the IT department and share the screenshot.
+        a(href="/" style="color:#212529")
+            span(href="/" style="padding-left: 0.5rem;") Back to Dashboard

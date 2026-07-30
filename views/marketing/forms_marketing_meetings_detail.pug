@@ -1,0 +1,632 @@
+extends ../layout
+
+include ../mixins/meeting-action-table
+include ../mixins/floating-input
+include ../mixins/floating-textarea
+include ../mixins/breadcrumb
+
+block layout-content
+  div#layoutSidenav_content
+    main
+      div.container-fluid.px-4
+        div(style="display:flex;align-items:center;justify-content:space-between;margin-top:.75rem;margin-bottom:.25rem;")
+        +app-breadcrumb({
+          homeHref: '/',
+          items: [
+            { label: 'Meetings', href: '/meetings_list' },
+            { label: `${meeting.meeting_name}`, active: true }]
+        })
+        //- ── Meeting Info Card ────────────────────────────────────────────
+        div.section-flex.mt-3
+          div.row.w-100.align-items-center.mb-1
+            div.col
+              span(style="font-weight:700;font-size:.85rem;color:#00586f;")
+                i.fas.fa-calendar-alt(style="margin-right:6px;")
+                | Meeting Details
+            div.col-auto
+              if meeting.meeting_status !== 'closed'
+                button#btnSaveMeeting.btn(
+                  style="background-color:#00586f;color:#fff;border-radius:6px;padding:5px 18px;font-size:.85rem;"
+                  onclick="saveMeetingInfo()"
+                )
+                  i.fas.fa-save(style="margin-right:6px;")
+                  | Save
+          div.row.w-100
+            div.col-md-5
+              +floating-input('Meeting Name', 'meetingName', 'text', true, '', '', '', {value: meeting.meeting_name, maxlength: '255', readonly: meeting.meeting_status === 'closed'})
+            div.col-md-4
+              +floating-input('Address', 'meetingAddress', 'text', false, '', '', '', {value: (meeting.meeting_address || ''), maxlength: '500', readonly: meeting.meeting_status === 'closed'})
+            div.col-md-3
+              div.form-group
+                label Created by
+                div(style="display:flex;align-items:center;gap:8px;margin-top:6px;")
+                  img(src="/pic/"+meeting.uingreso+".png" onerror="this.onerror=null;this.src='/pic/default.png';" style="width:36px;height:36px;border-radius:50%;object-fit:cover;border:2px solid #e0e0e0;" title=(meeting.uingreso || ''))
+          div.row.w-100
+            div.col-md-12
+              +floating-textarea('Comments', 'meetingComments', false, '', '', '', {maxlength: '500', readonly: meeting.meeting_status === 'closed'}, 3, meeting.meeting_comments || '')
+
+        //- ── Meetings & Action Points ─────────────────────────────────────
+        div.meeting-report-block.mt-4
+          div.meeting-report-header(style="display:flex;align-items:center;justify-content:space-between;")
+            span
+              i.fas.fa-tasks(style="color:#00586f;margin-right:8px;")
+              span.meeting-report-num Meetings & Action Points
+          div.table-responsive
+            +meeting-action-block(meeting, meetActions, actionContacts, actionResponsibles, users, 0, userProfile.UsuarioID, 0)
+
+        //- ── Close Meeting ────────────────────────────────────────────────
+        if meeting.meeting_status !== 'closed'
+          div.report-close-section.mt-4
+            div.report-close-info
+              i.fas.fa-lock(style="color:#f59e0b;font-size:1.1rem;")
+              span Close this meeting to generate CRM cases for all action points that have responsible and action details.
+            button#closeMeetingBtn.close-report-btn(type="button" onclick="closeMeeting()")
+              i.fas.fa-lock
+              |  Close Meeting
+        else
+          div.alert.alert-success.mt-4(style="border-radius:10px;")
+            i.fas.fa-check-circle(style="margin-right:8px;")
+            | This meeting has been closed. CRM cases were created for all eligible action points.
+
+  style.
+    h1, h2, h3 { color: rgb(0,88,111); }
+    .section-flex {
+      margin: 20px 0;
+      border: 2px solid rgb(0,88,111);
+      padding: 15px;
+      border-radius: 20px;
+    }
+    label:not(.floating-label):not(.form-check-label) {
+      display: block;
+      margin-bottom: 4px;
+      font-weight: bold;
+      font-size: .75rem;
+      color: black;
+    }
+    /* ── Shared action-table styles ── */
+    .actions-table { width:100%; border-collapse:collapse; font-size:.82rem; min-width:1100px; }
+    .actions-table thead th { background:#f5f5f5; border:none; padding:7px 8px; font-size:.7rem; text-transform:uppercase; letter-spacing:.04em; color:#666; white-space:nowrap; font-weight:700; }
+    .actions-table th.highlight-col { color:#00586f; }
+    .actions-table tbody tr { border-bottom:none; transition:background .1s; }
+    .actions-table tbody tr:hover { background:#f8fdff; }
+    .actions-table tbody tr.row-locked { background:#fafafa; }
+    .actions-table td { padding:4px 5px; vertical-align:middle; border:none; }
+    .action-input { width:100%; border:none; border-bottom:1px solid transparent; background:transparent; font-size:.82rem; padding:4px 5px; outline:none; border-radius:3px; transition:border-color .15s,background .15s; min-width:72px; }
+    .action-input:focus { border-bottom-color:#00586f; background:#f0fafd; }
+    .action-input[readonly],.action-input:disabled { color:#555; cursor:default; background:transparent; }
+    .highlight-input { font-weight:600; }
+    .crm-badge { display:inline-flex; align-items:center; gap:4px; background:#e6f4f1; color:#00586f; border-radius:12px; padding:2px 8px; font-size:.75rem; font-weight:700; text-decoration:none; white-space:nowrap; }
+    .crm-badge:hover { background:#cdeae5; color:#003d4f; }
+    .row-actions-cell { white-space:nowrap; text-align:center; }
+    .btn-row-remove { background:none; border:none; color:#ccc; cursor:pointer; border-radius:4px; padding:3px 6px; transition:color .15s,background .15s; }
+    .btn-row-remove:hover { color:#dc3545; background:#fff0f0; }
+    .btn-row-add { background:#00586f; color:#fff; border:none; border-radius:6px; padding:4px 12px; font-size:.78rem; font-weight:600; cursor:pointer; display:inline-flex; align-items:center; gap:5px; }
+    .btn-row-add:hover { background:#004256; }
+    .new-row-placeholder { background:#f8fdff; }
+    /* ── ARB ── */
+    .arb-bar { display:flex; flex-wrap:wrap; align-items:center; gap:4px; min-width:100px; }
+    .arb-chips { display:flex; flex-wrap:wrap; gap:3px; }
+    .arb-chip { display:inline-flex; align-items:center; gap:4px; background:#e8f4fb; color:#1a5276; border-radius:12px; padding:2px 8px 2px 3px; font-size:.74rem; font-weight:600; white-space:nowrap; }
+    .arb-avatar { border-radius:50%; object-fit:cover; flex-shrink:0; display:block; }
+    .arb-chip-remove { background:none; border:none; cursor:pointer; color:#888; font-size:.85rem; padding:0 0 0 3px; line-height:1; }
+    .arb-chip-remove:hover { color:#dc3545; }
+    .arb-add-btn { background:none; border:1px solid #ccc; color:#999; border-radius:10px; padding:1px 7px; font-size:.75rem; cursor:pointer; white-space:nowrap; display:inline-flex; align-items:center; }
+    .arb-add-btn:hover { border-color:#888; color:#555; background:#f5f5f5; }
+    .arb-list li { padding:6px 12px; cursor:pointer; font-size:.82rem; display:flex; align-items:center; gap:8px; }
+    .arb-list li:hover:not(.arb-no-results):not(.arb-already) { background:#f0fafd; }
+    .arb-list li.arb-already { color:#aaa; cursor:default; }
+    .arb-no-results { color:#aaa; font-style:italic; padding:8px 12px; }
+    /* ── ACB ── */
+    .acb-bar { display:flex; flex-wrap:wrap; align-items:center; gap:4px; min-width:120px; }
+    .acb-chips { display:flex; flex-wrap:wrap; gap:3px; }
+    .acb-chip { display:inline-flex; align-items:center; gap:3px; background:#e6f4f1; color:#00586f; border-radius:12px; padding:2px 8px 2px 8px; font-size:.74rem; font-weight:600; white-space:nowrap; }
+    .acb-chip-remove { background:none; border:none; cursor:pointer; color:#888; font-size:.85rem; padding:0 0 0 3px; line-height:1; }
+    .acb-chip-remove:hover { color:#dc3545; }
+    .acb-add-btn { background:none; border:1px solid #ccc; color:#999; border-radius:10px; padding:1px 7px; font-size:.75rem; cursor:pointer; white-space:nowrap; font-weight:500; }
+    .acb-add-btn:hover { border-color:#888; color:#555; background:#f5f5f5; }
+    .acb-list li { padding:6px 12px; cursor:pointer; font-size:.82rem; display:flex; flex-direction:column; }
+    .acb-list li:hover:not(.acb-no-results):not(.acb-already) { background:#f0fafd; }
+    .acb-list li.acb-already { color:#aaa; cursor:default; }
+    .acb-item-company { font-size:.72rem; color:#888; }
+    .acb-no-results { color:#aaa; font-style:italic; padding:8px 12px; }
+    /* ── Close section ── */
+    .report-close-section { display:flex; align-items:center; gap:20px; background:#fff8e1; border:1.5px solid #ffe082; border-radius:10px; padding:16px 24px; margin-top:16px; }
+    .report-close-info { flex:1; font-size:.87rem; color:#5d4037; display:flex; align-items:center; gap:8px; }
+    .close-report-btn { background:#00586f; color:#fff; border:none; border-radius:8px; padding:10px 28px; font-weight:700; font-size:.9rem; display:inline-flex; align-items:center; gap:8px; cursor:pointer; white-space:nowrap; }
+    .close-report-btn:hover { background:#004256; }
+    .close-report-btn:disabled { background:#9e9e9e; cursor:not-allowed; }
+    /* ── Meeting report block ── */
+    .meeting-report-block { border:1.5px solid #d9edf2; border-radius:10px; overflow:hidden; }
+    .meeting-report-header { padding:10px 18px; #d9edf2; font-size:.92rem; }
+    .meeting-report-num { font-weight:800; color:#00586f; font-size:.8rem; text-transform:uppercase; letter-spacing:.06em; }
+    .meeting-report-name { font-weight:600; color:#222; }
+    .meeting-report-addr { font-size:.82rem; color:#888; }
+
+  script.
+    const currentUID     = '!{userProfile.UsuarioID}';
+    const meetingId      = !{meeting.id};
+    const departamento   = '!{userProfile.Dep || ""}';
+    const meetingStatus  = '!{JSON.stringify(meeting.meeting_status)|| ""}';
+
+    // Seed picker data
+    window.userCellPickerUsersData = !{JSON.stringify(users.map(function(u){ return {id: u.UserID, name: u.Name}; }))};
+    window.contactCellPickerData   = !{JSON.stringify(contacts.map(function(c){ return {contact_id: c.contact_id, name: c.name, company_name: c.company_name || ''}; }))};
+
+    // ── Save Meeting Info ──────────────────────────────────────────────────
+    async function saveMeetingInfo() {
+      if (meetingStatus === 'closed') {
+        launch_toast('Cannot edit: Meeting is closed', 2);
+        return;
+      }
+      const name = document.getElementById('meetingName').value.trim();
+      if (!name) { launch_toast('Meeting Name is required', 2); return; }
+      const btn = document.getElementById('btnSaveMeeting');
+      btn.disabled = true;
+      try {
+        const res  = await fetch('/meetings/' + meetingId, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            meeting_name:     name,
+            meeting_address:  document.getElementById('meetingAddress').value.trim(),
+            meeting_comments: document.getElementById('meetingComments').value.trim(),
+            user_id:          currentUID,
+          }),
+        });
+        const data = await res.json();
+        btn.disabled = false;
+        if (data.result === 1) launch_toast('Meeting saved', 1);
+        else                    launch_toast('Error saving meeting', 2);
+      } catch(e) {
+        btn.disabled = false;
+        launch_toast('Error saving meeting', 2);
+      }
+    }
+
+    // ── Action Contact Bar (ACB) ───────────────────────────────────────────
+    (function() {
+      var _acbOpen = null;
+      function acbClose() { if (_acbOpen) _acbOpen.hidden = true; _acbOpen = null; }
+      function acbGetAdded(bar) {
+        return Array.from(bar.querySelectorAll('.acb-chip')).map(function(c) { return String(c.dataset.contactId); });
+      }
+      function acbPopulate(ul, search, bar) {
+        var contacts = window.contactCellPickerData || [];
+        var added    = acbGetAdded(bar);
+        var q        = (search || '').toLowerCase();
+        var filtered = q ? contacts.filter(function(c) {
+          return c.name.toLowerCase().includes(q) || (c.company_name||'').toLowerCase().includes(q);
+        }) : contacts;
+        ul.innerHTML = '';
+        if (!filtered.length) {
+          var li = document.createElement('li'); li.className = 'acb-no-results'; li.textContent = 'No contacts found'; ul.appendChild(li); return;
+        }
+        filtered.forEach(function(c) {
+          var li = document.createElement('li');
+          var isAdded = added.includes(String(c.contact_id));
+          if (isAdded) li.classList.add('acb-already');
+          li.innerHTML = '<span class="acb-item-name">' + c.name + '</span>' + (c.company_name ? '<span class="acb-item-company">' + c.company_name + '</span>' : '');
+          if (!isAdded) {
+            li.addEventListener('click', function(e) {
+              e.stopPropagation();
+              var actionId      = bar.dataset.actionId;
+              var isPlaceholder = bar.dataset.placeholder === '1';
+              var chip = acbMakeChip(c, bar, actionId, isPlaceholder);
+              bar.querySelector('.acb-chips').appendChild(chip);
+              li.classList.add('acb-already');
+              if (!isPlaceholder) {
+                fetch('/meetings_action_contact', {
+                  method: 'POST', headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ meeting_action_id: actionId, contact_id: c.contact_id })
+                }).then(function(r) { return r.json(); }).then(function(res) {
+                  if (!res.result) chip.remove();
+                  else launch_toast(c.name + ' added', 1);
+                }).catch(function() { chip.remove(); launch_toast('Error adding contact', 2); });
+              }
+            });
+          }
+          ul.appendChild(li);
+        });
+      }
+      function acbMakeChip(c, bar, actionId, isPlaceholder) {
+        var chip = document.createElement('span');
+        chip.className = 'acb-chip';
+        chip.dataset.contactId   = c.contact_id;
+        chip.dataset.contactName = c.name;
+        var label = c.name + (c.company_name ? ' (' + c.company_name + ')' : '');
+        chip.innerHTML = label + '<button class="acb-chip-remove" type="button" title="Remove">×</button>';
+        chip.querySelector('.acb-chip-remove').addEventListener('click', function(e) {
+          e.stopPropagation();
+          if (isPlaceholder) { chip.remove(); return; }
+          fetch('/meetings_action_contact', {
+            method: 'DELETE', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ meeting_action_id: actionId, contact_id: c.contact_id })
+          }).then(function(r) { return r.json(); }).then(function(res) {
+            if (res.result) chip.remove();
+          }).catch(function() { launch_toast('Error removing contact', 2); });
+        });
+        return chip;
+      }
+      function acbInitBar(bar) {
+        var isPlaceholder = bar.dataset.placeholder === '1';
+        if (!isPlaceholder) {
+          bar.querySelectorAll('.acb-chip-remove').forEach(function(btn) {
+            btn.addEventListener('click', function(e) {
+              e.stopPropagation();
+              var chip      = btn.closest('.acb-chip');
+              var contactId = chip.dataset.contactId;
+              var actionId  = bar.dataset.actionId;
+              fetch('/meetings_action_contact', {
+                method: 'DELETE', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ meeting_action_id: actionId, contact_id: contactId })
+              }).then(function(r) { return r.json(); }).then(function(res) {
+                if (res.result) chip.remove();
+              }).catch(function() { launch_toast('Error removing contact', 2); });
+            });
+          });
+        }
+        var addBtn = bar.querySelector('.acb-add-btn');
+        var dd     = bar.querySelector('.acb-dropdown');
+        if (!addBtn || !dd) return;
+        addBtn.addEventListener('click', function(e) {
+          e.stopPropagation();
+          var isOpen = !dd.hidden;
+          if (_acbOpen && _acbOpen !== dd) { _acbOpen.hidden = true; }
+          if (!isOpen) {
+            var rect = addBtn.getBoundingClientRect();
+            dd.style.top  = (rect.bottom + 3) + 'px';
+            dd.style.left = rect.left + 'px';
+            dd.hidden = false; _acbOpen = dd;
+            var ul  = dd.querySelector('.acb-list');
+            var inp = dd.querySelector('.acb-search');
+            if (inp) inp.value = '';
+            if (ul) acbPopulate(ul, '', bar);
+            if (inp) inp.focus();
+          } else { dd.hidden = true; _acbOpen = null; }
+        });
+        var si = dd.querySelector('.acb-search');
+        if (si) si.addEventListener('input', function() {
+          var ul = dd.querySelector('.acb-list');
+          if (ul) acbPopulate(ul, this.value, bar);
+        });
+        var rb = dd.querySelector('.acb-refresh-btn');
+        if (rb) rb.addEventListener('click', function(e) {
+          e.stopPropagation(); rb.textContent = '…';
+          fetch('/badaco/api/contacts?limit=10000').then(function(r) { return r.json(); })
+            .then(function(res) {
+              if (res.success && res.data) {
+                window.contactCellPickerData = res.data.map(function(c) {
+                  return { contact_id: c.contact_id, name: c.name, company_name: c.company_name };
+                });
+                var ul2 = dd.querySelector('.acb-list');
+                var si2 = dd.querySelector('.acb-search');
+                if (ul2) acbPopulate(ul2, si2 ? si2.value : '', bar);
+              }
+              rb.textContent = '⟳';
+            }).catch(function() { rb.textContent = '⟳'; });
+        });
+      }
+      window.meetingDetailACB = {
+        initAll: function() {
+          document.querySelectorAll('.acb-bar:not([data-acb-done])').forEach(function(bar) {
+            bar.setAttribute('data-acb-done', '1');
+            acbInitBar(bar);
+          });
+        },
+        getSelectedContactIds: function(bar) {
+          return Array.from(bar.querySelectorAll('.acb-chip')).map(function(c) { return c.dataset.contactId; });
+        }
+      };
+      document.addEventListener('click', acbClose);
+      window.addEventListener('scroll', function(e) {
+        if (!_acbOpen || _acbOpen.contains(e.target)) return;
+        acbClose();
+      }, true);
+      // Initialize immediately since script is at end of body
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', window.meetingDetailACB.initAll);
+      } else {
+        window.meetingDetailACB.initAll();
+      }
+    }());
+
+    // ── Action Responsible Bar (ARB) ──────────────────────────────────────
+    (function() {
+      var _arbOpen = null;
+      function arbClose() { if (_arbOpen) _arbOpen.hidden = true; _arbOpen = null; }
+      function arbGetAdded(bar) {
+        return Array.from(bar.querySelectorAll('.arb-chip')).map(function(c) { return c.dataset.userId; });
+      }
+      function arbPopulate(ul, search, bar) {
+        var users  = window.userCellPickerUsersData || [];
+        var added  = arbGetAdded(bar);
+        var q      = (search || '').toLowerCase();
+        var filtered = q ? users.filter(function(u) { return u.name.toLowerCase().includes(q); }) : users;
+        ul.innerHTML = '';
+        if (!filtered.length) {
+          var li = document.createElement('li'); li.className = 'arb-no-results'; li.textContent = 'No users found'; ul.appendChild(li); return;
+        }
+        filtered.forEach(function(u) {
+          var li = document.createElement('li');
+          var isAdded = added.includes(String(u.id));
+          if (isAdded) li.classList.add('arb-already');
+          li.innerHTML = '<img src="/pic/' + u.id + '.png" width="20" height="20" style="border-radius:50%;object-fit:cover;flex-shrink:0;" onerror="this.onerror=null;this.src=\'/pic/default.png\';"><span>' + u.name + '</span>';
+          if (!isAdded) {
+            li.addEventListener('click', function(e) {
+              e.stopPropagation();
+              var actionId      = bar.dataset.actionId;
+              var isPlaceholder = bar.dataset.placeholder === '1';
+              var chip = arbMakeChip(u, bar, actionId, isPlaceholder);
+              bar.querySelector('.arb-chips').appendChild(chip);
+              li.classList.add('arb-already');
+              if (!isPlaceholder) {
+                fetch('/meetings_action_responsible', {
+                  method: 'POST', headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ meeting_action_id: actionId, responsible: u.id })
+                }).then(function(r) { return r.json(); }).then(function(res) {
+                  if (!res.result) chip.remove();
+                  else launch_toast(u.name + ' added', 1);
+                }).catch(function() { chip.remove(); launch_toast('Error adding responsible', 2); });
+              }
+            });
+          }
+          ul.appendChild(li);
+        });
+      }
+      function arbMakeChip(u, bar, actionId, isPlaceholder) {
+        var chip = document.createElement('span');
+        chip.className = 'arb-chip';
+        chip.dataset.userId = u.id;
+        chip.innerHTML = '<img class="arb-avatar" src="/pic/' + u.id + '.png" width="18" height="18" onerror="this.onerror=null;this.src=\'/pic/default.png\';" title="' + u.name + '">' + u.name + '<button class="arb-chip-remove" type="button" title="Remove">×</button>';
+        chip.querySelector('.arb-chip-remove').addEventListener('click', function(e) {
+          e.stopPropagation();
+          if (isPlaceholder) { chip.remove(); return; }
+          fetch('/meetings_action_responsible', {
+            method: 'DELETE', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ meeting_action_id: actionId, responsible: u.id })
+          }).then(function(r) { return r.json(); }).then(function(res) {
+            if (res.result) chip.remove();
+          }).catch(function() { launch_toast('Error removing responsible', 2); });
+        });
+        return chip;
+      }
+      function arbInitBar(bar) {
+        var isPlaceholder = bar.dataset.placeholder === '1';
+        if (!isPlaceholder) {
+          bar.querySelectorAll('.arb-chip-remove').forEach(function(btn) {
+            btn.addEventListener('click', function(e) {
+              e.stopPropagation();
+              var chip     = btn.closest('.arb-chip');
+              var userId   = chip.dataset.userId;
+              var actionId = bar.dataset.actionId;
+              fetch('/meetings_action_responsible', {
+                method: 'DELETE', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ meeting_action_id: actionId, responsible: userId })
+              }).then(function(r) { return r.json(); }).then(function(res) {
+                if (res.result) chip.remove();
+              }).catch(function() { launch_toast('Error removing responsible', 2); });
+            });
+          });
+        }
+        var addBtn = bar.querySelector('.arb-add-btn');
+        var dd     = bar.querySelector('.arb-dropdown');
+        if (!addBtn || !dd) return;
+        addBtn.addEventListener('click', function(e) {
+          e.stopPropagation();
+          var isOpen = !dd.hidden;
+          if (_arbOpen && _arbOpen !== dd) _arbOpen.hidden = true;
+          if (!isOpen) {
+            var rect = addBtn.getBoundingClientRect();
+            dd.style.top  = (rect.bottom + 3) + 'px';
+            dd.style.left = rect.left + 'px';
+            dd.hidden = false; _arbOpen = dd;
+            var ul  = dd.querySelector('.arb-list');
+            var inp = dd.querySelector('.arb-search');
+            if (inp) inp.value = '';
+            if (ul) arbPopulate(ul, '', bar);
+            if (inp) inp.focus();
+          } else { dd.hidden = true; _arbOpen = null; }
+        });
+        var si = dd.querySelector('.arb-search');
+        if (si) si.addEventListener('input', function() {
+          var ul = dd.querySelector('.arb-list');
+          if (ul) arbPopulate(ul, this.value, bar);
+        });
+      }
+      window.meetingDetailARB = {
+        initAll: function() {
+          document.querySelectorAll('.arb-bar:not([data-arb-done])').forEach(function(bar) {
+            bar.setAttribute('data-arb-done', '1');
+            arbInitBar(bar);
+          });
+        },
+        getSelectedUserIds: function(bar) {
+          return Array.from(bar.querySelectorAll('.arb-chip')).map(function(c) { return c.dataset.userId; });
+        }
+      };
+      document.addEventListener('click', arbClose);
+      window.addEventListener('scroll', function(e) {
+        if (!_arbOpen || _arbOpen.contains(e.target)) return;
+        arbClose();
+      }, true);
+      // Initialize immediately since script is at end of body
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', window.meetingDetailARB.initAll);
+      } else {
+        window.meetingDetailARB.initAll();
+      }
+    }());
+
+    // ── Commit new action row ──────────────────────────────────────────────
+    function commitNewRow(btn) {
+      if (meetingStatus === 'closed') {
+        launch_toast('Cannot add actions: Meeting is closed', 2);
+        return;
+      }
+      const row = btn.closest('tr.new-row-placeholder');
+      if (!row) return;
+      const mId  = row.dataset.meetingId;
+      const data = { user_id: currentUID, meeting_id: mId };
+      row.querySelectorAll('[data-field]').forEach(function(el) {
+        data[el.dataset.field] = el.value || null;
+      });
+      const acbBar = row.querySelector('.acb-bar');
+      const arbBar = row.querySelector('.arb-bar');
+      const selectedContactIds = acbBar ? window.meetingDetailACB.getSelectedContactIds(acbBar) : [];
+      const selectedUserIds    = arbBar ? window.meetingDetailARB.getSelectedUserIds(arbBar)    : [];
+      // validation
+      const missing = [];
+      if (!selectedContactIds.length) missing.push('Contact');
+      if (!data.meeting_details)      missing.push('Meeting Details');
+      if (!data.meet_date)            missing.push('Meet Date');
+      if (missing.length) {
+        launch_toast('Required: ' + missing.join(', '), 2);
+        if (!selectedContactIds.length && acbBar) {
+          const ab = acbBar.querySelector('.acb-add-btn');
+          if (ab) { ab.style.outline = '2px solid #dc3545'; setTimeout(function(){ ab.style.outline = ''; }, 2500); }
+        }
+        ['meeting_details','meet_date'].forEach(function(f) {
+          if (!data[f]) {
+            const el = row.querySelector('[data-field="' + f + '"]');
+            if (el) { el.style.outline = '2px solid #dc3545'; setTimeout(function(){ el.style.outline = ''; }, 2500); }
+          }
+        });
+        return;
+      }
+      fetch('/meetings_action', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      })
+      .then(function(r) { return r.json(); })
+      .then(function(res) {
+        if (!res.id) { launch_toast('Error saving action', 2); return; }
+        const actionId = res.id;
+        Promise.all([
+          ...selectedContactIds.map(function(cid) {
+            return fetch('/meetings_action_contact', {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ meeting_action_id: actionId, contact_id: cid })
+            });
+          }),
+          ...selectedUserIds.map(function(uid) {
+            return fetch('/meetings_action_responsible', {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ meeting_action_id: actionId, responsible: uid })
+            });
+          })
+        ]).then(function() {
+          const tbody = row.closest('tbody');
+          const newTr = document.createElement('tr');
+          newTr.dataset.id        = actionId;
+          newTr.dataset.meetingId = mId;
+          var _PSVG = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>';
+          const contacts  = window.contactCellPickerData || [];
+          const allUsers  = window.userCellPickerUsersData || [];
+          var contactChips = '';
+          selectedContactIds.forEach(function(cid) {
+            var c = contacts.find(function(x) { return String(x.contact_id) === String(cid); });
+            if (c) contactChips += `<span class="acb-chip" data-contact-id="${cid}">${c.name}${c.company_name ? ' (' + c.company_name + ')' : ''}<button class="acb-chip-remove" type="button" title="Remove">×</button></span>`;
+          });
+          var respChips = '';
+          selectedUserIds.forEach(function(uid) {
+            var u = allUsers.find(function(x) { return String(x.id) === String(uid); });
+            if (u) respChips += `<span class="arb-chip" data-user-id="${uid}"><img class="arb-avatar" src="/pic/${uid}.png" width="18" height="18" style="border-radius:50%;object-fit:cover;" onerror="this.onerror=null;this.src='/pic/default.png';" title="${u.name}">${u.name}<button class="arb-chip-remove" type="button" title="Remove">×</button></span>`;
+          });
+          var contactCell = `<td><div class="acb-bar" data-action-id="${actionId}"><span class="acb-chips">${contactChips}</span><button class="acb-add-btn" type="button">${_PSVG}</button><div class="acb-dropdown" hidden style="position:fixed;z-index:9999;background:#fff;border:1px solid #d0e8ef;border-radius:8px;box-shadow:0 4px 16px rgba(0,88,111,.13);min-width:240px;"><div class="acb-dd-header" style="display:flex;align-items:center;gap:4px;padding:6px 8px;border-bottom:1px solid #f0f0f0;"><input class="acb-search" type="text" placeholder="Search contacts..." style="flex:1;border:1px solid #d0e8ef;border-radius:5px;padding:3px 7px;font-size:.8rem;outline:none;"><button class="acb-refresh-btn" type="button" title="Refresh" style="background:none;border:none;cursor:pointer;font-size:.9rem;color:#888;">⟳</button><a class="acb-new-btn" href="/badaco-contacts/create" style="font-size:.75rem;color:#00586f;font-weight:700;white-space:nowrap;text-decoration:none;padding:2px 6px;">+ New</a></div><ul class="acb-list" style="list-style:none;margin:0;padding:4px 0;max-height:200px;overflow-y:auto;"></ul></div></div></td>`;
+          var respCell = `<td><div class="arb-bar" data-action-id="${actionId}"><span class="arb-chips">${respChips}</span><button class="arb-add-btn" type="button">${_PSVG}</button><div class="arb-dropdown" hidden style="position:fixed;z-index:9999;background:#fff;border:1px solid #d0e8ef;border-radius:8px;box-shadow:0 4px 16px rgba(0,88,111,.13);min-width:220px;"><div style="padding:6px 8px;border-bottom:1px solid #f0f0f0;"><input class="arb-search" type="text" placeholder="Search users..." style="width:100%;border:1px solid #d0e8ef;border-radius:5px;padding:3px 7px;font-size:.8rem;outline:none;box-sizing:border-box;"></div><ul class="arb-list" style="list-style:none;margin:0;padding:4px 0;max-height:200px;overflow-y:auto;"></ul></div></div></td>`;
+          const fields = ['meeting_details','meet_date','action_points','due_date'];
+          const placeholders = { meet_date:'dd/mm/aaaa', due_date:'dd/mm/aaaa', meeting_details:'Details', action_points:'Action point' };
+          let cells = contactCell;
+          fields.forEach(function(f) {
+            const hi = f === 'action_points' ? ' highlight-input' : '';
+            const ph = placeholders[f] ? ` placeholder="${placeholders[f]}"` : '';
+            cells += `<td><input class="action-input${hi}" type="text" data-field="${f}" value="${(data[f]||'').replace(/"/g,'&quot;')}"${ph}></td>`;
+          });
+          cells += respCell;
+          const pVal = data.priority || '';
+          cells += `<td><select class="action-input" data-field="priority"><option value="0"${pVal==='0'?' selected':''}>Normal</option><option value="1"${pVal==='1'?' selected':''}>Important</option><option value="2"${pVal==='2'?' selected':''}>Urgent</option></select></td>`;
+          cells += `<td><span class="text-muted">—</span></td>`;
+          cells += `<td class="row-actions-cell"><button class="btn-row-remove" type="button" title="Remove" onclick="deleteMeetingAction(this)"><i class="fas fa-times"></i></button></td>`;
+          newTr.innerHTML = cells;
+          tbody.insertBefore(newTr, row);
+          initActionDatePickers(newTr);
+          window.meetingDetailACB.initAll();
+          window.meetingDetailARB.initAll();
+          // clear placeholder
+          row.querySelectorAll('[data-field]').forEach(function(el) { el.value = ''; });
+          if (acbBar) { acbBar.querySelector('.acb-chips').innerHTML = ''; delete acbBar.dataset.acbDone; window.meetingDetailACB.initAll(); }
+          if (arbBar) { arbBar.querySelector('.arb-chips').innerHTML = ''; delete arbBar.dataset.arbDone; window.meetingDetailARB.initAll(); }
+          launch_toast('Action added', 1);
+        });
+      })
+      .catch(function() { launch_toast('Error saving action', 2); });
+    }
+
+    // ── Delete action row ──────────────────────────────────────────────────
+    function deleteMeetingAction(btn) {
+      if (meetingStatus === 'closed') {
+        launch_toast('Cannot delete: Meeting is closed', 2);
+        return;
+      }
+      const row = btn.closest('tr');
+      if (!row || !row.dataset.id) return;
+      showModal(
+        'Are you sure you want to remove this action point? This action <strong>cannot be undone</strong>.',
+        function() {
+          fetch('/meetings_action/' + row.dataset.id, {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ user_id: currentUID })
+          })
+          .then(function(r) { return r.json(); })
+          .then(function() { row.remove(); launch_toast('Action removed', 1); })
+          .catch(function() { launch_toast('Error removing action', 2); });
+        },
+        null,
+        { title: 'Remove Action Point?', okText: 'Yes, remove it', cancelText: 'Cancel', type: 'danger' }
+      );
+    }
+
+    // ── Auto-save action on blur ───────────────────────────────────────────
+    document.addEventListener('blur', function(e) {
+      const el = e.target;
+      if (!el.classList.contains('action-input')) return;
+      if (meetingStatus === 'closed') return; // Don't save if meeting is closed
+      const row = el.closest('tr');
+      if (!row || !row.dataset.id || row.classList.contains('new-row-placeholder')) return;
+      const body = { user_id: currentUID };
+      row.querySelectorAll('[data-field]').forEach(function(inp) { body[inp.dataset.field] = inp.value || null; });
+      fetch('/meetings_action/' + row.dataset.id, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      }).catch(function() { launch_toast('Error saving action', 2); });
+    }, true);
+
+    // ── Close Meeting ──────────────────────────────────────────────────────
+    function closeMeeting() {
+        showModal(
+          'This will create CRM cases for all eligible action points and <strong>cannot be undone</strong>.',
+          function() {
+            const btn = document.getElementById('closeMeetingBtn');
+            btn.disabled = true;
+            fetch('/meetings_close/' + meetingId, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ user_id: currentUID, departamento: departamento })
+            })
+            .then(r => r.json())
+            .then(function(res) {
+              launch_toast('Meeting closed. ' + (res.crm_created || 0) + ' CRM case(s) created.', 1);
+              setTimeout(function() { window.location.reload(); }, 1500);
+            })
+            .catch(function() {
+              document.getElementById('closeMeetingBtn').disabled = false;
+              launch_toast('Error closing meeting', 2);
+            });
+          },
+          null,
+          { title: 'Close the Report?', okText: 'Yes, close it', cancelText: 'Cancel', type: 'danger' }
+      );
+    }

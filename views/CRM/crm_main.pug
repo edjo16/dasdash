@@ -1,0 +1,316 @@
+extends ../layout
+
+include ../ui/filter-bar
+include ../mixins/floating-date-hours
+include ../mixins/floating-input
+include ../mixins/floating-textarea
+include ../mixins/floating-rich-textarea
+include ../mixins/floating-select
+include ../mixins/floating-file
+include ../mixins/floating-users
+include ../mixins/floating-users-filter
+include ../mixins/data-table
+include ../mixins/floating-ct-select
+include ../mixins/breadcrumb
+
+block layout-content
+  div#layoutSidenav_content
+    main
+      div.container-fluid.px-4
+        +app-breadcrumb({
+          homeHref: '/',
+          items: [{ label: title, active: true }]
+        })
+        div.Not
+          label="departamentos"
+          input#departamentos(type="text" value=userProfile.departamentoOrigen)
+          input#cdepartamento(type="number" value=userProfile.departamentoId)
+          input#code(type="text" value=userProfile.UserID)
+          input#crm_id(type="text" value="0")
+          input#crm_filtro_asgined(type="number" value="0")
+          input#filter_asignados_value(type="text" value="")
+        //- Filter bar
+        - var priorityItems = [{value:'2',label:'Urgent'},{value:'1',label:'Important'},{value:'0',label:'Normal'}]
+        - var crmStatusItems = [{value:'0',label:'Not Started'},{value:'1',label:'In Progress'},{value:'999',label:'Closed'}]
+        - var filterColleagueOpts = (typeof filterColleagues !== 'undefined' ? filterColleagues : []).map(function(c){ return { value: c.UserID, label: c.Name, department: c.departamento }; })
+        +fb-bar
+          //- ── New Case action (not a filter — kept visible at all sizes)
+          a#opennewcase.page-link(style="display:flex;align-items:center;gap:5px; background-color: #00586f; color:white; border-radius:5px; padding:6px 12px; height:34px;")
+            i.fas.fa-plus
+          //- ── Mobile/tablet toggle: opens the secondary-filter drawer
+          +fb-mobile-toggle({targetId: 'crm-filters', label: 'Filters'})
+          //- ── Secondary filters
+          //- Desktop (≥992px): children flow inline in the bar (display: contents)
+          //- Mobile/tablet (≤991px): wrapper becomes a side drawer opened by the toggle above
+          +fb-search({id: 'SearchBox', placeholder: 'Search', onkeyup: 'SearchTable()'})
+          +fb-secondary({id: 'crm-filters', title: 'Filters'})
+            +fb-select({id: 'SelectBoxPriority', icon: 'fa-exclamation-circle', items: priorityItems, placeholder: 'All Priority', placeholderDisabled: false, onchange: 'load_main()', minWidth: '130px'})
+            +fb-select({id: 'SelectBoxStatus', icon: 'fa-circle', items: crmStatusItems, placeholder: 'All Status', placeholderDisabled: false, onchange: 'load_main()', minWidth: '120px', iconStyle: 'font-size:.45rem;'})
+            +fb-select({id: 'SelectBoxGlobalStatus', icon: 'fa-toggle-on', items: [{value:'open',label:'Open'},{value:'closed',label:'Closed'}], placeholder: 'All', placeholderDisabled: false, onchange: 'load_main()', minWidth: '90px'})
+            +floating-users-filter('filter_asignados', filterColleagueOpts, [], 'Filter assigned', true)
+          //- ── Right-side actions (always visible)
+          +fb-actions
+            +fb-reset-btn({onclick: 'resetFilters()'})
+            +fb-download-btn
+            +fb-view-toggle({id: 'crmViewMode', tableId: 'MainTable', ariaLabel: 'Select CRM data view'})
+            +fb-page-size({id: 'SelectBoxPages', sizes: [15, 50, 100, 250], onchange: 'load_main()'})
+            +fb-pagination
+        +data-table('MainTable', 'totalCount', { internalViewToggle: false })
+          thead
+            tr#header
+              th(style="width:2%; text-align:center;") Case
+              th(style="width:1%; text-align:center;") !
+              th(style="width:12%;") Case Type
+              th(style="width:20%;") Subject
+              th(style="width:10%; text-align:center;") Due Date
+              th(style="width:10%; text-align:center;") Last Update
+              th(style="width:5%;") Assigned
+              th(style="width:10%; text-align:center;") Status
+              th(style="width:5%;") Owner
+              th(style="width:1%; text-align:center;")
+                i.fas.fa-info-circle(style="color:#00586f;" title="Date Info")
+          tbody
+
+    //- New case form
+    div#crm_newcase.formulario(style="max-height:100vh;overflow-y:auto;")
+      div(style="display:flex;width:100%;justify-content: space-between;align-items: center;")       
+        div(style="width:90%")
+          h3.mt-2 Create new case
+        div
+          img#closenewcase.crm_icons(src="/img/xmark-solid.svg")
+      hr
+      div
+        div.row
+          div.col-md-12
+            +floating-ct-select('Case Type', 'intern_subject', true, 'type…', '/case-types-dropdown', 'openNewCaseTypeModal', '','', devteam)
+          div.col-md-12
+            - var users = grupousuarios_active.map(c => ({ value: c.UserID, label: c.Name, department:c.departamento }))
+            +floating-users('Assign - Active Re Collaborator', 'crm_asignados', users, [], false, 'Select a contact','', '', {}, true)
+            input(type="hidden" id="newcase_asignados" name="newcase_asignados")
+        div.row
+          div.col-md-12
+            +floating-input('Subject', 'subject', 'text', true, 'Subject of the case', '', '', {maxlength: 500})
+          div.col-md-12
+            +floating-rich-textarea('Description of the case', 'description', true, '', '', '', {}, 5, '', 6500)
+          div.col-md-12
+            +floating-select('Importance of the case', 'importancia', [{value: '0', label: 'Normal'}, {value: '1', label: 'Important'}, {value: '2', label: 'Urgent'}], true, 'Select importance', '', '', {defaultValue: '0'})
+          div.col-md-12
+            +floating-date-hours('Start Date', 'start_date', false)
+          div.col-md-12
+            - var brOpts = (typeof businessRelationships !== 'undefined' ? businessRelationships : [])
+            +floating-select('Business Relationship', 'business_relationship', brOpts, false, 'relationship…')
+        div.row.mt-2
+          div.col-md-12
+            +floating-file('Supporting Documents', 'files', false, true, false, '*')
+        div#crm_estados.row
+        //- div.row
+        //-   div.col-md-6
+        //-     h5 BADACO
+        //-     label Contact
+        //-     select#badaco_contact.form-control(name="badaco_contact") 
+        //-       option(value="new") New
+        //-       option(value="no") no
+        //- div#badaco_informacion_contacto.row
+        //-   div.col-md-6
+        //-     label Name
+        //-     input#badaco_contact_name.form-control(type="text" name="badaco_contact_name" maxlength="100")
+        //-     label Email
+        //-     input#badaco_contact_email.form-control(type="text" name="badaco_contact_email" maxlength="100")
+        //- div.row
+        //-   div.col-md-6
+        //-     h5 Attachments
+        //-     input#files.form-control(type="file" name="Supportfiles" multiple)
+        div.row
+          div.col-md-6
+            button#submitCRMNewCase.btn.btn-primary.btn-md(type="submit")
+              i.fas.fa-save.me-1
+              | Submit Case
+          //- div.col-md-4
+          //-     label Assigned
+          //-     select#selecionado.form-control(name="selecionado") 
+          //-       option(value="---") --- 
+      div#hidenewcase_adduser.close_menus.Not
+  div#hidenewcase.close_menus.Not
+
+  include ../crm/crm_case_modal
+
+  script.
+    // Auto-set assigned-to-me filter when key=Pending (replaces old /crm_main_asigned route)
+    (function() {
+      var params = new URLSearchParams(window.location.search);
+      if (params.get('key') === 'Pending') {
+        var asignedInput = document.getElementById('crm_filtro_asgined');
+        if (asignedInput) asignedInput.value = '1';
+      }
+    })();
+
+    window._benDepartments = !{JSON.stringify(typeof departments !== 'undefined' ? departments : [])};
+    window._benCompanies = !{JSON.stringify(typeof companies !== 'undefined' ? companies : [])};
+    localStorage.setItem('backpage', 'index');
+    let currentPage = 1;
+    let totalCount = 0;
+    // Bridge: crm_case_modal calls _beneficiaryListRefresh after saving a case type
+    window._beneficiaryListRefresh = function(newTypeId){
+      if(typeof window.refreshCtSelect_intern_subject === 'function')
+        window.refreshCtSelect_intern_subject(newTypeId);
+    };
+
+  //- ═══════════════════════════════════════════════════════════════
+  //- 🔧 Tech Support Auto-Assignment Feature
+  //- ═══════════════════════════════════════════════════════════════
+  script.
+    // Global state for Tech Support locking
+    var _techSupportLocked = false;
+    var _lockedUserId = null;
+    var _techSupportUsers = [];
+
+    // Get user by name (abarahona)
+    function findTechSupportUser(label) {
+      var allUsers = !{JSON.stringify(typeof grupousuarios_active !== 'undefined' ? grupousuarios_active : [])};
+      
+      var techUser = allUsers.find(function(u) {
+        return (u.UserID || '').toLowerCase().includes('abarahona') ||
+               (u.Name || '').toLowerCase().includes('abarahona');
+      });
+      
+      return techUser || null;
+    }
+
+    //  Lock user chip (make it non-removable with visual indicator)
+    function lockAssignedUserChip(userId) {
+      var display = document.querySelector('.floating-users-display[data-name="crm_asignados"]');
+      if (!display) return;
+      
+      var chips = display.querySelectorAll('.chip[data-value="' + userId + '"]');
+      chips.forEach(function(chip) {
+        chip.style.borderColor = '#FF6B6B';
+        chip.style.borderWidth = '2px';
+        var removeBtn = chip.querySelector('.remove-chip');
+        if (removeBtn) {
+          removeBtn.style.display = 'none';
+        }
+        chip.title = 'Tech Support assigned user (cannot be removed)';
+        chip.style.cursor = 'not-allowed';
+      });
+    }
+
+    // Unlock user chip (restore normal behavior)
+    function unlockAssignedUserChip(userId) {
+      var display = document.querySelector('.floating-users-display[data-name="crm_asignados"]');
+      if (!display) return;
+      
+      var chips = display.querySelectorAll('.chip[data-value="' + userId + '"]');
+      chips.forEach(function(chip) {
+        chip.style.borderColor = '';
+        chip.style.borderWidth = '';
+        var removeBtn = chip.querySelector('.remove-chip');
+        if (removeBtn) {
+          removeBtn.style.display = '';
+        }
+        chip.title = '';
+        chip.style.cursor = '';
+      });
+    }
+
+    // Sync assigned users from DOM to hidden input
+    function syncAssignedFromDom() {
+      var display = document.querySelector('.floating-users-display[data-name="crm_asignados"]');
+      if (!display) return;
+      
+      var hiddenInputs = display.querySelectorAll('input[type="hidden"]');
+      var selected = Array.from(hiddenInputs).map(function(i) { return i.value; });
+      
+      var globalHidden = document.getElementById('newcase_asignados');
+      if (globalHidden) {
+        globalHidden.value = selected.join(';');
+      }
+    }
+
+    // Handle Case Type change
+    function onCaseTypeChange(label) {
+      var isTechSupport = label.trim().toLowerCase() === 'tech support';
+
+      if (isTechSupport && !_techSupportLocked) {
+        var techUser = findTechSupportUser(label);
+        if (!techUser) {
+          console.warn('Tech Support user (abarahona) not found');
+          return;
+        }
+
+        _lockedUserId = techUser.UserID;
+
+        // Add user if not already selected
+        if (typeof selectFloatingMultiselectOption === 'function') {
+          selectFloatingMultiselectOption('crm_asignados', _lockedUserId);
+        }
+
+        syncAssignedFromDom();
+
+        // ⏱ Wait for chip render
+        setTimeout(function() {
+          lockAssignedUserChip(_lockedUserId);
+        }, 50);
+
+        _techSupportLocked = true;
+      }
+      else if (!isTechSupport && _techSupportLocked) {
+        if (_lockedUserId && typeof removeFloatingMultiselectChip === 'function') {
+          removeFloatingMultiselectChip('crm_asignados', _lockedUserId);
+        }
+
+        syncAssignedFromDom();
+        unlockAssignedUserChip(_lockedUserId);
+
+        _lockedUserId = null;
+        _techSupportLocked = false;
+      }
+    }
+
+    // Setup observer for Case Type changes
+    document.addEventListener('DOMContentLoaded', function() {
+      var selectedSpan = document.getElementById('intern_subject_selected');
+      if (!selectedSpan) {
+        console.warn('intern_subject_selected element not found');
+        return;
+      }
+
+      var prevLabel = '';
+      var observer = new MutationObserver(function() {
+        var label = (selectedSpan.textContent || '').trim();
+        if (label !== prevLabel) {
+          prevLabel = label;
+          onCaseTypeChange(label);
+        }
+      });
+
+      observer.observe(selectedSpan, { childList: true, characterData: true, subtree: true });
+    });
+
+    // ═══════════════════════════════════════════════════════════════
+    // Assignee filter — sync hidden input + trigger reload on change
+    // ═══════════════════════════════════════════════════════════════
+    document.addEventListener('DOMContentLoaded', function() {
+      var filterDisplay = document.querySelector('.floating-users-filter-display[data-name="filter_asignados"]');
+      if (!filterDisplay) return;
+
+      var _assigneeFilterTimeout = null;
+
+      var assigneeObs = new MutationObserver(function() {
+        if (filterDisplay._restoringFilter) return;
+        clearTimeout(_assigneeFilterTimeout);
+        _assigneeFilterTimeout = setTimeout(function() {
+          var hiddenInputs = filterDisplay.querySelectorAll('input[type="hidden"]');
+          var selected = Array.from(hiddenInputs).map(function(i) { return i.value; });
+          var globalHidden = document.getElementById('filter_asignados_value');
+          if (globalHidden) globalHidden.value = selected.join(';');
+          currentPage = 1;
+          load_main();
+        }, 50);
+      });
+
+      assigneeObs.observe(filterDisplay, { childList: true });
+    });
+
+  style.
+
+
