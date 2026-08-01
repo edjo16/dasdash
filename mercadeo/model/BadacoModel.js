@@ -427,15 +427,17 @@ FETCH NEXT @limit ROWS ONLY;
         const request = new sql.Request(transaction);
         const query = `
             UPDATE badaco_mcompany
-            SET 
+            SET
                 nombre = @nombre,
                 pais = @pais,
-                bmrg_id = @bmrg_id,
+                -- bmrg_id/domain are not editable from the UI: keep whatever is stored
+                -- (e.g. written by the external API) when the caller omits them
+                bmrg_id = COALESCE(@bmrg_id, bmrg_id),
                 bmrl_id = @bmrl_id,
                 telefono = @telefono,
                 address = @address,
                 email = @email,
-                domain = @domain,
+                domain = COALESCE(@domain, domain),
                 website = @website,
                 fmodificado = GETDATE(),
                 umodificado = @umodificado
@@ -444,7 +446,7 @@ FETCH NEXT @limit ROWS ONLY;
 
         request.input('bmc_id', sql.Int, companyId);
         request.input('nombre', sql.NVarChar, data.nombre);
-        request.input('pais', sql.Int, data.pais || null);
+        request.input('pais', sql.NVarChar, data.pais || null);
         request.input('bmrg_id', sql.Int, data.region || null);
         request.input('bmrl_id', sql.Int, data.bmrl_id || null);
         request.input('telefono', sql.NVarChar, data.telefono || null);

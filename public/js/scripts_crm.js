@@ -221,15 +221,86 @@ async function crmPdfRequest(url, options) {
     return json;
 }
 
-/* Visor de PDF de CRM: ver, versionar y escribir comentarios (sin firma). */
-function openCrmPdfViewer(crm_id, msg_id, filename) {
+/* ── Carga bajo demanda del visor ─────────────────────────────
+   El visor solo se necesita al abrir un PDF, asi que sus assets se
+   inyectan en el primer click en vez de depender de que la vista los
+   incluya. Evita que un cambio de titulo en la plantilla deje de cargar
+   el visor y que el navegador caiga al fallback de "abrir en pestana". */
+const CRM_PDF_ASSETS = {
+    css: '/css/pdf-viewer.css',
+    pdfjs: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js',
+    pdfWorker: '/js/pdf.worker.min.js',
+    viewer: '/js/pdf-viewer-doc.js',
+};
+
+const crmPdfAssetLoads = {};
+
+function loadCrmScriptOnce(src) {
+    if (crmPdfAssetLoads[src]) return crmPdfAssetLoads[src];
+    crmPdfAssetLoads[src] = new Promise(function (resolve, reject) {
+        const script = document.createElement('script');
+        script.src = src;
+        script.async = false;
+        script.onload = function () { resolve(); };
+        script.onerror = function () {
+            // Se descarta el intento fallido para poder reintentar en el proximo click.
+            delete crmPdfAssetLoads[src];
+            reject(new Error('Could not load ' + src));
+        };
+        document.head.appendChild(script);
+    });
+    return crmPdfAssetLoads[src];
+}
+
+function ensureCrmStylesheet(href) {
+    const already = Array.prototype.some.call(
+        document.querySelectorAll('link[rel="stylesheet"]'),
+        function (link) { return (link.getAttribute('href') || '').indexOf(href) === 0; }
+    );
+    if (already) return;
+    const link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = href;
+    document.head.appendChild(link);
+}
+
+async function ensureCrmPdfViewerLoaded() {
+    ensureCrmStylesheet(CRM_PDF_ASSETS.css);
+
+    if (!window.pdfjsLib) {
+        await loadCrmScriptOnce(CRM_PDF_ASSETS.pdfjs);
+    }
+    // La vista tambien puede haber cargado pdf.js sin configurar el worker.
+    if (window.pdfjsLib && !pdfjsLib.GlobalWorkerOptions.workerSrc) {
+        pdfjsLib.GlobalWorkerOptions.workerSrc = CRM_PDF_ASSETS.pdfWorker;
+    }
     if (!window.PdfDocViewer) {
-        window.open(getCrmFileEndpoints(crm_id, msg_id, filename).fileUrl, '_blank', 'noopener');
-        return false;
+        await loadCrmScriptOnce(CRM_PDF_ASSETS.viewer);
     }
 
+    return !!(window.pdfjsLib && window.PdfDocViewer);
+}
+
+/* Visor de PDF de CRM: ver, versionar y escribir comentarios (sin firma). */
+function openCrmPdfViewer(crm_id, msg_id, filename) {
     const params = getCrmPdfParams(crm_id, msg_id, filename);
 
+    function openInNewTab(reason) {
+        console.error('CRM PDF viewer unavailable, opening in browser instead:', reason);
+        window.open(getCrmFileEndpoints(crm_id, msg_id, filename).fileUrl, '_blank', 'noopener');
+    }
+
+    ensureCrmPdfViewerLoaded()
+        .then(function (ready) {
+            if (!ready) return openInNewTab('assets loaded but viewer did not register');
+            openCrmPdfViewerWith(params, crm_id, msg_id, filename);
+        })
+        .catch(openInNewTab);
+
+    return false;
+}
+
+function openCrmPdfViewerWith(params, crm_id, msg_id, filename) {
     window.PdfDocViewer.open({
         filename: filename,
         canWrite: true,
@@ -256,7 +327,6 @@ function openCrmPdfViewer(crm_id, msg_id, filename) {
             });
         }
     });
-    return false;
 }
 
 function createCrmActionLink(href, title, iconHtml, target, downloadName) {

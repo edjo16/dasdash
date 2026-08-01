@@ -19,9 +19,20 @@ block layout-content
         - var countryItems = (typeof countries !== 'undefined' ? countries : []).map(function(country) { return { value: country, label: country }; })
 
         +fb-bar
-          a#newContactBtn.fb-btn.badaco-new-contact(href='/badaco-contacts/create')
-            i.fas.fa-plus
-            span New Contact
+          div.dropdown
+            button#createMenuBtn.fb-btn.badaco-create-btn(type='button' data-bs-toggle='dropdown' aria-expanded='false')
+              i.fas.fa-plus
+              span Create
+              i.fas.fa-chevron-down.badaco-create-caret
+            ul.dropdown-menu.badaco-create-menu(aria-labelledby='createMenuBtn')
+              li
+                a#newContactBtn.dropdown-item(href='/badaco-contacts/create')
+                  i.fas.fa-user.me-2
+                  | New Contact
+              li
+                button#newCompanyBtn.dropdown-item(type='button' onclick='openNewCompanyModal()')
+                  i.fas.fa-building.me-2
+                  | New Company
           +fb-select({id: 'companyFilter', icon: 'fa-signature', items: companyItems, placeholder: 'All Companies', placeholderDisabled: false, minWidth: '175px'})
           +fb-select({id: 'jobLevelFilter', icon: 'fa-layer-group', items: jobLevelItems, placeholder: 'All Job Levels', placeholderDisabled: false, minWidth: '175px'})
           +fb-select({id: 'countryFilter', icon: 'fa-globe-americas', items: countryItems, placeholder: 'All Countries', placeholderDisabled: false, minWidth: '175px'})
@@ -41,23 +52,78 @@ block layout-content
               th Job Level
               th Job Title
               th Country
+              th.text-center Options
           tbody.bg-white
             tr
-              td.text-center(colspan='7')
+              td.text-center(colspan='6')
                 i.fas.fa-spinner.fa-spin.me-2
                 | Loading contacts...
 
+  include ./badaco_company_modal
+
   style.
-    .badaco-new-contact {
+    .badaco-create-btn {
       background-color: #00586f;
       border-color: #00586f;
       color: #ffffff;
     }
 
-    .badaco-new-contact:hover {
+    .badaco-create-btn:hover,
+    .badaco-create-btn[aria-expanded="true"] {
       background-color: #004456;
       border-color: #004456;
       color: #ffffff;
+    }
+
+    .badaco-create-caret {
+      font-size: 0.7rem;
+      transition: transform 0.2s ease;
+    }
+
+    .badaco-create-btn[aria-expanded="true"] .badaco-create-caret {
+      transform: rotate(180deg);
+    }
+
+    .badaco-create-menu {
+      min-width: 190px;
+      border: 1px solid #dee2e6;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+      padding: 4px;
+    }
+
+    .badaco-create-menu .dropdown-item {
+      display: flex;
+      align-items: center;
+      width: 100%;
+      border-radius: 6px;
+      font-size: 0.85rem;
+      padding: 8px 10px;
+      text-align: left;
+    }
+
+    .badaco-create-menu .dropdown-item:hover,
+    .badaco-create-menu .dropdown-item:focus {
+      background-color: #e6f4f1;
+      color: #00586f;
+    }
+
+    .badaco-create-menu .dropdown-item i {
+      width: 16px;
+      text-align: center;
+      color: #00586f;
+    }
+
+    .badaco-row-action {
+      background: none;
+      border: none;
+      padding: 4px 8px;
+      color: #00586f;
+      cursor: pointer;
+      border-radius: 6px;
+    }
+
+    .badaco-row-action:hover {
+      background-color: #e6f4f1;
     }
 
     #contactsTable {
@@ -173,7 +239,7 @@ block layout-content
       const tbody = document.querySelector('#contactsTable tbody');
       
       if (contacts.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="7" class="text-center">No contacts found</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="6" class="text-center">No contacts found</td></tr>';
         return;
       }
 
@@ -186,10 +252,35 @@ block layout-content
           </td>
           <td>${contact.job_title ? escapeHtml(contact.job_title) : '-'}</td>
           <td>${contact.contact_country_name ? escapeHtml(contact.contact_country_name) : '-'}</td>
+          <td class="text-center" onclick="event.stopPropagation()">
+            ${contact.bmc_id
+              ? `<button type="button" class="badaco-row-action" title="Edit company" onclick="event.stopPropagation();openCompanyModal('${escapeHtml(String(contact.bmc_id))}')"><i class="fas fa-edit"></i></button>`
+              : '-'}
+          </td>
         </tr>
       `).join('');
     }
-    
+
+    // Called by the company modal after a successful create/update
+    window._badacoCompanyRefresh = function(company) {
+      const companyFilter = document.getElementById('companyFilter');
+
+      if (companyFilter) {
+        if (company.isNew) {
+          const option = document.createElement('option');
+          option.value = company.bmc_id;
+          option.text = company.nombre;
+          companyFilter.appendChild(option);
+        } else {
+          const existing = companyFilter.querySelector(`option[value="${company.bmc_id}"]`);
+          if (existing) existing.text = company.nombre;
+        }
+      }
+
+      // A renamed company changes what the table shows, so reload the current page
+      if (!company.isNew) loadContacts();
+    };
+
     
     // Show alert
     function showAlert(message, type) {

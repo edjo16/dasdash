@@ -1252,8 +1252,8 @@ block layout-content
           if (form.request_type === 'partial_permit' && form.start_permit_hour) {
             rows += '<tr><th>Hours</th><td>' + form.start_permit_hour + ' - ' + form.end_permit_hour + '</td></tr>';
           }
-          var sd = form.start_date ? new Date(form.start_date).toLocaleDateString('en-GB') : '-';
-          var ed = form.end_date ? new Date(form.end_date).toLocaleDateString('en-GB') : '-';
+          var sd = form.start_date ? form.start_date.split('T')[0].split('-').reverse().join('/') : '-';
+          var ed = form.end_date ? form.end_date.split('T')[0].split('-').reverse().join('/') : '-';
           rows += '<tr><th>Start Date</th><td>' + sd + '</td></tr>';
           rows += '<tr><th>End Date</th><td>' + ed + '</td></tr>';
           rows += '<tr><th>Days</th><td>' + form.days + ' Days' || '-' + '</td></tr>';

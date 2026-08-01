@@ -7,7 +7,7 @@ import path from 'path';
 import { readFile, mkdir } from 'fs/promises';
 import { createReadStream, existsSync, statSync } from 'fs';
 import { PDFDocument } from 'pdf-lib';
-import DigitalSignaturesModel from '../../Approvals_functions/models/digital_signatures.js';
+import CRMPdfModel, { ORIGINAL_SUFFIX, VERSION_SUFFIX } from '../model/crm_pdf.js';
 import USERModel from '../../USERS/model/USER.js';
 import {
     applyWritesToPdfDocument,
@@ -20,18 +20,10 @@ import {
 } from '../../Approvals_functions/services/pdf-text-writer.js';
 import { buildCrmUncPath, isSafeFilename, validateCrmReadAccess } from './CRM.js';
 
-const CRM_MODULE = 'crm';
-const VERSION_SUFFIX = '_edited_v';
-const ORIGINAL_SUFFIX = '_v0_original';
-
 const FILE_LOCKED_RESPONSE = {
     error: 'file_locked',
     message: 'The file is currently open by another user. Please try again later.',
 };
-
-function docRef(msgId) {
-    return { module: CRM_MODULE, subRefId: msgId };
-}
 
 /** Valida parametros comunes y el acceso del usuario al caso. */
 async function validateCrmPdfRequest(connection, req, crmId, msgId, filename) {
@@ -51,13 +43,11 @@ async function validateCrmPdfRequest(connection, req, crmId, msgId, filename) {
 /**
  * Resuelve que archivo fisico corresponde a la version pedida.
  * 'latest' siempre apunta al archivo original, que se sobrescribe con
- * cada version nueva (mismo criterio que APPROVALS).
+ * cada version nueva.
  */
 async function resolveCrmVersionContext(transaction, crmId, msgId, filename, requestedVersion = 'latest') {
     const originalFilename = normalizeOriginalFilename(filename);
-    const versions = await DigitalSignaturesModel.getDocumentVersions(
-        transaction, crmId, originalFilename, docRef(msgId),
-    );
+    const versions = await CRMPdfModel.getDocumentVersions(transaction, crmId, msgId, originalFilename);
 
     const originalPath = buildCrmUncPath(crmId, msgId, originalFilename);
     const requested = String(requestedVersion || 'latest').toLowerCase();
@@ -133,10 +123,9 @@ export default class CRMPdfController {
                 pages.push({ pageNumber: i + 1, width, height });
             }
 
-            await DigitalSignaturesModel.insertAuditLog(transaction, {
-                approval_id: crmId,
-                module: CRM_MODULE,
-                sub_ref_id: msgId,
+            await CRMPdfModel.insertAuditLog(transaction, {
+                crm_id: crmId,
+                msg_id: msgId,
                 filename: context.originalFilename,
                 action: 'document_viewed',
                 user_id: req.session?.userID || 'unknown',
@@ -270,16 +259,22 @@ export default class CRMPdfController {
             const dir = path.dirname(context.fullPath);
             const ext = path.extname(context.originalFilename);
             const base = path.basename(context.originalFilename, ext);
-            await mkdir(dir, { recursive: true });
 
-            // Respaldo del original antes de sobrescribirlo por primera vez.
-            if (context.versions.length === 0) {
-                const originalBackupPath = path.join(dir, `${base}${ORIGINAL_SUFFIX}${ext}`);
-                await writeFileSafe(originalBackupPath, originalBytes);
-                await DigitalSignaturesModel.insertDocumentVersion(transaction, {
-                    approval_id: crmId,
-                    module: CRM_MODULE,
-                    sub_ref_id: msgId,
+            const isFirstVersion = context.versions.length === 0;
+            const originalBackupPath = path.join(dir, `${base}${ORIGINAL_SUFFIX}${ext}`);
+            const newVersion = isFirstVersion
+                ? 1
+                : Math.max(...context.versions.map(v => Number(v.version))) + 1;
+            const editedFilename = `${base}${VERSION_SUFFIX}${newVersion}${ext}`;
+            const editedPath = path.join(dir, editedFilename);
+
+            // Primero la base de datos. Si algo falla aqui (constraint, permisos)
+            // el rollback deja el PDF original intacto en disco; al reves se
+            // perderia el original sin quedar registro de la version.
+            if (isFirstVersion) {
+                await CRMPdfModel.insertDocumentVersion(transaction, {
+                    crm_id: crmId,
+                    msg_id: msgId,
                     filename: context.originalFilename,
                     version: 0,
                     version_type: 'original',
@@ -289,20 +284,9 @@ export default class CRMPdfController {
                 });
             }
 
-            const newVersion = context.versions.length > 0
-                ? Math.max(...context.versions.map(v => Number(v.version))) + 1
-                : 1;
-            const editedFilename = `${base}${VERSION_SUFFIX}${newVersion}${ext}`;
-            const editedPath = path.join(dir, editedFilename);
-
-            await writeFileSafe(editedPath, editedBytes);
-            // El archivo original siempre queda con la ultima version aplicada.
-            await writeFileSafe(context.fullPath, editedBytes);
-
-            await DigitalSignaturesModel.insertDocumentVersion(transaction, {
-                approval_id: crmId,
-                module: CRM_MODULE,
-                sub_ref_id: msgId,
+            await CRMPdfModel.insertDocumentVersion(transaction, {
+                crm_id: crmId,
+                msg_id: msgId,
                 filename: editedFilename,
                 version: newVersion,
                 version_type: 'edited',
@@ -311,10 +295,9 @@ export default class CRMPdfController {
                 created_by: userId,
             });
 
-            await DigitalSignaturesModel.insertAuditLog(transaction, {
-                approval_id: crmId,
-                module: CRM_MODULE,
-                sub_ref_id: msgId,
+            await CRMPdfModel.insertAuditLog(transaction, {
+                crm_id: crmId,
+                msg_id: msgId,
                 filename: context.originalFilename,
                 action: 'document_text_written',
                 user_id: userId,
@@ -330,6 +313,17 @@ export default class CRMPdfController {
                     output_filename: editedFilename,
                 }),
             });
+
+            // Validado todo en base de datos, se baja a disco dejando de ultimo
+            // la sobrescritura del original, que es la operacion destructiva.
+            await mkdir(dir, { recursive: true });
+            if (isFirstVersion && !existsSync(originalBackupPath)) {
+                // Si un intento previo fallo despues de crear el respaldo, ese
+                // archivo ya tiene el original intacto y no se debe pisar.
+                await writeFileSafe(originalBackupPath, originalBytes);
+            }
+            await writeFileSafe(editedPath, editedBytes);
+            await writeFileSafe(context.fullPath, editedBytes);
 
             await transaction.commit();
             res.send({

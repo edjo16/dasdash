@@ -1,0 +1,211 @@
+include ../mixins/floating-input
+include ../mixins/floating-input-phone
+include ../mixins/floating-select
+include ../mixins/floating-textarea
+include ../mixins/modal-container
+
+//- ── Company Modal (create + edit) ────────────────────────────────────
+//- Public API:
+//-   window.openNewCompanyModal()        -> create mode
+//-   window.openCompanyModal(bmc_id)     -> edit mode (fetches the company)
+//- On a successful save it calls window._badacoCompanyRefresh(company) if defined.
+
+- var cmCountryOptions = (typeof allCountries !== 'undefined' ? allCountries : []).map(function(c) { return { value: c.cpais, label: (c.xnombre_pais_ingles || '').trim() }; })
+- var cmRelationshipOptions = (typeof relationships !== 'undefined' ? relationships : []).map(function(r) { return { value: r.bmrl_id, label: r.name }; })
+
++modal-container('companyModal', 'companyModalTitle', 'companyModalClose', 'companyModalCancel', 'companyModalSave', 'Company')
+  input#companyModalId(type="hidden")
+  form#companyModalForm(autocomplete="off")
+    div.row
+      div.col-md-6.mb-2
+        +floating-input('Company Name', 'cm_nombre', 'text', true, '', '', '', { maxlength: 100 })
+      div.col-md-6.mb-2
+        +floating-input('Website', 'cm_website', 'text', true, '', '', '', { maxlength: 100 })
+    div.row
+      div.col-md-6.mb-2
+        +floating-input('Email', 'cm_email', 'email', false, '', '', '', { maxlength: 100 })
+      div.col-md-6.mb-2
+        +floating-select('Company Country', 'cm_pais', cmCountryOptions, false, 'Country')
+    div.row
+      div.col-md-6.mb-2
+        +floating-select('Relationship Type', 'cm_rela', cmRelationshipOptions, false, 'Relationship')
+      div.col-md-6.mb-2
+        +floating-input-phone('Phone', 'cm_telefono', false, '123-456-7890', 'PA')
+    div.row
+      div.col-12.mb-2
+        +floating-textarea('Address', 'cm_address', false, '', '', '', { maxlength: 250 }, 3)
+
+script.
+  (function() {
+    const get = id => document.getElementById(id);
+    const CM_USER_ID = '#{userProfile.UserID}';
+
+    // domain and bmrg_id are derived at export time (see downloadExcel), never captured here
+    const CM_FIELDS = ['cm_nombre', 'cm_website', 'cm_email', 'cm_pais',
+                       'cm_rela', 'cm_telefono', 'cm_address'];
+    const CM_REQUIRED = [
+      { id: 'cm_nombre', label: 'Company Name' },
+      { id: 'cm_website', label: 'Website' }
+    ];
+
+    function setVal(id, value) {
+      const el = get(id);
+      if (!el) return;
+      el.value = value == null ? '' : value;
+      el.classList.remove('error');
+      if (el.value) el.classList.add('has-value', 'valid');
+      else el.classList.remove('has-value', 'valid');
+    }
+
+    function resetModal() {
+      CM_FIELDS.forEach(function(id) {
+        const el = get(id);
+        if (!el) return;
+        el.value = '';
+        el.classList.remove('valid', 'error', 'has-value');
+        delete el.dataset.touched;
+        const clearError = window['clearInputError_' + id] || window['clearSelectError_' + id];
+        if (clearError) clearError();
+      });
+      if (window['setPhoneValue_cm_telefono']) window['setPhoneValue_cm_telefono']('');
+      get('companyModalId').value = '';
+    }
+
+    function openModal() {
+      get('companyModal').classList.add('open');
+      document.body.style.overflow = 'hidden';
+    }
+
+    function closeModal() {
+      get('companyModal').classList.remove('open');
+      document.body.style.overflow = '';
+    }
+
+    function validate() {
+      let ok = true;
+      CM_REQUIRED.forEach(function(field) {
+        const el = get(field.id);
+        if (!el) return;
+        if (!el.value.trim()) {
+          ok = false;
+          const setError = window['setInputError_' + field.id];
+          if (setError) setError(field.label + ' is required');
+          else el.classList.add('error');
+        } else {
+          const clearError = window['clearInputError_' + field.id];
+          if (clearError) clearError();
+        }
+      });
+      if (!ok) launch_toast('Please fill in the required fields', 2);
+      return ok;
+    }
+
+    async function saveCompany() {
+      if (!validate()) return;
+
+      const bmc_id = get('companyModalId').value;
+      const isEditMode = !!bmc_id;
+      const btn = get('companyModalSave');
+      const originalHtml = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Saving...';
+
+      const payload = {
+        nombre: get('cm_nombre').value.trim(),
+        website: get('cm_website').value.trim(),
+        email: get('cm_email').value.trim(),
+        pais: get('cm_pais').value,
+        bmrl_id: get('cm_rela').value || null,
+        telefono: get('cm_telefono-hidden').value.trim(),
+        address: get('cm_address').value.trim(),
+        uingreso: CM_USER_ID
+      };
+
+      const url = isEditMode
+        ? '/badaco/companies/update/' + encodeURIComponent(bmc_id)
+        : '/badaco/companies/create';
+
+      try {
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const data = await response.json();
+
+        if (data.success) {
+          launch_toast(isEditMode ? 'Company updated successfully' : 'Company created successfully', 1);
+          closeModal();
+          if (typeof window._badacoCompanyRefresh === 'function') {
+            window._badacoCompanyRefresh({
+              bmc_id: isEditMode ? bmc_id : data.bmc_id,
+              nombre: payload.nombre,
+              isNew: !isEditMode
+            });
+          }
+        } else {
+          launch_toast('Error: ' + data.error, 2);
+        }
+      } catch (error) {
+        console.error('Error saving company:', error);
+        launch_toast(isEditMode ? 'Error updating company' : 'Error creating company', 2);
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = originalHtml;
+      }
+    }
+
+    window.openNewCompanyModal = function() {
+      resetModal();
+      get('companyModalTitle').textContent = 'New Company';
+      get('companyModalSave').style.display = '';
+      openModal();
+    };
+
+    window.openCompanyModal = async function(bmc_id) {
+      resetModal();
+      get('companyModalTitle').textContent = 'Loading…';
+      get('companyModalSave').style.display = 'none';
+      openModal();
+
+      try {
+        const response = await fetch('/badaco/companies/' + encodeURIComponent(bmc_id));
+        const data = await response.json();
+
+        if (!data.success || !data.company) {
+          launch_toast('Company not found', 2);
+          closeModal();
+          return;
+        }
+
+        const company = data.company;
+        get('companyModalId').value = company.bmc_id;
+        setVal('cm_nombre', company.nombre);
+        setVal('cm_website', company.website);
+        setVal('cm_email', company.email);
+        setVal('cm_pais', company.pais);
+        setVal('cm_rela', company.bmrl_id);
+        setVal('cm_address', company.address);
+        setVal('cm_telefono', company.telefono);
+        if (window['setPhoneValue_cm_telefono']) window['setPhoneValue_cm_telefono'](company.telefono || '');
+
+        get('companyModalTitle').textContent = 'Edit Company';
+        get('companyModalSave').style.display = '';
+      } catch (error) {
+        console.error('Error loading company:', error);
+        launch_toast('Error loading company', 2);
+        closeModal();
+      }
+    };
+
+    document.addEventListener('DOMContentLoaded', function() {
+      get('companyModalClose').addEventListener('click', closeModal);
+      get('companyModalCancel').addEventListener('click', closeModal);
+      get('companyModalSave').addEventListener('click', saveCompany);
+
+      const modal = get('companyModal');
+      modal.addEventListener('click', function(e) {
+        if (e.target === modal) closeModal();
+      });
+    });
+  })();

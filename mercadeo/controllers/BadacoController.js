@@ -29,6 +29,9 @@ export default class BadacoController {
             const companies = await BadacoModel.getAllCompanies(pool);
             const jobLevels = await BadacoModel.getAllJobLevels(pool);
             const countries = await BadacoModel.getUniqueCountries(pool);
+            // Catalogs consumed by the company modal (create/edit)
+            const relationships = await BadacoModel.getAllRelationships(pool);
+            const countriesAll = await USERModel.getCountries(pool);
 
             res.render('badaco/badaco_contacts_list', {
                 title: 'BADACO - Contact Database',
@@ -44,6 +47,8 @@ export default class BadacoController {
                 users: users,
                 usuarios: grupousuarios,
                 countries: countries,
+                allCountries: countriesAll,
+                relationships: relationships,
                 devteam: devteam
             });
 
@@ -437,18 +442,15 @@ export default class BadacoController {
 
         try {
             await transaction.begin();
-            // const region = req.body.pais ? await BadacoModel.getRegionById(transaction,req.body.pais): null
-            // const domain = req.body.email ? req.body.email.split('@')[1]: null
+            // domain and region are derived at export time (see downloadExcel), not captured here
             const data = {
                 uingreso:req.body.uingreso,
                 nombre: req.body.nombre,
                 pais: req.body.pais || null,
                 bmrl_id: req.body.bmrl_id  || null,
-                // region: region,
                 telefono: req.body.telefono || null,
                 address: req.body.address || null,
                 email: req.body.email || null,
-                // domain: domain,
                 website: req.body.website || null,
             };
             
