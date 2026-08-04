@@ -5,17 +5,10 @@ import { validateUserId } from "../../Middleware/validateUserId.js";
 import CRMController from '../controllers/CRM.js';
 import CRMPdfController from '../controllers/CRM_pdf.js';
 import cron from 'node-cron';
-import { existsSync, mkdirSync } from 'fs';
-import { join } from 'path';
-import pkg from 'lodash';
-import { nombres_latinos } from '../../fuctions-approvals.js';
 import { requireAuth } from '../../Middleware/requireAuth.js';
-import { sanitizeHtml } from '../../utils/sanitize-html.js';
 
 export default function (app) {
-    const { forEach, keysIn } = pkg;
     var titulo = "CRM - "
-    const crm_dir = '//vps-file01/CRM/'
 
     app.get("/crm_main", validateUserId, async (req, res) => {
        await CRMController.getCRMGet(sqlConfig, req, res)
@@ -449,80 +442,10 @@ export default function (app) {
         }
     });
     
-    app.post('/form_crm_new_msg', async function(req, res, next) {
-            try {
-                let pool = await sql.connect(sqlConfig)
-                var UserID = req.body.UserID
-                var UserName = req.body.UserName
-                var crm_id = req.body.crm_id
-                var description = sanitizeHtml(req.body.description)
-                // Obtener departamentos donde el usuario sea manager
-                let sql_query = `SELECT COUNT(*) id_msg FROM dbo.crm_msg WHERE id_main = @crm_id`
-                let crm_msg = await pool.request()
-                    .input('crm_id', sql.Int, crm_id)
-                    .query(sql_query)
-                let id_msg = crm_msg.recordset[0].id_msg + 1
-                sql_query = `INSERT INTO approvals.dbo.crm_msg
-                (id_mensaje, id_main, fingreso, nombre_mensaje, body_mensaje, id_msg, de_nombre, ms_process, para_correo, to_procesado, ms_filename, de_correo, para_nombre, ctipo)
-                VALUES('', @crm_id, getdate(), 'New comment', @description, @id_msg, @UserName, 0, Null, 0, '', '', '', 1);`
-                var insert = await pool.request()
-                    .input('crm_id', sql.Int, crm_id)
-                    .input('description', sql.VarChar, description)
-                    .input('id_msg', sql.Int, id_msg)
-                    .input('UserName', sql.VarChar, UserName)
-                    .query(sql_query)
-                try {
-                    if (req.files && req.files.Supportfiles) {
-                        var folderPath = join(crm_dir, String(crm_id));  
-                        if (!existsSync(folderPath)) {
-                            mkdirSync(folderPath);
-                        }
-                        var folderPath = join(crm_dir, String(crm_id), String(id_msg));   
-                        if (!existsSync(folderPath)) {
-                            mkdirSync(folderPath);
-                        } 
-                        if (req.files.Supportfiles.name) {
-                            let file = req.files.Supportfiles;
-                            let filename = nombres_latinos(file.name)
-                            sql_query = `insert into crm_archivos (id_main, id_msg, xname)
-                            VALUES (@crm_id, @id_msg, @xname)`
-                            var insert = await pool.request()
-                                .input('crm_id', sql.Int, crm_id)
-                                .input('id_msg', sql.Int, id_msg)
-                                .input('xname', sql.VarChar, filename)
-                                .query(sql_query)
-                            var filePath = join(folderPath, filename);
-                            file.mv(filePath);
-                        } else {
-                            forEach(keysIn(req.files.Supportfiles), (key) => {
-                                let file = req.files.Supportfiles[key];
-                                let filename = nombres_latinos(file.name)
-                                sql_query = `insert into crm_archivos (id_main, id_msg, xname)
-                                VALUES (@crm_id, @id_msg, @xname)`
-                                var insert = pool.request()
-                                    .input('crm_id', sql.Int, crm_id)
-                                    .input('id_msg', sql.Int, id_msg)
-                                    .input('xname', sql.VarChar, filename)
-                                    .query(sql_query)
-                                var filePath = join(folderPath, filename);
-                                file.mv(filePath);
-                            });
-                        }
-                    }                    
-                } catch (error) {
-                    console.log(error)                
-                }
-                await pool.request()
-                    .input('crm_id', sql.Int, crm_id)
-                    .query(`UPDATE crm_main SET fmodificado = getdate() WHERE id = @crm_id`)
-                res.send({ result: 1 })
-            } catch (error) {
-                console.log(error)
-                res.send({ result: 0 })
-            }
-        });
+    app.post('/form_crm_new_msg', async function (req, res) {
+        await CRMController.addComment(sqlConfig, req, res);
+    });
 
-        
     app.post("/deparment-users", async (req, res) => {
         await CRMController.readUsersByDepartment(sqlConfig, req, res)
     })

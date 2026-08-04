@@ -75,7 +75,6 @@ block layout-content
                           span Email already exists
                     div.col-md-6
                       +floating-input('Contact Job Title', 'job_title', 'text', false, '', '', '', { maxlength: 75, value: contact ? contact.job_title : '' })
-                  div.row
                     div.col-md-6
                       +floating-input-phone('Contact Phone Number', 'phone_number', false, '123-456-7890', 'PA', '', '', contact ? contact.phone_number : '')
                     div.col-md-6
@@ -102,57 +101,57 @@ block layout-content
                               if (select.value) select.classList.add('has-value', 'valid');
                             }
                           });
-                    div.row
-                      div.col-md-6
-                        +floating-select('Contact Country', 'countryContact', countryOptions, false, 'Country')
-                        if isEdit && contact.country
-                          script.
-                            document.addEventListener('DOMContentLoaded', function() {
-                              const select = document.getElementById('countryContact');
-                              if (select) {
-                                select.value = '#{contact.country}';
-                                if (select.value) select.classList.add('has-value', 'valid');
-                              }
-                            });
-                        - var eventos = events?.map(c => ({ value: c.id, label: `${c.event_name? c.event_name : c.visit_name } - ${c.category} `}))
-                        +floating-select('Contact Event', 'event', eventos, false, 'Event')
-                        if isEdit && contact.event
-                          script.
-                            document.addEventListener('DOMContentLoaded', function() {
-                              const select = document.getElementById('event');
-                              if (select) {
-                                select.value = '#{contact.event}';
-                                if (select.value) select.classList.add('has-value', 'valid');
-                              }
-                            });
-                      div.col-md-6.d-flex.align-items-stretch
-                        +floating-textarea('Address','address',false,'','','',{ maxlength: 100, value: contact ? contact.address : '' },3)
-                        if isEdit && contact.address
-                          script.
-                            document.addEventListener('DOMContentLoaded', function() {
-                              const textarea = document.getElementById('address');
-                              if (textarea) {
-                                textarea.value = '#{contact.address}';
-                                if (textarea.value.trim()) {
-                                  textarea.classList.add('has-value', 'valid');
-                                }
-                              }
-                            });
-                      div.col-md-6
-                        - var relationshipOptions = relationships.map(r => ({ value: r.bmrl_id, label: r.name }))
-                        +floating-select('Contact Relationship', 'contact_rl_id', relationshipOptions, false, 'Relationship', '', '', {})
+                    div.col-md-6
+                      +floating-select('Contact Country', 'countryContact', countryOptions, false, 'Country')
+                      if isEdit && contact.country
+                        script.
+                          document.addEventListener('DOMContentLoaded', function() {
+                            const select = document.getElementById('countryContact');
+                            if (select) {
+                              select.value = '#{contact.country}';
+                              if (select.value) select.classList.add('has-value', 'valid');
+                            }
+                          });
+                    div.col-md-6  
+                      - var eventos = events?.map(c => ({ value: c.id, label: `${c.event_name? c.event_name : c.visit_name } - ${c.category} `}))
+                      +floating-select('Contact Event', 'event', eventos, false, 'Event')
+                      if isEdit && contact.event
+                        script.
+                          document.addEventListener('DOMContentLoaded', function() {
+                            const select = document.getElementById('event');
+                            if (select) {
+                              select.value = '#{contact.event}';
+                              if (select.value) select.classList.add('has-value', 'valid');
+                            }
+                          });
+                    div.col-md-6
+                      - var relationshipOptions = relationships.map(r => ({ value: r.bmrl_id, label: r.name }))
+                      +floating-select('Contact Relationship', 'contact_rl_id', relationshipOptions, false, 'Relationship', '', '', {})
 
-                        if isEdit && contact.contact_rl_id
-                          script.
-                            document.addEventListener('DOMContentLoaded', function() {
-                              const select = document.getElementById('contact_rl_id');
-                              if (select) {
-                                select.value = '#{contact.contact_rl_id}';
-                                if (select.value) {
-                                  select.classList.add('has-value', 'valid');
-                                }
+                      if isEdit && contact.contact_rl_id
+                        script.
+                          document.addEventListener('DOMContentLoaded', function() {
+                            const select = document.getElementById('contact_rl_id');
+                            if (select) {
+                              select.value = '#{contact.contact_rl_id}';
+                              if (select.value) {
+                                select.classList.add('has-value', 'valid');
                               }
-                            });
+                            }
+                          });
+                    div.col-md-12
+                      +floating-textarea('Address','address',false,'','','',{ maxlength: 100, value: contact ? contact.address : '' },2)
+                      if isEdit && contact.address
+                        script.
+                          document.addEventListener('DOMContentLoaded', function() {
+                            const textarea = document.getElementById('address');
+                            if (textarea) {
+                              textarea.value = '#{contact.address}';
+                              if (textarea.value.trim()) {
+                                textarea.classList.add('has-value', 'valid');
+                              }
+                            }
+                          });
           //- Action Buttons
           div.row
             div.col-xl-12

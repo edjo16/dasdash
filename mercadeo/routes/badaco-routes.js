@@ -208,6 +208,74 @@ router.get('/badaco/api/relationships', ...badacoManageGuards, async (req, res) 
     await BadacoController.getRelationshipsAPI(sqlConfig, req, res);
 });
 
+/**
+ * @openapi
+ * /badaco/api/user-prefs:
+ *   get:
+ *     summary: GET User Prefs (contacts list)
+ *     description: Obtiene las preferencias de columnas del usuario para la lista de contactos
+ *     tags:
+ *       - BADACO API
+ *     responses:
+ *       200:
+ *         description: Preferencias del usuario (prefs null si no ha guardado)
+ */
+router.get('/badaco/api/user-prefs', ...badacoManageGuards, async (req, res) => {
+    await BadacoController.getUserPrefs(sqlConfig, req, res);
+});
+
+/**
+ * @openapi
+ * /badaco/api/user-prefs:
+ *   post:
+ *     summary: POST User Prefs (contacts list)
+ *     description: Guarda las columnas visibles elegidas por el usuario
+ *     tags:
+ *       - BADACO API
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               columns:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *     responses:
+ *       200:
+ *         description: Preferencias guardadas
+ */
+router.post('/badaco/api/user-prefs', ...badacoManageGuards, async (req, res) => {
+    await BadacoController.saveUserPrefs(sqlConfig, req, res);
+});
+
+/**
+ * @openapi
+ * /badaco/contacts/{id}:
+ *   get:
+ *     summary: GET Contact by ID
+ *     description: Obtiene los datos de un contacto especifico (usado por el modal de contacto)
+ *     tags:
+ *       - BADACO API
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID del contacto
+ *     responses:
+ *       200:
+ *         description: Datos del contacto
+ *       404:
+ *         description: Contacto no encontrado
+ */
+router.get('/badaco/contacts/:id', ...badacoManageGuards, async (req, res) => {
+    await BadacoController.getContactByIdAPI(sqlConfig, req, res);
+});
+
 // ==================== API ENDPOINTS (CRUD) ====================
 
 /**

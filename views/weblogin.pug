@@ -16,7 +16,7 @@ html
                         img(src="/ACRE_LOGO-02.svg" alt="Active Re")
 
                     //- Avatar section (shown if user is remembered)
-                    div#avatarSection.login-avatar-section(style="display:none;")
+                    div#avatarSection.login-avatar-section
                         img#userAvatar.login-avatar(src="/pic/default.png" alt="User" onerror="this.src='/pic/default.png';")
                         div#avatarName.login-avatar-name
                         div.login-avatar-hint Not you?
@@ -110,35 +110,40 @@ html
                 });
             }
 
-            // Update avatar on email change
+            // Update avatar once the user has entered an email or username
             if (input) {
                 input.addEventListener('blur', function() {
                     var val = input.value.trim();
                     if (val) showAvatar(val);
-                    else hideAvatar();
+                    else resetAvatar();
                 });
             }
         })();
 
-        function showAvatar(email) {
-            // Extract username before @ for pic lookup
-            var username = email.indexOf('@') !== -1 ? email.split('@')[0] : email;
-            var section = document.getElementById('avatarSection');
+        function showAvatar(user) {
+            // Extract the part before @ for pic lookup (works for plain usernames too)
+            var username = user.split('@')[0];
             var avatar = document.getElementById('userAvatar');
             var nameEl = document.getElementById('avatarName');
+            var hint = document.querySelector('.login-avatar-hint');
             avatar.src = '/pic/' + username + '.png';
-            nameEl.textContent = email;
-            section.style.display = 'flex';
+            nameEl.textContent = user;
+            if (hint) hint.classList.add('is-visible');
         }
 
-        function hideAvatar() {
-            document.getElementById('avatarSection').style.display = 'none';
+        function resetAvatar() {
+            var avatar = document.getElementById('userAvatar');
+            var nameEl = document.getElementById('avatarName');
+            var hint = document.querySelector('.login-avatar-hint');
+            avatar.src = '/pic/default.png';
+            nameEl.textContent = '';
+            if (hint) hint.classList.remove('is-visible');
         }
 
         function clearSavedUser() {
             localStorage.removeItem('session_last_user');
             document.getElementById('name').value = '';
-            hideAvatar();
+            resetAvatar();
             document.getElementById('name').focus();
         }
 

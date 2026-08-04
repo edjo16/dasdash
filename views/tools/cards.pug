@@ -1,0 +1,112 @@
+extends ../layout
+
+block layout-content
+  div#layoutSidenav_content(style="justify-content: start;")
+    main
+      div.container-fluid.px-4
+        h1#titlename.mt-4 Business Card Data Extraction
+        ol.breadcrumb.mb-4
+          li.breadcrumb-item.active Upload business card photos, extract the contact data with AI, review it and download it as Excel.
+
+        div.tools-translator
+          //- Panel izquierdo: carga y configuración
+          div.tt-panel.tt-panel--input
+            //- Zona drag & drop (múltiples imágenes)
+            div#pcDropzone.tt-dropzone(tabindex="0" role="button" aria-label="Upload card images")
+              input#pcFileInput.tt-file-input(type="file" accept=".png,.jpg,.jpeg,.webp" multiple)
+              div.tt-dropzone__inner
+                i.fas.fa-id-card.tt-dropzone__icon
+                p.tt-dropzone__title Drag & drop your card images here
+                p.tt-dropzone__hint or
+                button#pcBrowseBtn.btn.btn-primary.btn-sm(type="button") Browse files
+                p.tt-dropzone__formats Supported: PNG, JPG, JPEG, WEBP — up to 40 images
+
+            //- Lista de archivos subidos (con emparejado frente/dorso)
+            div#pcFiles.pc-files.d-none
+              div.pc-files__head
+                span#pcFilesCount.pc-files__count
+                button#pcClearBtn.tt-preview__clear(type="button" title="Remove all files")
+                  i.fas.fa-times
+              p.pc-files__hint
+                i.fas.fa-info-circle.me-1
+                | If a card is double-sided, mark its second image as "Back of previous card" to merge both sides.
+              div#pcFileList.pc-files__list
+
+            //- Acción principal
+            button#pcProcessBtn.btn.btn-primary.tt-process(type="button" disabled)
+              i.fas.fa-id-card.me-2
+              span Extract card data
+
+            //- Indicador de progreso / estado
+            div#pcStatus.tt-status.d-none
+              div.tt-status__bar
+                div#pcStatusFill.tt-status__fill
+              div#pcStatusText.tt-status__text
+
+          //- Panel derecho: resultados
+          div.tt-panel.tt-panel--output
+            //- Estado vacío
+            div#pcEmpty.tt-empty
+              i.fas.fa-address-book.tt-empty__icon
+              p Upload your card images to see the extracted contacts here.
+
+            //- Resultados
+            div#pcResults.d-none
+              div.tt-result-block
+                div.tt-result-block__head
+                  span.tt-result-block__title
+                    i.fas.fa-table.me-2
+                    | Extracted data — review and edit if needed
+                  span#pcMeta.tt-badge
+
+                if badacoEnabled
+                  //- Resumen del emparejado contra los catálogos de BADACO
+                  div.pc-review
+                    div.pc-review__text
+                      i.fas.fa-wand-magic-sparkles.me-1
+                      | Company, Job Level and Country are linked to Badaco: you see the name, we save the id.
+                      | Review the highlighted cells before creating the contacts.
+                    div.pc-review__legend
+                      span.pc-conf.pc-conf--high Matched
+                      span.pc-conf.pc-conf--medium Likely
+                      span.pc-conf.pc-conf--low Review
+                      span.pc-conf.pc-conf--none Not found
+                  div#pcSummary.pc-summary
+
+                div.pc-table-wrap
+                  table.pc-table
+                    thead
+                      tr
+                        th File
+                        each column in cardColumns
+                          th= column.label
+                        if badacoEnabled
+                          th.text-center Actions
+                    tbody#pcTableBody
+
+              //- Exportar
+              div.tt-export
+                span.tt-export__label Download results:
+                div.tt-export__buttons
+                  button.btn.btn-outline-success.btn-sm(type="button" data-export="xlsx")
+                    i.fas.fa-file-excel.me-1
+                    | Excel
+                  button.btn.btn-outline-primary.btn-sm(type="button" data-export="csv")
+                    i.fas.fa-file-csv.me-1
+                    | CSV
+                button#pcResetBtn.btn.btn-outline-secondary.btn-sm(type="button")
+                  i.fas.fa-sync-alt.me-1
+                  | Process more cards
+
+  //- Configuración que consume /tools/cards.js (columnas y catálogos de BADACO).
+  //- Los "<" se escapan para que un nombre con etiquetas no cierre el script.
+  - var pcConfig = { columns: cardColumns, catalogs: (badacoEnabled ? matchCatalogs : { companies: [], jobLevels: [], countries: [] }), badacoEnabled: !!badacoEnabled }
+  - var pcConfigJson = JSON.stringify(pcConfig).replace(/</g, '\\u003c')
+  script.
+    window.__pcConfig = !{pcConfigJson};
+
+  if badacoEnabled
+    include ../badaco/badaco_company_modal
+    include ../badaco/badaco_contact_modal
+
+  script(src='/tools/cards.js')

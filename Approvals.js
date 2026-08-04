@@ -22,10 +22,11 @@ import authRoutes from './AUTH/routes/auth-routes.js';
 import usersRoutes from './USERS/routes/users-routes.js';
 import badacoRoutes from './mercadeo/routes/badaco-routes.js';
 import aiRoutes from './AI/routes/ai-routes.js';
-
+import toolsRoutes from './Tools/routes/tools-routes.js'
 import { createRequire } from 'module';
 import fs from 'fs';
 import { session_config, sqlConfig } from "./dbConfig.js";
+import { metricsMiddleware, metricsHandler, observeDbPool } from './observability/metrics.js';
 
 /*** App Variables*/
 const app = express();
@@ -48,6 +49,10 @@ if (!process.env.SESSION_SECRET) {
 }
 
 app.set('trust proxy', 1);
+
+/*** Observabilidad (Prometheus) — antes de session para que el scrape no toque el store */
+app.use(metricsMiddleware);
+app.get('/metrics', metricsHandler);
 
 const bodyParserLimit = process.env.BODY_PARSER_LIMIT || '10mb';
 
@@ -121,7 +126,8 @@ app.use('/', hrRoutes);
 
 //Rutas Users
 app.use('/', usersRoutes);
-
+//Rutas Users
+app.use('/', toolsRoutes);
 // Rutas Mercadeo
 formsRoutesMercadeo(app);
 mercadeoRoutes(app);
@@ -133,8 +139,9 @@ crmRoutes(app);
 app.use('/', badacoRoutes);
 app.use('/', aiRoutes);
 // Initialize global DB connection pool then start server
-sql.connect(sqlConfig).then(() => {
+sql.connect(sqlConfig).then((pool) => {
     console.log('DB connection pool established');
+    observeDbPool(pool);
     app.listen(port, () => {
         console.log(`Listening to requests on http://localhost:${port}`);
         swaggerDocs(app, port);

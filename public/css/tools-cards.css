@@ -1,0 +1,367 @@
+/**
+ * Estilos de la herramienta "Presentation Cards" (módulo Tools).
+ * Complementa a tools-translator.css (reutiliza .tt-panel, .tt-dropzone,
+ * .tt-status, .tt-export...) y usa las CSS vars de tema del proyecto
+ * (--surface-*, --text-*, --border-*) para soportar dark mode.
+ */
+
+/* ---------- Lista de archivos subidos ---------- */
+.pc-files {
+  margin-top: 1rem;
+  border: 1px solid var(--border-default);
+  border-radius: 10px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+
+.pc-files__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem 0.75rem;
+  background: var(--surface-3);
+  border-bottom: 1px solid var(--border-default);
+}
+
+.pc-files__count {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.pc-files__hint {
+  margin: 0;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border-default);
+}
+
+.pc-files__list {
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.pc-file {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--border-default);
+}
+
+.pc-file:last-child {
+  border-bottom: none;
+}
+
+.pc-file.is-back {
+  background: var(--surface-3);
+  border-left: 3px solid var(--bs-primary);
+}
+
+.pc-file__thumb {
+  width: 52px;
+  height: 36px;
+  object-fit: cover;
+  border-radius: 6px;
+  border: 1px solid var(--border-default);
+  flex-shrink: 0;
+}
+
+.pc-file__info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.pc-file__name {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pc-file__size {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+
+.pc-file__back {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin: 0;
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.pc-file__remove {
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0.15rem 0.35rem;
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+
+.pc-file__remove:hover {
+  color: var(--bs-danger);
+  background: var(--surface-1);
+}
+
+/* ---------- Tabla de resultados ---------- */
+.pc-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--border-default);
+  border-radius: 10px;
+  background: var(--surface-2);
+}
+
+.pc-table {
+  width: 100%;
+  min-width: 960px;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+}
+
+.pc-table th {
+  position: sticky;
+  top: 0;
+  background: var(--surface-3);
+  color: var(--text-secondary);
+  font-weight: 600;
+  text-align: left;
+  padding: 0.5rem 0.6rem;
+  border-bottom: 1px solid var(--border-default);
+  white-space: nowrap;
+}
+
+.pc-table td {
+  padding: 0.25rem 0.35rem;
+  border-bottom: 1px solid var(--border-default);
+  vertical-align: middle;
+}
+
+.pc-table tr:last-child td {
+  border-bottom: none;
+}
+
+.pc-table__file {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  padding: 0.25rem 0.6rem;
+}
+
+.pc-table__input {
+  width: 100%;
+  min-width: 110px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-primary);
+  padding: 0.3rem 0.4rem;
+  font-size: 0.82rem;
+}
+
+.pc-table__input:hover {
+  border-color: var(--border-default);
+}
+
+.pc-table__input:focus {
+  outline: none;
+  border-color: var(--bs-primary);
+  background: var(--surface-1);
+}
+
+/* Botón "Process more cards" alineado a la derecha del bloque export */
+#pcResetBtn {
+  margin-left: auto;
+}
+
+/* ---------- Columna de acciones (crear contacto en Badaco) ---------- */
+.pc-table__actions {
+  padding: 0.25rem 0.5rem;
+  white-space: nowrap;
+  text-align: center;
+}
+
+/* ---------- Revisión / emparejado con BADACO ---------- */
+.pc-review {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border-default);
+  border-radius: 10px;
+  background: var(--surface-3);
+}
+
+.pc-review__text {
+  font-size: 0.76rem;
+  color: var(--text-secondary);
+  max-width: 60ch;
+}
+
+.pc-review__legend {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.pc-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.9rem;
+  margin-bottom: 0.5rem;
+  padding: 0 0.15rem;
+  font-size: 0.76rem;
+  font-weight: 600;
+}
+
+.pc-summary__ok { color: var(--bs-success); }
+.pc-summary__ready { color: var(--text-secondary); }
+.pc-summary__warn { color: var(--bs-warning); }
+
+/* Celda enlazada: texto de la tarjeta + valor de BADACO + estado */
+.pc-table__link {
+  min-width: 200px;
+  padding: 0.3rem 0.35rem;
+}
+
+.pc-link {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.pc-link__raw {
+  width: 100%;
+  border: 1px dashed transparent;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-muted);
+  padding: 0.1rem 0.3rem;
+  font-size: 0.72rem;
+  font-style: italic;
+}
+
+.pc-link__raw:hover {
+  border-color: var(--border-default);
+}
+
+.pc-link__raw:focus {
+  outline: none;
+  border-color: var(--bs-primary);
+  border-style: solid;
+  background: var(--surface-1);
+  color: var(--text-primary);
+  font-style: normal;
+}
+
+.pc-link__select {
+  width: 100%;
+  min-width: 150px;
+  border: 1px solid var(--border-default);
+  border-radius: 6px;
+  background: var(--surface-1);
+  color: var(--text-primary);
+  padding: 0.25rem 0.35rem;
+  font-size: 0.8rem;
+}
+
+.pc-link__select:focus {
+  outline: none;
+  border-color: var(--bs-primary);
+}
+
+.pc-link__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+/* Chips de confianza */
+.pc-conf {
+  display: inline-block;
+  padding: 0.05rem 0.4rem;
+  border-radius: 999px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  border: 1px solid transparent;
+  cursor: help;
+}
+
+.pc-conf--high {
+  color: #0f5132;
+  background: #d1e7dd;
+  border-color: #a3cfbb;
+}
+
+.pc-conf--medium {
+  color: #664d03;
+  background: #fff3cd;
+  border-color: #ffe69c;
+}
+
+.pc-conf--low {
+  color: #842029;
+  background: #f8d7da;
+  border-color: #f1aeb5;
+}
+
+.pc-conf--none {
+  color: var(--text-muted);
+  background: var(--surface-3);
+  border-color: var(--border-default);
+}
+
+/* Alternativas sugeridas ("¿quisiste decir...?") */
+.pc-suggest {
+  border: 1px dashed var(--border-default);
+  background: transparent;
+  color: var(--text-secondary);
+  border-radius: 999px;
+  padding: 0.05rem 0.45rem;
+  font-size: 0.68rem;
+  max-width: 170px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.pc-suggest:hover {
+  border-style: solid;
+  border-color: var(--bs-primary);
+  color: var(--bs-primary);
+}
+
+.pc-suggest--create {
+  border-color: var(--bs-primary);
+  color: var(--bs-primary);
+}
+
+/* Estado de la fila */
+.pc-table tr.is-saved td {
+  background: rgba(25, 135, 84, 0.08);
+}
+
+.pc-table tr.is-failed .pc-table__file {
+  color: var(--bs-danger);
+}

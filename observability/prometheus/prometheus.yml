@@ -1,0 +1,19 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  # App dasdash corriendo en el host (npm run dev / pm2), puerto 8081
+  - job_name: dasdash
+    metrics_path: /metrics
+    authorization:
+      type: Bearer
+      credentials_file: /etc/prometheus/token.secret
+    static_configs:
+      - targets: ["host.docker.internal:8081"]
+        labels:
+          env: desa

@@ -1,0 +1,107 @@
+extends ../layout
+
+block layout-content
+  div#layoutSidenav_content(style="justify-content: start;")
+    main
+      div.container-fluid.px-4
+        h3#titlename.mt-4 Multi-Language Translator
+        ol.breadcrumb.mb-4
+          li.breadcrumb-item.active Extract text from images and PDFs in any language and translate it into the language you choose.
+
+        div.tools-translator
+          //- Panel izquierdo: carga y configuración
+          div.tt-panel.tt-panel--input
+            //- Zona drag & drop
+            div#ttDropzone.tt-dropzone(tabindex="0" role="button" aria-label="Upload file")
+              input#ttFileInput.tt-file-input(type="file" accept=".png,.jpg,.jpeg,.webp,.pdf")
+              div.tt-dropzone__inner
+                i.fas.fa-cloud-upload-alt.tt-dropzone__icon
+                p.tt-dropzone__title Drag & drop your file here
+                p.tt-dropzone__hint or
+                button#ttBrowseBtn.btn.btn-primary.btn-sm(type="button") Browse files
+                p.tt-dropzone__formats Supported: PNG, JPG, JPEG, WEBP, PDF
+
+            //- Vista previa del archivo
+            div#ttPreview.tt-preview.d-none
+              div.tt-preview__head
+                span#ttFileName.tt-preview__name
+                button#ttClearBtn.tt-preview__clear(type="button" title="Remove file")
+                  i.fas.fa-times
+              div#ttPreviewBody.tt-preview__body
+
+            //- Configuración
+            div.tt-config
+              div.tt-field
+                label.tt-label(for="ttSourceLang") Source language
+                select#ttSourceLang.form-select
+                  each code, name in ocrLanguages
+                    option(value=code)= name
+              div.tt-field
+                label.tt-label(for="ttTargetLang") Target language
+                select#ttTargetLang.form-select
+                  each code, name in targetLanguages
+                    option(value=code selected=(code === 'eng'))= name
+              div.tt-field.tt-field--check
+                label.tt-check
+                  input#ttPreprocess.tt-check__input(type="checkbox" checked)
+                  span Enhance image before OCR (recommended for photos/scans)
+
+            //- Acción principal
+            button#ttProcessBtn.btn.btn-primary.tt-process(type="button" disabled)
+              i.fas.fa-language.me-2
+              span Extract & Translate
+
+            //- Indicador de progreso / estado
+            div#ttStatus.tt-status.d-none
+              div.tt-status__bar
+                div#ttStatusFill.tt-status__fill
+              div#ttStatusText.tt-status__text
+
+          //- Panel derecho: resultados
+          div.tt-panel.tt-panel--output
+            //- Estado vacío
+            div#ttEmpty.tt-empty
+              i.fas.fa-file-alt.tt-empty__icon
+              p Upload a file to see the extracted text and its translation here.
+
+            //- Resultados
+            div#ttResults.tt-results.d-none
+              div.tt-result-block
+                div.tt-result-block__head
+                  span.tt-result-block__title
+                    i.fas.fa-eye.me-2
+                    | Extracted text
+                  span#ttMeta.tt-badge
+                textarea#ttExtracted.form-control.tt-textarea(rows="7" spellcheck="false")
+
+              div.tt-result-block
+                div.tt-result-block__head
+                  span.tt-result-block__title
+                    i.fas.fa-globe.me-2
+                    | Translation
+                  button#ttRetranslate.btn.btn-outline-secondary.btn-sm(type="button" title="Translate again with current text")
+                    i.fas.fa-sync-alt
+                textarea#ttTranslated.form-control.tt-textarea(rows="9" spellcheck="false")
+
+              //- Exportar
+              div.tt-export
+                span.tt-export__label Download translation:
+                div.tt-export__buttons
+                  button.btn.btn-outline-danger.btn-sm(type="button" data-export="pdf")
+                    i.fas.fa-file-pdf.me-1
+                    | PDF
+                  button.btn.btn-outline-primary.btn-sm(type="button" data-export="word")
+                    i.fas.fa-file-word.me-1
+                    | Word
+                  button.btn.btn-outline-secondary.btn-sm(type="button" data-export="txt")
+                    i.fas.fa-file-alt.me-1
+                    | TXT
+
+        //- Historial de la sesión
+        div#ttHistory.tt-history.d-none
+          h5.tt-history__title
+            i.fas.fa-history.me-2
+            | Session history
+          div#ttHistoryList.tt-history__list
+
+  script(src='/tools/translator.js')

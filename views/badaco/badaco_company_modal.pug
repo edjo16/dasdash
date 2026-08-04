@@ -6,7 +6,9 @@ include ../mixins/modal-container
 
 //- ── Company Modal (create + edit) ────────────────────────────────────
 //- Public API:
-//-   window.openNewCompanyModal()        -> create mode
+//-   window.openNewCompanyModal(prefill?) -> create mode, optionally pre-filled with
+//-                                           { nombre, website, email, pais (cpais),
+//-                                             bmrl_id, telefono, address }
 //-   window.openCompanyModal(bmc_id)     -> edit mode (fetches the company)
 //- On a successful save it calls window._badacoCompanyRefresh(company) if defined.
 
@@ -155,11 +157,21 @@ script.
       }
     }
 
-    window.openNewCompanyModal = function() {
+    window.openNewCompanyModal = function(prefill) {
       resetModal();
       get('companyModalTitle').textContent = 'New Company';
       get('companyModalSave').style.display = '';
       openModal();
+
+      if (prefill) {
+        if (prefill.nombre) setVal('cm_nombre', prefill.nombre);
+        if (prefill.website) setVal('cm_website', prefill.website);
+        if (prefill.email) setVal('cm_email', prefill.email);
+        if (prefill.pais) setVal('cm_pais', prefill.pais);
+        if (prefill.bmrl_id) setVal('cm_rela', prefill.bmrl_id);
+        if (prefill.address) setVal('cm_address', prefill.address);
+        if (prefill.telefono && window['setPhoneValue_cm_telefono']) window['setPhoneValue_cm_telefono'](prefill.telefono);
+      }
     };
 
     window.openCompanyModal = async function(bmc_id) {

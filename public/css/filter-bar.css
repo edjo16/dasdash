@@ -754,3 +754,285 @@
 [data-theme="dark"] .fb-toggle-badge {
   background: #00a8cc;
 }
+
+/* ══════════════════════════════════════════════════════════════
+   Filter dropdown (+fb-dropdown / +fb-columns-picker)
+   Planner-style button that opens a floating panel below it.
+   ────────────────────────────────────────────────────────────── */
+.fb-dd {
+  position: relative;
+  display: inline-flex;
+  flex: 0 0 auto;
+}
+.fb-dd-caret {
+  font-size: .6rem;
+  transition: transform .2s ease;
+}
+.fb-dd.is-open .fb-dd-caret {
+  transform: rotate(180deg);
+}
+.fb-dd.is-open > .fb-dd-toggle {
+  border-color: #00586f;
+  color: #00586f;
+  background: #e6f4f1;
+}
+.fb-dd-panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 1050;
+  min-width: 260px;
+  background: #fff;
+  border: 1px solid #dee2e6;
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.14);
+  padding: 12px;
+  display: none;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 70vh;
+  overflow: auto;
+}
+.fb-dd.is-open .fb-dd-panel {
+  display: flex;
+}
+/* Stack filter pills full-width inside the panel */
+.fb-dd-panel .fb-select-wrap,
+.fb-dd-panel .fb-combo {
+  width: 100%;
+}
+.fb-dd-panel .fb-search {
+  width: 100%;
+  justify-content: flex-start;
+  gap: 8px;
+  cursor: text;
+  padding: 0 10px;
+}
+.fb-dd-panel .fb-search input {
+  max-width: 100%;
+  opacity: 1;
+  pointer-events: auto;
+}
+.fb-dd-field-label {
+  font-size: .72rem;
+  font-weight: 600;
+  color: #6c757d;
+  text-transform: uppercase;
+  letter-spacing: .03em;
+  margin: 2px 0 -6px 2px;
+}
+/* Columns picker checkbox rows */
+.fb-dd-cols {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.fb-dd-col {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: .82rem;
+  color: #495057;
+  padding: 7px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  margin: 0;
+  user-select: none;
+}
+.fb-dd-col:hover {
+  background: #e6f4f1;
+  color: #00586f;
+}
+.fb-dd-col input {
+  accent-color: #00586f;
+  margin: 0;
+}
+@media (max-width: 575.98px) {
+  .fb-dd-panel {
+    position: fixed;
+    left: 12px;
+    right: 12px;
+    top: auto;
+    min-width: 0;
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   Searchable combo pill (+fb-combo)
+   ────────────────────────────────────────────────────────────── */
+.fb-combo {
+  cursor: pointer;
+  padding: 0 46px 0 32px;
+}
+.fb-combo-display {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  height: 100%;
+  outline: none;
+}
+.fb-combo-label {
+  font-size: .8rem;
+  color: #495057;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.fb-combo-clear {
+  position: absolute;
+  right: 24px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  color: #adb5bd;
+  font-size: 1rem;
+  line-height: 1;
+  padding: 2px 4px;
+  cursor: pointer;
+}
+.fb-combo-clear:hover {
+  color: #dc3545;
+}
+.fb-combo-dropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 1050;
+  width: max(100%, 300px);
+  background: #fff;
+  border: 1px solid #dee2e6;
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.14);
+  display: none;
+  overflow: hidden;
+}
+.fb-combo.is-open .fb-combo-dropdown {
+  display: block;
+}
+.fb-combo-head {
+  display: flex;
+  gap: 6px;
+  padding: 8px;
+  border-bottom: 1px solid #eef1f3;
+}
+.fb-combo-search {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid #dee2e6;
+  border-radius: 6px;
+  padding: 5px 9px;
+  font-size: .8rem;
+  outline: none;
+}
+.fb-combo-search:focus {
+  border-color: #00586f;
+  box-shadow: 0 0 0 3px rgba(0,88,111,.12);
+}
+.fb-combo-new {
+  border: 1px solid #00586f;
+  background: #00586f;
+  color: #fff;
+  border-radius: 6px;
+  font-size: .75rem;
+  padding: 0 10px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.fb-combo-new:hover {
+  background: #004456;
+}
+.fb-combo-options {
+  list-style: none;
+  margin: 0;
+  padding: 4px;
+  max-height: 260px;
+  overflow: auto;
+}
+.fb-combo-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 7px 9px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: .82rem;
+  color: #495057;
+}
+.fb-combo-option:hover {
+  background: #e6f4f1;
+  color: #00586f;
+}
+.fb-combo-option.is-selected {
+  background: #e6f4f1;
+  color: #00586f;
+  font-weight: 600;
+}
+.fb-combo-option-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fb-combo-edit {
+  border: none;
+  background: none;
+  color: #00586f;
+  padding: 2px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+  visibility: hidden;
+  font-size: .75rem;
+}
+.fb-combo-option:hover .fb-combo-edit {
+  visibility: visible;
+}
+.fb-combo-edit:hover {
+  background: #d2ebe4;
+}
+.fb-combo-empty {
+  padding: 10px;
+  font-size: .8rem;
+  color: #adb5bd;
+  text-align: center;
+}
+
+/* Dark mode overrides for dropdown + combo */
+[data-theme="dark"] .fb-dd-panel,
+[data-theme="dark"] .fb-combo-dropdown {
+  background: #1d2128;
+  border-color: #444;
+}
+[data-theme="dark"] .fb-dd.is-open > .fb-dd-toggle {
+  border-color: #00a8cc;
+  color: #00a8cc;
+  background: #1e3a40;
+}
+[data-theme="dark"] .fb-dd-col,
+[data-theme="dark"] .fb-combo-option,
+[data-theme="dark"] .fb-combo-label {
+  color: #ccc;
+}
+[data-theme="dark"] .fb-dd-col:hover,
+[data-theme="dark"] .fb-combo-option:hover,
+[data-theme="dark"] .fb-combo-option.is-selected {
+  background: #1e3a40;
+  color: #6ec5d6;
+}
+[data-theme="dark"] .fb-combo-head {
+  border-color: #444;
+}
+[data-theme="dark"] .fb-combo-search {
+  background: #14171c;
+  border-color: #444;
+  color: #ccc;
+}
+[data-theme="dark"] .fb-dd-field-label {
+  color: #8a939b;
+}
+[data-theme="dark"] .fb-combo-empty {
+  color: #777;
+}

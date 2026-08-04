@@ -4,6 +4,9 @@ import { get_menu } from '../../functions.js';
 import USERModel from '../../USERS/model/USER.js';
 import Rules from '../../USERS/rule/DevTeam.js';
 import EventsModel from '../model/events.js'
+import UserPrefsModel from '../../USERS/model/UserPrefs.js';
+
+const BADACO_CONTACTS_MODULE = 'badaco_contacts';
 
 export default class BadacoController {
     constructor() { }
@@ -32,6 +35,12 @@ export default class BadacoController {
             // Catalogs consumed by the company modal (create/edit)
             const relationships = await BadacoModel.getAllRelationships(pool);
             const countriesAll = await USERModel.getCountries(pool);
+            // Catalogs consumed by the contact modal (create/edit)
+            const grupousuarios_active = await USERModel.getAllUserActive(pool, usuarioData.compania);
+            const events = await EventsModel.readforms(pool, 100, 0, devteam, UserID, null, null, null);
+            const regions = await BadacoModel.getUniqueRegions(pool);
+            // Saved column visibility preferences for this user (null = defaults)
+            const columnPrefs = await UserPrefsModel.getPrefs(pool, UserID, BADACO_CONTACTS_MODULE);
 
             res.render('badaco/badaco_contacts_list', {
                 title: 'BADACO - Contact Database',
@@ -49,6 +58,10 @@ export default class BadacoController {
                 countries: countries,
                 allCountries: countriesAll,
                 relationships: relationships,
+                grupousuarios_active: grupousuarios_active,
+                events: events.recordset || [],
+                regions: regions,
+                columnPrefs: columnPrefs,
                 devteam: devteam
             });
 
@@ -65,13 +78,17 @@ export default class BadacoController {
         const pool = await sql.connect(connection);
         
         try {
-            const { search, bmc_id, bmjl_id, country, limit, page } = req.query;
-            
+            const { search, bmc_id, bmjl_id, country, bmrl_id, job_title, event, region, limit, page } = req.query;
+
             const filters = {};
             if (search) filters.search = search;
             if (bmc_id) filters.bmc_id = parseInt(bmc_id);
             if (bmjl_id) filters.bmjl_id = parseInt(bmjl_id);
             if (country) filters.country = country;
+            if (bmrl_id) filters.bmrl_id = parseInt(bmrl_id);
+            if (job_title) filters.job_title = job_title;
+            if (event) filters.event = parseInt(event);
+            if (region) filters.region = region;
             
             const limitNum = parseInt(limit) || 15;
             const pageNum = parseInt(page) || 1;
@@ -333,6 +350,45 @@ export default class BadacoController {
             res.status(500).json({ 
                 success: false, 
                 error: error.message 
+            });
+        }
+    }
+
+    /**
+     * Get contact by ID (GET, JSON) - used by the contact modal (create/edit)
+     */
+    static async getContactByIdAPI(connection, req, res) {
+        const pool = await sql.connect(connection);
+
+        try {
+            const contactId = parseInt(req.params.id);
+
+            if (!contactId || isNaN(contactId)) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'Invalid contact ID'
+                });
+            }
+
+            const contact = await BadacoModel.getContactById(pool, contactId);
+
+            if (!contact) {
+                return res.status(404).json({
+                    success: false,
+                    error: 'Contact not found'
+                });
+            }
+
+            res.json({
+                success: true,
+                contact: contact
+            });
+
+        } catch (error) {
+            console.error('Error in getContactByIdAPI:', error);
+            res.status(500).json({
+                success: false,
+                error: error.message
             });
         }
     }
@@ -619,6 +675,10 @@ export default class BadacoController {
             if (data.bmc_id) filters.bmc_id = parseInt(data.bmc_id);
             if (data.bmjl_id) filters.bmjl_id = parseInt(data.bmjl_id);
             if (data.country) filters.country = data.country;
+            if (data.bmrl_id) filters.bmrl_id = parseInt(data.bmrl_id);
+            if (data.job_title) filters.job_title = data.job_title;
+            if (data.event) filters.event = parseInt(data.event);
+            if (data.region) filters.region = data.region;
             
             // Get all contacts with filters (no pagination for Excel)
             const contacts = await BadacoModel.getAllContacts(transaction, filters, 100000, 0);
@@ -711,6 +771,46 @@ export default class BadacoController {
             try { await transaction.rollback(); } catch (_) {}
             console.error('Error generating Excel file:', error);
             res.status(500).send('Error generating Excel file');
+        }
+    }
+
+    /**
+     * GET user preferences for the contacts list (column visibility)
+     */
+    static async getUserPrefs(connection, req, res) {
+        const pool = await sql.connect(connection);
+        try {
+            const UserID = req.session?.userID || req.query.UserID;
+            if (!UserID) {
+                return res.status(401).json({ success: false, error: 'Not authenticated' });
+            }
+            const prefs = await UserPrefsModel.getPrefs(pool, UserID, BADACO_CONTACTS_MODULE);
+            res.json({ success: true, prefs: prefs });
+        } catch (error) {
+            console.error('Error in getUserPrefs:', error);
+            res.status(500).json({ success: false, error: error.message });
+        }
+    }
+
+    /**
+     * POST user preferences for the contacts list (column visibility)
+     */
+    static async saveUserPrefs(connection, req, res) {
+        const pool = await sql.connect(connection);
+        try {
+            const UserID = req.session?.userID || req.body.UserID;
+            if (!UserID) {
+                return res.status(401).json({ success: false, error: 'Not authenticated' });
+            }
+            const columns = req.body.columns;
+            if (!Array.isArray(columns) || columns.length === 0) {
+                return res.status(400).json({ success: false, error: '"columns" must be a non-empty array' });
+            }
+            await UserPrefsModel.savePrefs(pool, UserID, BADACO_CONTACTS_MODULE, { columns: columns.map(String) });
+            res.json({ success: true });
+        } catch (error) {
+            console.error('Error in saveUserPrefs:', error);
+            res.status(500).json({ success: false, error: error.message });
         }
     }
 

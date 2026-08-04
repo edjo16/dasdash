@@ -41,6 +41,30 @@ export default class BadacoModel {
             request.input('country', sql.VarChar, filters.country);
         }
 
+        // Relationship filter
+        if (filters.bmrl_id) {
+            whereClause += ` AND c.contact_rl_id = @bmrl_id`;
+            request.input('bmrl_id', sql.Int, filters.bmrl_id);
+        }
+
+        // Job title filter (specific text match, independent of general search)
+        if (filters.job_title) {
+            whereClause += ` AND c.job_title LIKE @job_title`;
+            request.input('job_title', sql.VarChar, `%${filters.job_title}%`);
+        }
+
+        // Event filter
+        if (filters.event) {
+            whereClause += ` AND c.event = @event`;
+            request.input('event', sql.Int, filters.event);
+        }
+
+        // Region filter (continent of the company's country, as in the Excel export)
+        if (filters.region) {
+            whereClause += ` AND spm.xnombre_continente_ingles = @region`;
+            request.input('region', sql.VarChar, filters.region);
+        }
+
         const query = `
         SELECT
     c.contact_id,
@@ -64,7 +88,8 @@ export default class BadacoModel {
     spc.xnombre_pais_ingles AS contact_country_name,
 
     spm.cpais               AS company_country_code,
-    spm.xnombre_pais_ingles AS company_country_name
+    spm.xnombre_pais_ingles AS company_country_name,
+    spm.xnombre_continente_ingles AS company_region
 
 FROM badaco_contactos AS c
 LEFT JOIN badaco_mcompany  AS comp ON c.bmc_id = comp.bmc_id
@@ -141,10 +166,31 @@ FETCH NEXT @limit ROWS ONLY;
             request.input('country', sql.VarChar, filters.country);
         }
 
+        if (filters.bmrl_id) {
+            whereClause += ` AND c.contact_rl_id = @bmrl_id`;
+            request.input('bmrl_id', sql.Int, filters.bmrl_id);
+        }
+
+        if (filters.job_title) {
+            whereClause += ` AND c.job_title LIKE @job_title`;
+            request.input('job_title', sql.VarChar, `%${filters.job_title}%`);
+        }
+
+        if (filters.event) {
+            whereClause += ` AND c.event = @event`;
+            request.input('event', sql.Int, filters.event);
+        }
+
+        if (filters.region) {
+            whereClause += ` AND spm.xnombre_continente_ingles = @region`;
+            request.input('region', sql.VarChar, filters.region);
+        }
+
         const query = `
             SELECT COUNT(*) as total
             FROM badaco_contactos c
             LEFT JOIN badaco_mcompany comp ON c.bmc_id = comp.bmc_id
+            LEFT JOIN m_pais spm ON spm.cpais = comp.pais
             ${whereClause}
         `;
 
@@ -554,6 +600,21 @@ FETCH NEXT @limit ROWS ONLY;
         `;
         const { recordset } = await request.query(query);
         return recordset.map(r => r.country);
+    }
+
+    /**
+     * Get unique regions (continents) from m_pais
+     */
+    static async getUniqueRegions(transaction) {
+        const request = new sql.Request(transaction);
+        const query = `
+            SELECT DISTINCT xnombre_continente_ingles
+            FROM m_pais
+            WHERE xnombre_continente_ingles IS NOT NULL AND xnombre_continente_ingles != ''
+            ORDER BY xnombre_continente_ingles ASC
+        `;
+        const { recordset } = await request.query(query);
+        return recordset.map(r => r.xnombre_continente_ingles);
     }
     static async getCompanyType(transaction) {
         const request = new sql.Request(transaction);

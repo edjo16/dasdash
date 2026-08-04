@@ -576,7 +576,7 @@ function buildCrmFileActions(crm_id, msg_id, filename) {
          if (ext === '.pdf'){
              actions.appendChild(createCrmActionButton(
                  'Open viewer (write comments)',
-                 '<i class="fas fa-eye secondIcon"></i>',
+                 '<i class="fas fa-edit secondIcon"></i>',
                  function () { openCrmPdfViewer(crm_id, msg_id, filename); }
                 ));
         }

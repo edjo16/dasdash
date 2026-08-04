@@ -12,7 +12,7 @@ import { postCRM, postCloseTask } from '../../APPROVALS/functions.js'
 import { get_menu } from '../../functions.js';
 import Rules from '../../USERS/rule/DevTeam.js';
 import DashboardController from '../../USERS/controllers/Dashboard.js';
-import { sanitizeHtml } from '../../utils/sanitize-html.js';
+import { sanitizeHtml, stripTags } from '../../utils/sanitize-html.js';
 import dotenv from 'dotenv';
 import ExcelJS from 'exceljs';
 dotenv.config();
@@ -693,6 +693,36 @@ export default class CRMController {
             res.status(500).json({ error: error.message });
         }
     }
+    // Adds a "New comment" message (with optional attachments) to an existing CRM case.
+    static async addComment(conection, req, res) {
+        try {
+            const { UserID, UserName, crm_id } = req.body;
+
+            if (!UserID || !UserName) {
+                return res.status(400).send({ result: 0, err: 'UserID and UserName are required' });
+            }
+
+            const crmId = Number(crm_id);
+            if (!crm_id || !Number.isInteger(crmId) || crmId <= 0) {
+                return res.status(400).send({ result: 0, err: 'crm_id must be a valid positive integer' });
+            }
+
+            const description = sanitizeHtml(req.body.description);
+            if (!stripTags(description).trim()) {
+                return res.status(400).send({ result: 0, err: 'description is required' });
+            }
+
+            const result = await CRMModel.addComment(conection, crmId, description, UserName, req.files);
+            if (!result || result.result === 0) {
+                return res.status(result?.err === 'CRM case not found' ? 404 : 500).send(result || { result: 0, err: 'Unable to add comment' });
+            }
+            res.send(result);
+        } catch (error) {
+            console.error('Error in CRMController.addComment:', error);
+            res.status(500).send({ result: 0, err: error.message });
+        }
+    }
+
     static async notificationNewCRM(conection, req, res) {
         let {asignados, origen=null, crm_case_id=null } = req.body;
         await sql.connect(conection);

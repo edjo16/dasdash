@@ -695,6 +695,274 @@ mixin fb-secondary(opts)
       };
     })();
 
+//- ── +fb-dropdown(opts) ──────────────────────────────────────
+//- Icon + label button that opens a floating panel anchored below
+//- it (Planner-style). Works on desktop and mobile. Block mixin —
+//- put any filter mixins (+fb-select, inputs, …) inside; they are
+//- stacked full-width in the panel.
+//- opts: {
+//-   id (required, unique), icon (default 'fa-filter'),
+//-   label (default 'Filter'), badge (default true — active count
+//-   bubble updated via window.fbDdSetCount(id, n)), panelWidth
+//- }
+mixin fb-dropdown(opts)
+  - const _ddId    = (opts && opts.id)    || 'fb-dd'
+  - const _ddIcon  = (opts && opts.icon)  || 'fa-filter'
+  - const _ddLabel = (opts && opts.label) || 'Filter'
+  - const _ddBadge = !(opts && opts.badge === false)
+  - const _ddW     = (opts && opts.panelWidth) || null
+  div.fb-dd(id=_ddId)
+    button.fb-btn.fb-dd-toggle(type="button" aria-expanded="false" aria-haspopup="true" aria-controls=_ddId+'_panel')
+      i(class=`fas ${_ddIcon}` aria-hidden="true")
+      span= _ddLabel
+      if _ddBadge
+        span.fb-toggle-badge(id=_ddId+'-badge' hidden aria-live="polite")
+      i.fas.fa-chevron-down.fb-dd-caret(aria-hidden="true")
+    div.fb-dd-panel(id=_ddId+'_panel' role="group" aria-label=_ddLabel style=_ddW ? `width:${_ddW};` : null)
+      block
+
+  script.
+    (function(){
+      if (window.__fbDdInit) return;
+      window.__fbDdInit = true;
+
+      function closeAll(except){
+        document.querySelectorAll('.fb-dd.is-open').forEach(function(dd){
+          if (dd === except) return;
+          dd.classList.remove('is-open');
+          var btn = dd.querySelector('.fb-dd-toggle');
+          if (btn) btn.setAttribute('aria-expanded', 'false');
+        });
+      }
+
+      document.addEventListener('click', function(e){
+        var toggle = e.target.closest('.fb-dd-toggle');
+        if (toggle) {
+          var dd = toggle.closest('.fb-dd');
+          var willOpen = !dd.classList.contains('is-open');
+          closeAll(dd);
+          dd.classList.toggle('is-open', willOpen);
+          toggle.setAttribute('aria-expanded', String(willOpen));
+          return;
+        }
+        if (!e.target.closest('.fb-dd')) closeAll();
+      });
+
+      document.addEventListener('keydown', function(e){
+        if (e.key === 'Escape') closeAll();
+      });
+
+      // Public API: active-filter counter bubble on the toggle button
+      window.fbDdSetCount = function(id, count){
+        var badge = document.getElementById(id + '-badge');
+        if (!badge) return;
+        if (count > 0) { badge.textContent = String(count); badge.hidden = false; }
+        else { badge.textContent = ''; badge.hidden = true; }
+      };
+    })();
+
+//- ── +fb-columns-picker(opts) ────────────────────────────────
+//- Dropdown of checkboxes to toggle table column visibility.
+//- Page JS listens for 'change' on the checkboxes inside the panel.
+//- opts: {
+//-   id (required), label (default 'Columns'),
+//-   columns [{key, label, checked}]
+//- }
+mixin fb-columns-picker(opts)
+  - const _cpId   = (opts && opts.id)      || 'fb-columns'
+  - const _cpCols = (opts && opts.columns) || []
+  +fb-dropdown({id: _cpId, icon: 'fa-columns', label: (opts && opts.label) || 'Columns', badge: false, panelWidth: '220px'})
+    div.fb-dd-cols
+      each col in _cpCols
+        label.fb-dd-col
+          input(type="checkbox" value=col.key checked=col.checked)
+          span= col.label
+
+//- ── +fb-combo(opts) ─────────────────────────────────────────
+//- Searchable select pill with optional "+ New" and per-option
+//- edit actions (modeled on mixins/floating-beneficiary but styled
+//- as a filter-bar pill). The hidden input gets id/name = opts.id,
+//- so page code can keep using getElementById(id).value and its
+//- 'change' event, exactly like a native +fb-select.
+//- opts: {
+//-   id (required), icon, items [{value,label}], placeholder,
+//-   filterLabel, minWidth, searchPlaceholder,
+//-   onNew  — global fn name called on "+ New" click,
+//-   onEdit — global fn name called with (value) on pencil click
+//- }
+//- JS API: window['fbCombo_' + id] = { setItems, addItem, updateItem, setValue, clear }
+mixin fb-combo(opts)
+  - const _cbId    = (opts && opts.id)          || 'fbCombo'
+  - const _cbIcon  = (opts && opts.icon)        || 'fa-signature'
+  - const _cbItems = (opts && opts.items)       || []
+  - const _cbPh    = (opts && opts.placeholder) || 'All'
+  - const _cbMinW  = (opts && opts.minWidth)    || null
+  - const _cbNew   = (opts && opts.onNew)       || ''
+  - const _cbEdit  = (opts && opts.onEdit)      || ''
+  - const _cbSrcPh = (opts && opts.searchPlaceholder) || 'Search...'
+  div.fb-select-wrap.fb-combo(
+    id=_cbId+'_wrap'
+    data-fb-filter=(opts && opts.filterLabel) || _cbPh
+    style=_cbMinW ? `min-width:${_cbMinW};` : null
+  )
+    i(class=`fas ${_cbIcon} fb-icon` aria-hidden="true")
+    div.fb-combo-display(id=_cbId+'_display' tabindex="0" role="combobox" aria-expanded="false" aria-haspopup="listbox")
+      span.fb-combo-label.is-placeholder(id=_cbId+'_label')= _cbPh
+    button.fb-combo-clear(id=_cbId+'_clear' type="button" title="Clear" hidden) ×
+    i.fas.fa-chevron-down.fb-select-arrow(aria-hidden="true")
+    div.fb-combo-dropdown(id=_cbId+'_dropdown')
+      div.fb-combo-head
+        input.fb-combo-search(id=_cbId+'_search' type="text" placeholder=_cbSrcPh autocomplete="off")
+        if _cbNew
+          button.fb-combo-new(id=_cbId+'_new' type="button") + New
+      ul.fb-combo-options(id=_cbId+'_options' role="listbox")
+    input(type="hidden" id=_cbId name=_cbId)
+
+  script.
+    (function(){
+      var _id      = '#{_cbId}';
+      var _onNew   = '#{_cbNew}';
+      var _onEdit  = '#{_cbEdit}';
+      var _ph      = '#{_cbPh}';
+      var items    = !{JSON.stringify(_cbItems)};
+
+      var wrap     = null, display = null, dropdown = null, search = null,
+          options  = null, label = null, clearBtn = null, hidden = null;
+
+      function esc(v){
+        return String(v == null ? '' : v)
+          .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+      }
+
+      function findItem(value){
+        for (var i = 0; i < items.length; i++) {
+          if (String(items[i].value) === String(value)) return items[i];
+        }
+        return null;
+      }
+
+      function render(q){
+        if (!options) return;
+        var query = String(q || '').toLowerCase();
+        var current = hidden ? hidden.value : '';
+        var html = '';
+        for (var i = 0; i < items.length; i++) {
+          var it = items[i];
+          if (query && String(it.label).toLowerCase().indexOf(query) === -1) continue;
+          var selected = current !== '' && String(it.value) === String(current);
+          html += '<li class="fb-combo-option' + (selected ? ' is-selected' : '') + '" role="option" data-value="' + esc(it.value) + '">'
+               +  '<span class="fb-combo-option-label">' + esc(it.label) + '</span>'
+               +  (_onEdit ? '<button type="button" class="fb-combo-edit" title="Edit" data-edit="' + esc(it.value) + '"><i class="fas fa-pencil-alt"></i></button>' : '')
+               +  '</li>';
+        }
+        options.innerHTML = html || '<li class="fb-combo-empty">No results</li>';
+      }
+
+      function open(){
+        wrap.classList.add('is-open');
+        display.setAttribute('aria-expanded', 'true');
+        render(search ? search.value.trim() : '');
+        if (search) setTimeout(function(){ search.focus(); }, 50);
+      }
+
+      function close(){
+        wrap.classList.remove('is-open');
+        display.setAttribute('aria-expanded', 'false');
+      }
+
+      function updateDisplay(){
+        var item = hidden.value !== '' ? findItem(hidden.value) : null;
+        if (item) {
+          label.textContent = item.label;
+          label.classList.remove('is-placeholder');
+          clearBtn.hidden = false;
+        } else {
+          label.textContent = _ph;
+          label.classList.add('is-placeholder');
+          clearBtn.hidden = true;
+        }
+      }
+
+      function setValue(value, silent){
+        hidden.value = value == null ? '' : String(value);
+        updateDisplay();
+        if (!silent) hidden.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+
+      document.addEventListener('DOMContentLoaded', function(){
+        wrap     = document.getElementById(_id + '_wrap');
+        display  = document.getElementById(_id + '_display');
+        dropdown = document.getElementById(_id + '_dropdown');
+        search   = document.getElementById(_id + '_search');
+        options  = document.getElementById(_id + '_options');
+        label    = document.getElementById(_id + '_label');
+        clearBtn = document.getElementById(_id + '_clear');
+        hidden   = document.getElementById(_id);
+        if (!wrap) return;
+
+        display.addEventListener('click', function(){
+          if (wrap.classList.contains('is-open')) close(); else open();
+        });
+        display.addEventListener('keydown', function(e){
+          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); }
+          if (e.key === 'Escape') close();
+        });
+
+        if (search) {
+          search.addEventListener('input', function(){ render(this.value.trim()); });
+          search.addEventListener('click', function(e){ e.stopPropagation(); });
+          search.addEventListener('keydown', function(e){ if (e.key === 'Escape') close(); });
+        }
+
+        clearBtn.addEventListener('click', function(e){
+          e.stopPropagation();
+          setValue('');
+          close();
+        });
+
+        options.addEventListener('click', function(e){
+          var editBtn = e.target.closest('[data-edit]');
+          if (editBtn) {
+            e.stopPropagation();
+            close();
+            if (_onEdit && typeof window[_onEdit] === 'function') window[_onEdit](editBtn.getAttribute('data-edit'));
+            return;
+          }
+          var opt = e.target.closest('.fb-combo-option');
+          if (!opt) return;
+          setValue(opt.getAttribute('data-value'));
+          close();
+        });
+
+        var newBtn = document.getElementById(_id + '_new');
+        if (newBtn) newBtn.addEventListener('click', function(e){
+          e.stopPropagation();
+          close();
+          if (_onNew && typeof window[_onNew] === 'function') window[_onNew]();
+        });
+
+        document.addEventListener('click', function(e){
+          if (!wrap.contains(e.target)) close();
+        });
+
+        updateDisplay();
+      });
+
+      window['fbCombo_' + _id] = {
+        setItems: function(list){ items = list || []; render(search ? search.value.trim() : ''); updateDisplay(); },
+        addItem: function(item){ items.push(item); render(search ? search.value.trim() : ''); },
+        updateItem: function(value, newLabel){
+          var it = findItem(value);
+          if (it) it.label = newLabel;
+          render(search ? search.value.trim() : '');
+          updateDisplay();
+        },
+        setValue: setValue,
+        clear: function(silent){ setValue('', silent); }
+      };
+    })();
+
 //- ══════════════════════════════════════════════════════════════
 //- CONVENIENCE WRAPPER — composes all individual mixins above.
 //- Backward-compatible with existing +filter-bar({...}) calls.

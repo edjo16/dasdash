@@ -23,6 +23,11 @@ html(data-theme=userProfile.DarkMode == 1 ? "dark" : "light")
     script(src='/js/FontAwesomeFree5.15.4.js')
     link(rel="stylesheet" href="/css/modalMixin.css")
     link(rel="stylesheet" href="/css/filter-bar.css")
+    if(title.includes('Translator'))
+      link(rel="stylesheet" href="/css/tools-translator.css")
+    if(title.includes('Presentation Cards'))
+      link(rel="stylesheet" href="/css/tools-translator.css")
+      link(rel="stylesheet" href="/css/tools-cards.css")
     script(src='/js/modalMixin.js')
     script(src='/date.format.js')
     script(src='/jquery-3.7.1.min.js')
@@ -303,9 +308,9 @@ html(data-theme=userProfile.DarkMode == 1 ? "dark" : "light")
                   if(devteam)
                     a#users(class="nav-link " href="#" onclick="url_usuario(this.id)") Admin
                   a#forms_ITequipment(class="nav-link", href="#" onclick="url_usuario(this.id)") Equipment Checkout
+                  a#forms_it_external_emails_request(class="nav-link", href="#" onclick="url_usuario(this.id)") External Emails Request
                   if(userMenu.dep.includes("9;"))
                     a#forms_interdepartmental_request(class="nav-link " href="/forms_interdepartmental_request") Request Form 
-                  a#forms_it_external_emails_request(class="nav-link", href="#" onclick="url_usuario(this.id)") External Emails Request
                   a#forms_it_software_change_request_view(class="nav-link", href="#" onclick="url_usuario(this.id)") Software Change Request
                   a#temporary_change_locations(class="nav-link", href="#" onclick="url_usuario(this.id)") Temporary Change Location
                   if(devteam)
@@ -372,8 +377,6 @@ html(data-theme=userProfile.DarkMode == 1 ? "dark" : "light")
           font-weight: 700;
           text-transform: uppercase;
           letter-spacing: 0.04em;
-          color: #00586f;
-          background: #f0f4f5;
           border-bottom: 1px solid #dee2e6;
         }
         .search-result-item {
@@ -386,7 +389,6 @@ html(data-theme=userProfile.DarkMode == 1 ? "dark" : "light")
           transition: background 0.12s ease;
         }
         .search-result-item:hover {
-          background: #e8f4fb;
           color: #00586f;
         }
         .search-status {
@@ -395,14 +397,12 @@ html(data-theme=userProfile.DarkMode == 1 ? "dark" : "light")
           border-radius: 4px;
           font-size: 0.7rem;
           font-weight: 600;
-          background: #e9ecef;
           color: #495057;
         }
         .search-meta {
           display: inline-block;
           margin-left: 4px;
           font-size: 0.75rem;
-          color: #6c757d;
         }
         .search-prio-urgent,
         .search-prio-important {
@@ -414,7 +414,6 @@ html(data-theme=userProfile.DarkMode == 1 ? "dark" : "light")
           border-radius: 50%;
           font-size: 0.6rem;
           font-weight: 700;
-          color: #fff;
           line-height: 1;
         }
         .search-prio-urgent { background: #dc3545; }

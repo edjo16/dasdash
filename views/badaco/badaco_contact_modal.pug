@@ -1,0 +1,406 @@
+include ../mixins/floating-input
+include ../mixins/floating-input-phone
+include ../mixins/floating-select
+include ../mixins/floating-select-create
+include ../mixins/floating-users
+include ../mixins/floating-textarea
+include ../mixins/modal-container
+
+//- ── Contact Modal (create + view/edit) ──────────────────────────────────
+//- Public API:
+//-   window.openNewContactModal(prefill?)  -> create mode, optionally pre-filled with
+//-                                            { name, email, phone, job_title, address,
+//-                                              bmc_id, bmjl_id, country, event, company }
+//-                                            Foreign keys (bmc_id / bmjl_id / country /
+//-                                            event) win when provided; `company` is the
+//-                                            fallback and is matched by name against the
+//-                                            Company options, case-insensitive.
+//-   window.openContactModal(contact_id)   -> edit mode (fetches the contact)
+//- On a successful save it calls window._badacoContactRefresh() if defined.
+
+- var ctmCompanyOptions = (typeof companies !== 'undefined' ? companies : []).map(function(c) { return { value: c.bmc_id, label: c.nombre + (c.xnombre_pais_ingles ? ' (' + c.xnombre_pais_ingles + ')' : '') }; })
+- var ctmJobLevelOptions = (typeof jobLevels !== 'undefined' ? jobLevels : []).map(function(jl) { return { value: jl.bmjl_id, label: jl.name }; })
+- var ctmCountryOptions = (typeof allCountries !== 'undefined' ? allCountries : []).map(function(c) { return { value: c.cpais, label: (c.xnombre_pais_ingles || '').trim() }; })
+- var ctmRelationshipOptions = (typeof relationships !== 'undefined' ? relationships : []).map(function(r) { return { value: r.bmrl_id, label: r.name }; })
+- var ctmEventOptions = (typeof events !== 'undefined' ? events : []).map(function(e) { return { value: e.id, label: (e.event_name ? e.event_name : e.visit_name) + ' - ' + e.category }; })
+- var ctmUserOptions = (typeof grupousuarios_active !== 'undefined' ? grupousuarios_active : []).map(function(u) { return { value: u.UserID, label: u.Name, department: u.departamento }; })
+
++modal-container('contactModal', 'contactModalTitle', 'contactModalClose', 'contactModalCancel', 'contactModalSave', 'Contact')
+  input#contactModalId(type="hidden")
+  form#contactModalForm(autocomplete="off")
+    div.row
+      div.col-md-6.mb-2
+        +floating-select('Company', 'ctm_bmc_id', ctmCompanyOptions, true, 'Company')
+      div.col-md-6.mb-2
+        +floating-input('Full Name', 'ctm_name', 'text', true, '', '', '', { maxlength: 100 })
+    div.row
+      div.col-md-6.mb-2
+        +floating-input('Email', 'ctm_email', 'email', true, '', '', '', { maxlength: 100 })
+        div#ctmEmailValidationMessage(style="display:none;color:#dc3545;font-size:0.8rem;margin-top:0.25rem;")
+          i.fas.fa-exclamation-circle.me-1
+          span Email already exists
+      div.col-md-6.mb-2
+        +floating-input('Job Title', 'ctm_job_title', 'text', false, '', '', '', { maxlength: 75 })
+    div.row
+      div.col-md-6.mb-2
+        +floating-input-phone('Phone', 'ctm_phone', false, '123-456-7890', 'PA')
+      div.col-md-6.mb-2
+        +floating-select-create('Job Level', 'ctm_bmjl_id', ctmJobLevelOptions, false, 'Job level', '', 'New', '', '', {}, 'ctmOffcanvasNewJobLevel')
+    div.row
+      div.col-md-6.mb-2
+        +floating-select('Country', 'ctm_country', ctmCountryOptions, false, 'Country')
+      div.col-md-6.mb-2
+        +floating-select('Event', 'ctm_event', ctmEventOptions, false, 'Event')
+    div.row
+      div.col-md-6.mb-2
+        +floating-select('Relationship', 'ctm_contact_rl_id', ctmRelationshipOptions, false, 'Relationship')
+      div.col-md-6.mb-2
+        +floating-users('Assign - Active Re Collaborator', 'ctm_contactos_asociados', ctmUserOptions, [], false, 'Contact', '', '', {}, true, 'Business Developer')
+    div.row
+      div.col-12.mb-2
+        +floating-textarea('Address', 'ctm_address', false, '', '', '', { maxlength: 250 }, 2)
+
+//- Offcanvas: New Job Level (nested trigger lives inside the modal above)
+div#ctmOffcanvasNewJobLevel.offcanvas.offcanvas-end(tabindex="-1" aria-labelledby="ctmOffcanvasNewJobLevelLabel")
+  div.offcanvas-header
+    h5#ctmOffcanvasNewJobLevelLabel.offcanvas-title
+      i.fas.fa-briefcase.me-2
+      | New Job Level
+    button.btn-close(type="button" data-bs-dismiss="offcanvas" aria-label="Close")
+  div.offcanvas-body
+    form#ctmFormNewJobLevel
+      +floating-input('Job Level Name', 'ctm_jobLevelName', 'text', true, '', '', '', { maxlength: 100 })
+      div.d-grid.gap-2.mt-3
+        button#ctmBtnSaveJobLevel.btn.btn-primary(type="button")
+          i.fas.fa-save.me-1
+          | Save Job Level
+        button.btn.btn-secondary(type="button" data-bs-dismiss="offcanvas") Cancel
+
+style.
+  /* The job-level offcanvas must render above the contact modal (app-modal is 1055) */
+  #ctmOffcanvasNewJobLevel {
+    z-index: 1075;
+  }
+  .offcanvas-backdrop.show {
+    z-index: 1070;
+  }
+
+script.
+  (function() {
+    const get = id => document.getElementById(id);
+    const CTM_USER_ID = '#{userProfile.UserID}';
+    const CTM_COMPANIES = !{JSON.stringify((typeof companies !== 'undefined' ? companies : []).map(function(c) { return { value: c.bmc_id, name: c.nombre }; }))};
+
+    const CTM_FIELDS = ['ctm_bmc_id', 'ctm_name', 'ctm_email', 'ctm_job_title',
+                        'ctm_bmjl_id', 'ctm_country', 'ctm_event', 'ctm_contact_rl_id', 'ctm_address'];
+    const CTM_REQUIRED = [
+      { id: 'ctm_bmc_id', label: 'Company' },
+      { id: 'ctm_name', label: 'Full Name' },
+      { id: 'ctm_email', label: 'Email' }
+    ];
+
+    let ctmEmailValid = true;
+    let ctmEmailCheckTimeout;
+
+    function setVal(id, value) {
+      const el = get(id);
+      if (!el) return;
+      el.value = value == null ? '' : value;
+      el.classList.remove('error');
+      if (el.value) el.classList.add('has-value', 'valid');
+      else el.classList.remove('has-value', 'valid');
+    }
+
+    function setFloatingUsersValue(name, values) {
+      const display = document.querySelector('.floating-users-display[data-name="' + name + '"]');
+      if (!display) return;
+      display.querySelectorAll('input[type="hidden"]').forEach(function(i) { i.remove(); });
+      (values || []).forEach(function(v) {
+        const input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = name + '[]';
+        input.value = v;
+        display.appendChild(input);
+      });
+      if (window.updateFloatingMultiselectDisplay) updateFloatingMultiselectDisplay(name);
+    }
+
+    function resetEmailState() {
+      const msg = get('ctmEmailValidationMessage');
+      if (msg) msg.style.display = 'none';
+      const emailEl = get('ctm_email');
+      if (emailEl) emailEl.classList.remove('is-invalid');
+      ctmEmailValid = true;
+    }
+
+    function resetModal() {
+      CTM_FIELDS.forEach(function(id) {
+        const el = get(id);
+        if (!el) return;
+        el.value = '';
+        el.classList.remove('valid', 'error', 'has-value');
+        delete el.dataset.touched;
+        const clearError = window['clearInputError_' + id] || window['clearSelectError_' + id];
+        if (clearError) clearError();
+      });
+      if (window['setPhoneValue_ctm_phone']) window['setPhoneValue_ctm_phone']('');
+      setFloatingUsersValue('ctm_contactos_asociados', []);
+      resetEmailState();
+      get('contactModalId').value = '';
+    }
+
+    function openModal() {
+      get('contactModal').classList.add('open');
+      document.body.style.overflow = 'hidden';
+    }
+
+    function closeModal() {
+      get('contactModal').classList.remove('open');
+      document.body.style.overflow = '';
+    }
+
+    async function checkEmailAvailability(email, excludeContactId) {
+      if (!email) {
+        resetEmailState();
+        return;
+      }
+      try {
+        const params = new URLSearchParams({ email: email, excludeContactId: excludeContactId || '' });
+        const response = await fetch('/badaco/api/check-email?' + params);
+        const data = await response.json();
+        const msg = get('ctmEmailValidationMessage');
+        const emailEl = get('ctm_email');
+        if (data.exists) {
+          if (msg) msg.style.display = 'block';
+          emailEl.classList.add('is-invalid');
+          ctmEmailValid = false;
+        } else {
+          if (msg) msg.style.display = 'none';
+          emailEl.classList.remove('is-invalid');
+          ctmEmailValid = true;
+        }
+      } catch (error) {
+        console.error('Error checking email:', error);
+      }
+    }
+
+    function validate() {
+      let ok = true;
+      CTM_REQUIRED.forEach(function(field) {
+        const el = get(field.id);
+        if (!el) return;
+        if (!el.value.trim()) {
+          ok = false;
+          const setError = window['setInputError_' + field.id] || window['setSelectError_' + field.id];
+          if (setError) setError(field.label + ' is required');
+          else el.classList.add('error');
+        } else {
+          const clearError = window['clearInputError_' + field.id] || window['clearSelectError_' + field.id];
+          if (clearError) clearError();
+        }
+      });
+      if (!ok) launch_toast('Please fill in the required fields', 2);
+      return ok;
+    }
+
+    async function saveContact() {
+      if (!validate()) return;
+
+      if (!ctmEmailValid) {
+        launch_toast('Email already exists. Please use a different email address.', 2);
+        return;
+      }
+
+      const contactId = get('contactModalId').value;
+      const isEditMode = !!contactId;
+      const btn = get('contactModalSave');
+      const originalHtml = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Saving...';
+
+      const dialCodeEl = get('ctm_phone-dialcode');
+      const dialCode = dialCodeEl ? dialCodeEl.textContent.trim() : '';
+      const phoneHidden = get('ctm_phone-hidden').value.trim();
+      const phoneTyped = get('ctm_phone').value.trim();
+      const phoneNumber = phoneHidden || (phoneTyped ? (dialCode + ' ' + phoneTyped) : '');
+
+      const payload = {
+        UserID: CTM_USER_ID,
+        name: get('ctm_name').value.trim(),
+        email: get('ctm_email').value.trim(),
+        phone_number: phoneNumber,
+        contactos_asociados: Array.from(document.querySelectorAll('.floating-users-display[data-name="ctm_contactos_asociados"] input[type="hidden"]')).map(function(i) { return i.value; }),
+        bmc_id: parseInt(get('ctm_bmc_id').value),
+        job_title: get('ctm_job_title').value.trim(),
+        bmjl_id: get('ctm_bmjl_id').value ? parseInt(get('ctm_bmjl_id').value) : null,
+        country: get('ctm_country').value.trim(),
+        address: get('ctm_address').value.trim(),
+        event: get('ctm_event').value ? parseInt(get('ctm_event').value) : null,
+        contact_rl_id: get('ctm_contact_rl_id').value || null
+      };
+
+      const url = isEditMode
+        ? '/badaco-contacts/update/' + encodeURIComponent(contactId)
+        : '/badaco-contacts/create';
+
+      try {
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const data = await response.json();
+
+        if (data.success) {
+          launch_toast(isEditMode ? 'Contact updated successfully' : 'Contact created successfully', 1);
+          closeModal();
+          if (typeof window._badacoContactRefresh === 'function') window._badacoContactRefresh();
+        } else {
+          launch_toast('Error: ' + data.error, 2);
+        }
+      } catch (error) {
+        console.error('Error saving contact:', error);
+        launch_toast(isEditMode ? 'Error updating contact' : 'Error creating contact', 2);
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = originalHtml;
+      }
+    }
+
+    window.openNewContactModal = function(prefill) {
+      resetModal();
+      get('contactModalTitle').textContent = 'New Contact';
+      get('contactModalSave').style.display = '';
+      openModal();
+
+      if (prefill) {
+        if (prefill.name) setVal('ctm_name', prefill.name);
+        if (prefill.email) {
+          setVal('ctm_email', prefill.email);
+          // Avisa de inmediato si ese correo ya está en la base.
+          checkEmailAvailability(prefill.email, '');
+        }
+        if (prefill.job_title) setVal('ctm_job_title', prefill.job_title);
+        if (prefill.address) setVal('ctm_address', prefill.address);
+        if (prefill.phone && window['setPhoneValue_ctm_phone']) window['setPhoneValue_ctm_phone'](prefill.phone);
+
+        // Llaves foráneas ya resueltas por quien abre el modal (p. ej. la
+        // herramienta de tarjetas): se aplican tal cual.
+        if (prefill.bmjl_id) setVal('ctm_bmjl_id', prefill.bmjl_id);
+        if (prefill.country) setVal('ctm_country', prefill.country);
+        if (prefill.event) setVal('ctm_event', prefill.event);
+
+        if (prefill.bmc_id) {
+          setVal('ctm_bmc_id', prefill.bmc_id);
+        } else if (prefill.company) {
+          const needle = prefill.company.trim().toLowerCase();
+          const match = CTM_COMPANIES.find(function(c) { return (c.name || '').trim().toLowerCase() === needle; });
+          if (match) {
+            setVal('ctm_bmc_id', match.value);
+          } else {
+            launch_toast('Company "' + prefill.company + '" was not found in Badaco. Please select an existing one or create it first.', 2);
+          }
+        }
+      }
+    };
+
+    window.openContactModal = async function(contactId) {
+      resetModal();
+      get('contactModalTitle').textContent = 'Loading…';
+      get('contactModalSave').style.display = 'none';
+      openModal();
+
+      try {
+        const response = await fetch('/badaco/contacts/' + encodeURIComponent(contactId));
+        const data = await response.json();
+
+        if (!data.success || !data.contact) {
+          launch_toast('Contact not found', 2);
+          closeModal();
+          return;
+        }
+
+        const contact = data.contact;
+        get('contactModalId').value = contact.contact_id;
+        setVal('ctm_bmc_id', contact.bmc_id);
+        setVal('ctm_name', contact.name);
+        setVal('ctm_email', contact.email);
+        setVal('ctm_job_title', contact.job_title);
+        setVal('ctm_bmjl_id', contact.bmjl_id);
+        setVal('ctm_country', contact.country);
+        setVal('ctm_event', contact.event);
+        setVal('ctm_contact_rl_id', contact.contact_rl_id);
+        setVal('ctm_address', contact.address);
+        if (window['setPhoneValue_ctm_phone']) window['setPhoneValue_ctm_phone'](contact.phone_number || '');
+        setFloatingUsersValue('ctm_contactos_asociados', contact.contactos_asociados || []);
+
+        get('contactModalTitle').textContent = 'Edit Contact';
+        get('contactModalSave').style.display = '';
+      } catch (error) {
+        console.error('Error loading contact:', error);
+        launch_toast('Error loading contact', 2);
+        closeModal();
+      }
+    };
+
+    document.addEventListener('DOMContentLoaded', function() {
+      get('contactModalClose').addEventListener('click', closeModal);
+      get('contactModalCancel').addEventListener('click', closeModal);
+      get('contactModalSave').addEventListener('click', saveContact);
+
+      const modal = get('contactModal');
+      modal.addEventListener('click', function(e) {
+        if (e.target === modal) closeModal();
+      });
+
+      const emailInput = get('ctm_email');
+      emailInput.addEventListener('input', function() {
+        clearTimeout(ctmEmailCheckTimeout);
+        ctmEmailCheckTimeout = setTimeout(function() {
+          checkEmailAvailability(emailInput.value.trim(), get('contactModalId').value);
+        }, 500);
+      });
+
+      get('ctmBtnSaveJobLevel').addEventListener('click', async function() {
+        const name = get('ctm_jobLevelName').value.trim();
+        if (!name) {
+          launch_toast('Job Level name is required', 2);
+          return;
+        }
+        const btn = this;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Saving...';
+        try {
+          const response = await fetch('/badaco/joblevels/create', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: name, UserID: CTM_USER_ID })
+          });
+          const data = await response.json();
+          if (data.success) {
+            const select = get('ctm_bmjl_id');
+            const option = document.createElement('option');
+            option.value = data.bmjl_id;
+            option.text = name;
+            select.appendChild(option);
+            select.value = data.bmjl_id;
+            select.classList.add('has-value', 'valid');
+
+            const offcanvasEl = get('ctmOffcanvasNewJobLevel');
+            const offcanvas = bootstrap.Offcanvas.getInstance(offcanvasEl) || bootstrap.Offcanvas.getOrCreateInstance(offcanvasEl);
+            offcanvas.hide();
+            get('ctmFormNewJobLevel').reset();
+
+            launch_toast('Job Level created successfully', 1);
+          } else {
+            launch_toast('Error: ' + data.error, 2);
+          }
+        } catch (error) {
+          launch_toast('Error creating job level', 2);
+        } finally {
+          btn.disabled = false;
+          btn.innerHTML = '<i class="fas fa-save me-1"></i> Save Job Level';
+        }
+      });
+    });
+  })();

@@ -210,18 +210,28 @@ body {
   box-shadow: 0 2px 12px rgba(0,0,0,0.08);
   margin-bottom: 12px;
   background-color: #f0f0f0;
+  transition: opacity 0.2s ease;
 }
 
 .login-avatar-name {
   font-size: 16px;
   font-weight: 600;
   color: var(--login-text);
+  height: 24px;
+  transition: opacity 0.2s ease;
 }
 
 .login-avatar-hint {
+  display: none;
   font-size: 13px;
   color: var(--login-text-muted);
   margin-top: 2px;
+  height: 24px;
+  transition: opacity 0.2s ease;
+}
+
+.login-avatar-hint.is-visible {
+  display: block;
 }
 
 /* Small logo on left panel */

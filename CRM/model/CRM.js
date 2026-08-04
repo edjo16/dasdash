@@ -860,6 +860,43 @@ ORDER BY
         }
     }
 
+    // Adds a "New comment" message to an existing CRM case, with optional file attachments.
+    static async addComment(conection, crm_id, description, UserName, files = null) {
+        await sql.connect(conection);
+        const transaction = new sql.Transaction();
+        try {
+            await transaction.begin();
+
+            const caseRequest = new sql.Request(transaction);
+            const caseResult = await caseRequest
+                .input('crm_id', sql.Int, crm_id)
+                .query('SELECT id FROM crm_main WHERE id = @crm_id');
+            if (!caseResult.recordset.length) {
+                await transaction.rollback();
+                return { result: 0, err: 'CRM case not found' };
+            }
+
+            const countRequest = new sql.Request(transaction);
+            const countResult = await countRequest
+                .input('crm_id', sql.Int, crm_id)
+                .query('SELECT COUNT(*) id_msg FROM dbo.crm_msg WHERE id_main = @crm_id');
+            const id_msg = countResult.recordset[0].id_msg + 1;
+
+            await CRMModel.createNewMessage(transaction, crm_id, 'New comment', description, id_msg, UserName, files);
+
+            const updateRequest = new sql.Request(transaction);
+            await updateRequest
+                .input('crm_id', sql.Int, crm_id)
+                .query('UPDATE crm_main SET fmodificado = getdate() WHERE id = @crm_id');
+
+            await transaction.commit();
+            return { result: 1, id_msg };
+        } catch (err) {
+            try { await transaction.rollback(); } catch (_) {}
+            return { result: 0, err: err.message };
+        }
+    }
+
     static async crmRemoveUser(conection, res, req) {
         const { u_asignado: user, crm_id } = req.body;
         await sql.connect(conection)
