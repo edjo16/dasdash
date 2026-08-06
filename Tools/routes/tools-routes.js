@@ -36,4 +36,9 @@ router.post('/api/tools/cards/rematch', requireAuth, async (req, res) => {
   await CardsController.rematch(sqlConfig, req, res);
 });
 
+// API: alta en BADACO de una o varias tarjetas ya revisadas (`dryRun` sólo valida).
+router.post('/api/tools/cards/contacts', requireAuth, async (req, res) => {
+  await CardsController.createContacts(sqlConfig, req, res);
+});
+
 export default router;

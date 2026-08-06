@@ -269,6 +269,34 @@ FETCH NEXT @limit ROWS ONLY;
     }
 
     /**
+     * Busca de un tirón los contactos que ya usan alguno de esos correos.
+     * Lo usa la carga masiva (herramienta de tarjetas) para avisar de los
+     * duplicados sin lanzar una consulta por fila.
+     */
+    static async findContactsByEmails(transaction, emails) {
+        const list = [...new Set((emails || [])
+            .map((email) => String(email == null ? '' : email).trim().toLowerCase())
+            .filter(Boolean))];
+        if (!list.length) return [];
+
+        const request = new sql.Request(transaction);
+        const params = list.map((email, i) => {
+            request.input('email' + i, sql.VarChar, email);
+            return '@email' + i;
+        });
+
+        const query = `
+            SELECT c.contact_id, c.email, c.name, comp.nombre AS company_name
+            FROM badaco_contactos AS c
+            LEFT JOIN badaco_mcompany AS comp ON c.bmc_id = comp.bmc_id
+            WHERE LOWER(c.email) IN (${params.join(', ')})
+        `;
+
+        const { recordset } = await request.query(query);
+        return recordset;
+    }
+
+    /**
      * Create new contact
      */
     static async createContact(transaction, data) {

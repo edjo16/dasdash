@@ -46,13 +46,16 @@
   var els = {};
   var state = {
     files: [], // { id, file, previewUrl, isBack }
-    rows: [],  // { file, data, match, links, saved }
+    rows: [],  // { id, file, data, match, links, status, issue }
     processing: false,
-    pendingContactRow: -1,
-    pendingCompanyRow: -1,
+    sending: false,
+    pendingContact: null, // fila esperando a que el modal de contacto guarde
+    pendingCompany: null, // fila esperando a que el modal de empresa guarde
     catalogsDirty: false // hay una empresa nueva que el servidor aún no tiene en caché
   };
   var nextId = 1;
+  var nextRowId = 1;
+  var validateTimer = null;
 
   /** Índices id -> etiqueta por catálogo, para pintar sin volver a buscar. */
   var catalogIndex = {};
@@ -77,6 +80,10 @@
     els.meta = $('pcMeta');
     els.summary = $('pcSummary');
     els.resetBtn = $('pcResetBtn');
+    els.uploadAllBtn = $('pcUploadAllBtn');
+    els.uploadAllLabel = $('pcUploadAllLabel');
+    els.recheckBtn = $('pcRecheckBtn');
+    els.bulkText = $('pcBulkText');
   }
 
   /* ---------------- Catálogos de BADACO ---------------- */
@@ -315,6 +322,10 @@
 
       updateMeta();
       clearFiles();
+      updateSummary();
+      // Se avisa de los duplicados y de lo que falta antes de que el usuario
+      // pulse nada: la columna Status queda al día sola.
+      if (BADACO) validateAll(true);
       if (failures) {
         setStatus('Done with ' + failures + ' failed card(s). Check the table.', 'error');
       } else {
@@ -342,7 +353,20 @@
 
   /** Construye una fila del modelo a partir de la respuesta del servidor. */
   function makeRow(file, data, match) {
-    var row = { file: file, data: {}, match: {}, links: {}, saved: false, failed: false, el: null };
+    var row = {
+      id: nextRowId++,
+      file: file,
+      data: {},
+      match: {},
+      links: {},
+      inputs: {},
+      saved: false,   // ya existe en BADACO
+      failed: false,  // la extracción falló
+      status: 'draft', // draft | ready | error | saving | saved
+      issue: null,     // { code, message, fields }
+      contactId: null,
+      el: null
+    };
     DATA_KEYS.forEach(function (key) { row.data[key] = data[key] || ''; });
     applyMatch(row, match);
     return row;
@@ -387,17 +411,37 @@
     });
 
     if (BADACO) {
+      var tdStatus = document.createElement('td');
+      tdStatus.className = 'pc-table__status';
+      row.statusCell = tdStatus;
+      tr.appendChild(tdStatus);
+
       var tdActions = document.createElement('td');
-      tdActions.className = 'pc-table__actions text-center';
-      var badacoBtn = document.createElement('button');
-      badacoBtn.type = 'button';
-      badacoBtn.className = 'btn btn-outline-primary btn-sm';
-      badacoBtn.title = 'Create this contact in Badaco';
-      badacoBtn.innerHTML = '<i class="fas fa-user-plus"></i>';
-      badacoBtn.addEventListener('click', function () { openBadacoContact(row); });
-      row.actionBtn = badacoBtn;
-      tdActions.appendChild(badacoBtn);
+      tdActions.className = 'pc-table__actions';
+
+      // Acción principal: la fila se crea en BADACO tal cual está en la tabla.
+      var sendBtn = document.createElement('button');
+      sendBtn.type = 'button';
+      sendBtn.className = 'btn btn-primary btn-sm pc-action';
+      sendBtn.title = 'Create this contact in Badaco right now';
+      sendBtn.innerHTML = '<i class="fas fa-paper-plane"></i>';
+      sendBtn.addEventListener('click', function () { sendRows([row], { single: true }); });
+      row.actionBtn = sendBtn;
+      tdActions.appendChild(sendBtn);
+
+      // Acción secundaria: el formulario completo, para lo que la tarjeta no
+      // trae (evento, relación, colaborador asignado...).
+      var formBtn = document.createElement('button');
+      formBtn.type = 'button';
+      formBtn.className = 'btn btn-outline-secondary btn-sm pc-action';
+      formBtn.title = 'Open the full Badaco form instead (event, relationship, assignees…)';
+      formBtn.innerHTML = '<i class="fas fa-pen-to-square"></i>';
+      formBtn.addEventListener('click', function () { openBadacoContact(row); });
+      row.formBtn = formBtn;
+      tdActions.appendChild(formBtn);
+
       tr.appendChild(tdActions);
+      renderStatus(row);
     }
 
     els.tableBody.appendChild(tr);
@@ -409,11 +453,17 @@
     input.type = 'text';
     input.className = 'pc-table__input';
     input.value = row.data[key] || '';
+    row.inputs[key] = input;
     input.addEventListener('input', function () {
       row.data[key] = this.value;
       // Todo menos el nombre alimenta alguna sugerencia: el puesto da el job
       // level; email/web dan la empresa; dirección y teléfonos dan el país.
       if (key !== 'name') scheduleRematch(row);
+      if (key === 'name' || key === 'email') {
+        // Editar lo obligatorio limpia el aviso viejo y vuelve a validar.
+        refreshRowState(row);
+        scheduleValidation();
+      }
     });
     return input;
   }
@@ -425,6 +475,7 @@
   function linkCell(row, column) {
     var wrap = document.createElement('div');
     wrap.className = 'pc-link';
+    row['wrap_' + column.link] = wrap;
 
     // Lo que dice la tarjeta. Editarlo vuelve a pedir el emparejado.
     // Si ese campo ya tiene su propia columna editable (Job Level nace de Job
@@ -448,9 +499,9 @@
     if (column.catalog === 'companies') {
       control = document.createElement('input');
       control.type = 'text';
-      control.className = 'pc-link__select';
+      control.className = 'pc-link__select pc-link__select--search';
       control.setAttribute('list', 'pcCompanyList');
-      control.placeholder = 'Link a Badaco company';
+      control.placeholder = 'Type to search Badaco…';
       control.value = labelOf('companies', row.links[column.link]);
       control.addEventListener('change', function () {
         var id = idOfLabel('companies', this.value);
@@ -492,8 +543,13 @@
     if (linked) confidence = manual ? 'high' : (match.confidence || 'high');
     else confidence = (match.options && match.options.length) ? 'low' : 'none';
 
+    // El borde de la celda repite el estado, para localizar de un vistazo lo
+    // que hay que revisar sin leer cada chip.
+    var wrap = row['wrap_' + column.link];
+    if (wrap) wrap.className = 'pc-link pc-link--' + (manual ? 'manual' : confidence);
+
     var chip = document.createElement('span');
-    chip.className = 'pc-conf pc-conf--' + confidence;
+    chip.className = 'pc-conf pc-conf--' + (manual ? 'manual' : confidence);
     chip.textContent = manual ? 'Selected' : confidenceLabel(confidence, match.reason);
     chip.title = manual ? 'Chosen manually' : confidenceTitle(confidence, match);
     meta.appendChild(chip);
@@ -504,7 +560,8 @@
       var suggestion = document.createElement('button');
       suggestion.type = 'button';
       suggestion.className = 'pc-suggest';
-      suggestion.textContent = option.label;
+      suggestion.innerHTML = '<i class="fas fa-arrow-turn-up pc-suggest__icon"></i>' +
+        '<span class="pc-suggest__text">' + escapeHtml(option.label) + '</span>';
       suggestion.title = 'Use "' + option.label + '" (' + Math.round((option.score || 0) * 100) + '% match)';
       suggestion.addEventListener('click', function () {
         row.links[column.link] = String(option.id);
@@ -533,6 +590,10 @@
 
   function refreshLinkCell(row, column) {
     renderLinkMeta(row, column);
+    if (column.link === 'company') {
+      refreshRowState(row);
+      scheduleValidation();
+    }
     updateSummary();
   }
 
@@ -617,7 +678,7 @@
       setStatus('The Badaco contact form is not available on this page.', 'error');
       return;
     }
-    state.pendingContactRow = state.rows.indexOf(row);
+    state.pendingContact = row;
     window.openNewContactModal({
       name: row.data.name || '',
       email: row.data.email || '',
@@ -637,7 +698,7 @@
       setStatus('The Badaco company form is not available on this page.', 'error');
       return;
     }
-    state.pendingCompanyRow = state.rows.indexOf(row);
+    state.pendingCompany = row;
     window.openNewCompanyModal({
       nombre: row.data.company || '',
       website: row.data.website || '',
@@ -663,8 +724,8 @@
       els.companyList.appendChild(option);
     }
 
-    var row = state.rows[state.pendingCompanyRow];
-    state.pendingCompanyRow = -1;
+    var row = state.pendingCompany;
+    state.pendingCompany = null;
     if (!row || !LINK_COLUMNS.company) return;
 
     row.links.company = String(company.bmc_id);
@@ -674,45 +735,525 @@
   };
 
   /** El modal de contacto avisa aquí cuando guarda: se marca la fila. */
-  window._badacoContactRefresh = function () {
-    var row = state.rows[state.pendingContactRow];
-    state.pendingContactRow = -1;
+  window._badacoContactRefresh = function (contact) {
+    var row = state.pendingContact;
+    state.pendingContact = null;
     if (!row) return;
-
-    row.saved = true;
-    if (row.el) row.el.classList.add('is-saved');
-    if (row.actionBtn) {
-      row.actionBtn.className = 'btn btn-success btn-sm';
-      row.actionBtn.innerHTML = '<i class="fas fa-check"></i>';
-      row.actionBtn.title = 'Contact already created in Badaco';
-      row.actionBtn.disabled = true;
-    }
-    updateSummary();
+    markSaved(row, contact && contact.contact_id);
   };
+
+  /* ---------------- Alta directa en BADACO ---------------- */
+
+  /** Título corto de cada motivo de rechazo (el largo lo da el servidor). */
+  var ISSUE_TITLES = {
+    missing_fields: 'Required data missing',
+    invalid_email: 'Invalid email',
+    duplicate_batch: 'Repeated in this batch',
+    duplicate_badaco: 'Already in Badaco',
+    unknown_company: 'Company not found',
+    insert_failed: 'Badaco rejected it',
+    network: 'Could not reach Badaco'
+  };
+
+  /** Lo que BADACO exige y la fila todavía no tiene. */
+  function missingFields(row) {
+    var missing = [];
+    if (!String(row.data.name || '').trim()) missing.push('Name');
+    if (!String(row.data.email || '').trim()) missing.push('Email');
+    if (LINK_COLUMNS.company && !row.links.company) missing.push('Company');
+    return missing;
+  }
+
+  /** Filas que aún no están en BADACO (una extracción fallida se puede rellenar a mano). */
+  function pendingRows() {
+    return state.rows.filter(function (row) { return !row.saved; });
+  }
+
+  function readyRows() {
+    return pendingRows().filter(function (row) { return !missingFields(row).length; });
+  }
+
+  /** Lo que viaja al servidor por fila. `ref` permite devolver el resultado a su fila. */
+  function rowPayload(row) {
+    return {
+      ref: row.id,
+      label: row.file,
+      name: row.data.name,
+      email: row.data.email,
+      job_title: row.data.job_title,
+      phone_number: row.data.phone_number || row.data.mobile,
+      address: row.data.address,
+      bmc_id: row.links.company,
+      bmjl_id: row.links.jobLevel,
+      country: row.links.country
+    };
+  }
+
+  /**
+   * Recalcula el estado local de la fila tras una edición: el aviso viejo deja
+   * de ser cierto en cuanto el usuario toca el dato que lo provocó, así que se
+   * borra y el chip vuelve a decir sólo lo que falta (el servidor confirmará).
+   */
+  function refreshRowState(row) {
+    if (row.saved || row.status === 'saving') return;
+    row.issue = null;
+    row.status = missingFields(row).length ? 'draft' : 'ready';
+    renderStatus(row);
+    updateSummary();
+  }
+
+  function markSaved(row, contactId) {
+    row.saved = true;
+    row.issue = null;
+    row.status = 'saved';
+    if (contactId) row.contactId = contactId;
+    renderStatus(row);
+    updateSummary();
+  }
+
+  /** Pinta la columna Status y deja los botones de la fila en el estado correcto. */
+  function renderStatus(row) {
+    if (!BADACO || !row.statusCell) return;
+    var cell = row.statusCell;
+    cell.innerHTML = '';
+
+    if (row.el) {
+      row.el.classList.toggle('is-saved', row.status === 'saved');
+      row.el.classList.toggle('is-error', row.status === 'error');
+    }
+
+    var missing = missingFields(row);
+    var chip = document.createElement('span');
+
+    if (row.status === 'saved') {
+      chip.className = 'pc-state pc-state--ok';
+      chip.innerHTML = '<i class="fas fa-circle-check"></i>Created' + (row.contactId ? ' #' + row.contactId : '');
+      chip.title = 'This contact already exists in Badaco';
+    } else if (row.status === 'saving') {
+      chip.className = 'pc-state pc-state--busy';
+      chip.innerHTML = '<i class="fas fa-spinner fa-spin"></i>Sending…';
+    } else if (row.issue) {
+      chip.className = 'pc-state pc-state--bad';
+      chip.innerHTML = '<i class="fas fa-circle-exclamation"></i>' + escapeHtml(ISSUE_TITLES[row.issue.code] || 'Not sent');
+      chip.title = row.issue.message || '';
+    } else if (missing.length) {
+      chip.className = 'pc-state pc-state--warn';
+      chip.innerHTML = '<i class="fas fa-triangle-exclamation"></i>Needs ' + escapeHtml(missing.join(', '));
+      chip.title = row.failed
+        ? 'The AI could not read this card: type the data by hand or upload a sharper photo.'
+        : 'Badaco requires ' + missing.join(', ') + ' before creating the contact.';
+    } else {
+      chip.className = 'pc-state pc-state--ready';
+      chip.innerHTML = '<i class="fas fa-circle-check"></i>Ready';
+      chip.title = 'Everything Badaco needs is filled in — press Send';
+    }
+    cell.appendChild(chip);
+
+    // El motivo completo se lee sin pasar el ratón por encima.
+    var detail = row.issue ? row.issue.message : (row.failed && missing.length ? 'The card could not be read — complete it by hand.' : '');
+    if (detail) {
+      var note = document.createElement('div');
+      note.className = 'pc-state__detail';
+      note.textContent = detail;
+      cell.appendChild(note);
+    }
+
+    if (row.actionBtn) {
+      var busy = row.status === 'saving';
+      row.actionBtn.disabled = busy || row.status === 'saved' || state.sending;
+      if (row.status === 'saved') {
+        row.actionBtn.className = 'btn btn-success btn-sm pc-action';
+        row.actionBtn.innerHTML = '<i class="fas fa-check"></i>';
+        row.actionBtn.title = 'Contact already created in Badaco';
+      } else {
+        row.actionBtn.className = 'btn btn-primary btn-sm pc-action';
+        row.actionBtn.innerHTML = busy ? '<i class="fas fa-spinner fa-spin"></i>' : '<i class="fas fa-paper-plane"></i>';
+        row.actionBtn.title = missing.length
+          ? 'Send to Badaco — it still needs ' + missing.join(', ')
+          : 'Create this contact in Badaco right now';
+      }
+    }
+    if (row.formBtn) row.formBtn.disabled = row.status === 'saved' || state.sending;
+  }
+
+  /** Vuelca la respuesta del servidor (alta real o `dryRun`) sobre las filas. */
+  function applyResults(targets, results) {
+    var byRef = {};
+    targets.forEach(function (row) { byRef[row.id] = row; });
+
+    (results || []).forEach(function (result) {
+      var row = byRef[result.ref];
+      if (!row) return;
+      if (result.status === 'created') {
+        markSaved(row, result.contact_id);
+      } else if (result.status === 'error') {
+        row.contactId = result.existing_contact_id || row.contactId;
+        row.issue = { code: result.code, message: result.message, fields: result.fields || [] };
+        row.status = 'error';
+        renderStatus(row);
+      } else {
+        row.issue = null;
+        row.status = 'ready';
+        renderStatus(row);
+      }
+    });
+  }
+
+  /** Envía las filas indicadas a BADACO y reporta fila por fila lo que pasó. */
+  async function sendRows(rows, options) {
+    var opts = options || {};
+    var targets = (rows || []).filter(function (row) { return !row.saved; });
+    if (!targets.length || state.sending) return;
+
+    state.sending = true;
+    clearTimeout(validateTimer);
+    targets.forEach(function (row) {
+      row.status = 'saving';
+      row.issue = null;
+    });
+    state.rows.forEach(renderStatus);
+    updateBulkButton();
+    setBulkText('<i class="fas fa-spinner fa-spin me-1"></i>Sending ' + targets.length + ' contact(s) to Badaco…');
+
+    try {
+      var res = await fetch('/api/tools/cards/contacts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contacts: targets.map(rowPayload) })
+      });
+      var data = await res.json().catch(function () { return {}; });
+      if (!res.ok || data.result !== 1) {
+        throw new Error(data.error || 'Badaco answered with an error (' + res.status + ')');
+      }
+
+      applyResults(targets, data.results);
+      reportOutcome(targets, data.created || 0, opts);
+    } catch (error) {
+      console.error('send to badaco failed', error);
+      // Ninguna fila llegó: todas quedan marcadas y se explica el motivo.
+      targets.forEach(function (row) {
+        row.status = 'error';
+        row.issue = {
+          code: 'network',
+          fields: [],
+          message: error.message || 'The request never reached Badaco. Check your connection and try again.'
+        };
+      });
+      setBulkText('<i class="fas fa-circle-exclamation me-1"></i>Nothing was sent — Badaco did not answer.', 'bad');
+      toast('Nothing was sent: ' + (error.message || 'connection error'), 2);
+      openReportModal(targets, 'The request never reached Badaco, so no contact was created.');
+    } finally {
+      state.sending = false;
+      state.rows.forEach(renderStatus);
+      updateSummary();
+    }
+  }
+
+  /** Resultado del envío: toast + texto en la barra + modal con lo que falló. */
+  function reportOutcome(targets, created, opts) {
+    var failed = targets.filter(function (row) { return row.status === 'error'; });
+
+    if (!failed.length) {
+      setBulkText('<i class="fas fa-circle-check me-1"></i>' + created + ' contact(s) created in Badaco.', 'ok');
+      toast(created === 1 ? 'Contact created in Badaco' : created + ' contacts created in Badaco', 1);
+      return;
+    }
+
+    setBulkText('<i class="fas fa-triangle-exclamation me-1"></i>' + created + ' created — ' +
+      failed.length + ' row(s) could not be sent.', 'warn');
+    toast(created + ' created, ' + failed.length + ' could not be sent', 2);
+
+    // Con una sola fila el chip ya lo explica todo; el modal sería un estorbo.
+    if (opts.single && failed.length === 1) {
+      focusRowIssue(failed[0]);
+      return;
+    }
+    openReportModal(failed, created
+      ? created + ' contact(s) were created. These rows stayed out:'
+      : 'No contact was created. These rows have problems:');
+  }
+
+  /** Comprobación previa (no crea nada): campos obligatorios y correos repetidos. */
+  function scheduleValidation() {
+    if (!BADACO) return;
+    clearTimeout(validateTimer);
+    validateTimer = setTimeout(function () { validateAll(true); }, 900);
+  }
+
+  async function validateAll(silent) {
+    if (!BADACO || state.sending) return;
+
+    // Lo que ya sabemos incompleto no se consulta: su aviso lo pinta el chip.
+    state.rows.forEach(function (row) {
+      if (!row.saved && missingFields(row).length && (!row.issue || row.issue.code === 'missing_fields')) {
+        row.issue = null;
+        row.status = 'draft';
+        renderStatus(row);
+      }
+    });
+
+    var targets = readyRows();
+    if (!targets.length) {
+      updateSummary();
+      if (!silent) {
+        setBulkText('Nothing to check yet: no row has Name, Email and Company filled in.', 'warn');
+        toast('No row is complete enough to check', 2);
+      }
+      return;
+    }
+
+    if (!silent) setBulkText('<i class="fas fa-spinner fa-spin me-1"></i>Checking ' + targets.length + ' row(s) against Badaco…');
+    try {
+      var res = await fetch('/api/tools/cards/contacts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ dryRun: true, contacts: targets.map(rowPayload) })
+      });
+      var data = await res.json().catch(function () { return {}; });
+      if (!res.ok || data.result !== 1) throw new Error(data.error || 'Check failed');
+
+      applyResults(targets, data.results);
+      if (!silent) {
+        var blocked = data.failed || 0;
+        setBulkText(blocked
+          ? '<i class="fas fa-triangle-exclamation me-1"></i>' + blocked + ' row(s) would be rejected — see the Status column.'
+          : '<i class="fas fa-circle-check me-1"></i>' + (data.ready || 0) + ' row(s) are ready to send.',
+          blocked ? 'warn' : 'ok');
+        toast(blocked ? blocked + ' row(s) need attention' : 'All checked rows are ready', blocked ? 2 : 1);
+      }
+    } catch (error) {
+      console.error('badaco check failed', error);
+      if (!silent) {
+        setBulkText('<i class="fas fa-circle-exclamation me-1"></i>The check could not be completed.', 'bad');
+        toast('Could not check the rows against Badaco', 2);
+      }
+    } finally {
+      updateSummary();
+    }
+  }
+
+  /** "Send all": avisa antes si hay filas que se quedarían fuera. */
+  function sendAll() {
+    var pending = pendingRows();
+    var ready = readyRows();
+    var incomplete = pending.length - ready.length;
+
+    if (!ready.length) {
+      showModal(
+        'None of the rows has Name, Email and Company filled in yet. Complete at least one row — the Status column tells you what each one is missing.',
+        null, null,
+        { title: 'Nothing to send', okText: 'Got it', cancelText: 'Close', type: 'warning' }
+      );
+      return;
+    }
+
+    if (incomplete) {
+      showModal(
+        '<b>' + ready.length + '</b> row(s) will be sent to Badaco.<br>' +
+        '<b>' + incomplete + '</b> row(s) will stay here because they are missing Name, Email or Company.',
+        function () { sendRows(ready); },
+        null,
+        { title: 'Send ' + ready.length + ' of ' + pending.length + '?', okText: 'Send ' + ready.length, cancelText: 'Cancel', type: 'warning' }
+      );
+      return;
+    }
+
+    sendRows(ready);
+  }
+
+  /* ---------------- Informe de lo que no se pudo subir ---------------- */
+
+  /**
+   * Modal con las filas rechazadas: motivo por fila y, para cada una, arreglarla
+   * o borrarla. Reutiliza el aspecto de modalMixin (.modal-mixin/.modal-content).
+   */
+  function openReportModal(rows, intro) {
+    var host = document.createElement('div');
+    host.className = 'modal-mixin';
+
+    var items = rows.map(function (row) {
+      var who = [row.data.name, row.data.email, labelOf('companies', row.links.company) || row.data.company]
+        .filter(Boolean).map(escapeHtml).join(' · ');
+      return '' +
+        '<li class="pc-report__item">' +
+          '<div class="pc-report__head">' +
+            '<span class="pc-report__file" title="' + escapeHtml(row.file || '') + '">' + escapeHtml(row.file || 'Card') + '</span>' +
+            '<span class="pc-state pc-state--bad"><i class="fas fa-circle-exclamation"></i>' +
+              escapeHtml(ISSUE_TITLES[row.issue && row.issue.code] || 'Not sent') + '</span>' +
+          '</div>' +
+          (who ? '<div class="pc-report__who">' + who + '</div>' : '') +
+          '<div class="pc-report__msg">' + escapeHtml((row.issue && row.issue.message) || 'It could not be sent.') + '</div>' +
+          '<div class="pc-report__row-actions">' +
+            '<button type="button" class="pc-report__link" data-fix="' + row.id + '">' +
+              '<i class="fas fa-pen me-1"></i>Edit this row</button>' +
+            '<button type="button" class="pc-report__link pc-report__link--danger" data-drop="' + row.id + '">' +
+              '<i class="fas fa-trash-can me-1"></i>Remove it</button>' +
+          '</div>' +
+        '</li>';
+    }).join('');
+
+    host.innerHTML =
+      '<div class="modal-overlay"></div>' +
+      '<div class="modal-content pc-report">' +
+        '<div class="modal-icon">' +
+          '<svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#e67e22" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+          '<path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>' +
+          '<line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>' +
+        '</div>' +
+        '<div class="modal-title">' + rows.length + ' row(s) were not sent to Badaco</div>' +
+        '<div class="modal-message">' + escapeHtml(intro || '') + '</div>' +
+        '<ul class="pc-report__list">' + items + '</ul>' +
+        '<div class="modal-actions pc-report__actions">' +
+          '<button type="button" class="modal-btn-cancel" data-act="close">Close</button>' +
+          '<button type="button" class="pc-report__danger" data-act="drop-all">' +
+            '<i class="fas fa-trash-can me-1"></i>Remove all ' + rows.length + '</button>' +
+          '<button type="button" class="modal-btn-ok" style="background:#00586f" data-act="fix-first">' +
+            '<i class="fas fa-pen me-1"></i>Fix them</button>' +
+        '</div>' +
+      '</div>';
+
+    document.body.appendChild(host);
+
+    function close() { if (host.parentNode) host.parentNode.removeChild(host); }
+
+    host.querySelector('.modal-overlay').addEventListener('click', close);
+    host.addEventListener('click', function (e) {
+      var target = e.target.closest('[data-fix],[data-drop],[data-act]');
+      if (!target) return;
+
+      var fixId = target.getAttribute('data-fix');
+      if (fixId) {
+        close();
+        focusRowIssue(rowById(Number(fixId)));
+        return;
+      }
+
+      var dropId = target.getAttribute('data-drop');
+      if (dropId) {
+        removeRow(rowById(Number(dropId)));
+        var item = target.closest('.pc-report__item');
+        if (item) item.remove();
+        if (!host.querySelector('.pc-report__item')) close();
+        return;
+      }
+
+      var act = target.getAttribute('data-act');
+      if (act === 'close') close();
+      if (act === 'fix-first') {
+        close();
+        // La primera que siga en la tabla (el usuario pudo borrar alguna aquí).
+        focusRowIssue(rows.find(function (row) { return state.rows.indexOf(row) !== -1; }));
+      }
+      if (act === 'drop-all') {
+        close();
+        showModal(
+          'The ' + rows.length + ' row(s) that could not be sent will be removed from the table. ' +
+          'The data on them will be lost — export to Excel first if you need it.',
+          function () {
+            rows.forEach(removeRow);
+            toast(rows.length + ' row(s) removed', 1);
+          },
+          null,
+          { title: 'Remove the failed rows?', okText: 'Remove them', cancelText: 'Keep them', type: 'danger' }
+        );
+      }
+    });
+  }
+
+  function rowById(id) {
+    return state.rows.find(function (row) { return row.id === id; });
+  }
+
+  /** Lleva al usuario a la celda que hay que corregir. */
+  function focusRowIssue(row) {
+    if (!row || !row.el) return;
+    row.el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    row.el.classList.remove('is-flash');
+    void row.el.offsetWidth; // reinicia la animación
+    row.el.classList.add('is-flash');
+
+    var fields = (row.issue && row.issue.fields && row.issue.fields.length) ? row.issue.fields : missingFields(row);
+    var target = null;
+    if (fields[0] === 'Company') target = row.control_company;
+    else if (fields[0] === 'Email') target = row.inputs.email;
+    else if (fields[0] === 'Name') target = row.inputs.name;
+    target = target || row.inputs.email || row.inputs.name;
+
+    if (target) {
+      setTimeout(function () {
+        target.focus();
+        if (target.select) target.select();
+      }, 350);
+    }
+  }
+
+  function removeRow(row) {
+    if (!row) return;
+    var idx = state.rows.indexOf(row);
+    if (idx === -1) return;
+    state.rows.splice(idx, 1);
+    if (row.el && row.el.parentNode) row.el.parentNode.removeChild(row.el);
+    if (state.pendingContact === row) state.pendingContact = null;
+    if (state.pendingCompany === row) state.pendingCompany = null;
+
+    if (!state.rows.length) {
+      els.results.classList.add('d-none');
+      els.empty.classList.remove('d-none');
+    }
+    updateMeta();
+    updateSummary();
+  }
 
   /* ---------------- Resumen ---------------- */
 
-  function rowIsReady(row) {
-    if (row.failed) return false;
-    if (!row.data.name || !row.data.email) return false;
-    return !LINK_COLUMNS.company || !!row.links.company;
+  function summaryPill(tone, icon, text) {
+    return '<span class="pc-summary__pill pc-summary__pill--' + tone + '">' +
+      '<i class="fas ' + icon + '"></i>' + escapeHtml(text) + '</span>';
   }
 
   function updateSummary() {
     if (!els.summary || !BADACO) return;
 
-    var ready = 0, saved = 0, blocked = 0;
+    var created = 0, ready = 0, blocked = 0, rejected = 0;
     state.rows.forEach(function (row) {
-      if (row.saved) saved++;
-      else if (rowIsReady(row)) ready++;
-      else blocked++;
+      if (row.saved) created++;
+      else if (row.issue) rejected++;
+      else if (missingFields(row).length) blocked++;
+      else ready++;
     });
 
     var parts = [];
-    if (saved) parts.push('<span class="pc-summary__ok"><i class="fas fa-check-circle me-1"></i>' + saved + ' created</span>');
-    parts.push('<span class="pc-summary__ready"><i class="fas fa-user-plus me-1"></i>' + ready + ' ready to create</span>');
-    if (blocked) parts.push('<span class="pc-summary__warn"><i class="fas fa-triangle-exclamation me-1"></i>' + blocked + ' need a name, email or company</span>');
+    if (created) parts.push(summaryPill('ok', 'fa-circle-check', created + ' created in Badaco'));
+    parts.push(summaryPill('ready', 'fa-paper-plane', ready + ' ready to send'));
+    if (blocked) parts.push(summaryPill('warn', 'fa-triangle-exclamation', blocked + ' missing name, email or company'));
+    if (rejected) parts.push(summaryPill('bad', 'fa-circle-exclamation', rejected + ' rejected — see Status'));
     els.summary.innerHTML = parts.join('');
+
+    updateBulkButton();
+  }
+
+  function updateBulkButton() {
+    if (!els.uploadAllBtn) return;
+    var pending = pendingRows().length;
+    var ready = readyRows().length;
+
+    els.uploadAllBtn.disabled = state.sending || !ready;
+    if (els.uploadAllLabel) {
+      els.uploadAllLabel.textContent = state.sending
+        ? 'Sending…'
+        : 'Send all to Badaco' + (ready ? ' (' + ready + ')' : '');
+    }
+    if (els.recheckBtn) els.recheckBtn.disabled = state.sending || !pending;
+  }
+
+  function setBulkText(html, tone) {
+    if (!els.bulkText) return;
+    els.bulkText.innerHTML = html;
+    els.bulkText.className = 'pc-bulk__text' + (tone ? ' is-' + tone : '');
+  }
+
+  function toast(message, icon) {
+    if (typeof window.launch_toast === 'function') window.launch_toast(message, icon == null ? 0 : icon);
   }
 
   function updateMeta() {
@@ -721,12 +1262,14 @@
 
   function resetAll() {
     state.rows = [];
-    state.pendingContactRow = -1;
-    state.pendingCompanyRow = -1;
+    state.pendingContact = null;
+    state.pendingCompany = null;
     els.tableBody.innerHTML = '';
     els.results.classList.add('d-none');
     els.empty.classList.remove('d-none');
     if (els.summary) els.summary.innerHTML = '';
+    setBulkText('Send every reviewed row to Badaco in one go. Rows with problems are reported back, never silently skipped.');
+    updateBulkButton();
     clearFiles();
   }
 
@@ -839,7 +1382,20 @@
     });
     els.clearBtn.addEventListener('click', clearFiles);
     els.processBtn.addEventListener('click', process);
-    els.resetBtn.addEventListener('click', resetAll);
+    els.resetBtn.addEventListener('click', function () {
+      // Vaciar la tabla con filas sin subir es la forma fácil de perder trabajo.
+      var pending = BADACO ? pendingRows().length : 0;
+      if (!pending) { resetAll(); return; }
+      showModal(
+        '<b>' + pending + '</b> row(s) have not been created in Badaco yet and will be lost. ' +
+        'Send them first, or download the Excel if you want to keep them.',
+        resetAll, null,
+        { title: 'Clear the table?', okText: 'Clear anyway', cancelText: 'Go back', type: 'danger' }
+      );
+    });
+
+    if (els.uploadAllBtn) els.uploadAllBtn.addEventListener('click', sendAll);
+    if (els.recheckBtn) els.recheckBtn.addEventListener('click', function () { validateAll(false); });
 
     // Delegación: quitar archivo / marcar dorso.
     els.fileList.addEventListener('click', function (e) {

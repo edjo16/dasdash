@@ -24,6 +24,10 @@ const MAX_FILE_BYTES = Number(process.env.TOOLS_MAX_FILE_BYTES || 25 * 1024 * 10
 const IMAGE_MIME = new Set(['image/png', 'image/jpeg', 'image/jpg', 'image/webp']);
 const IMAGE_EXT = /\.(png|jpe?g|webp)$/i;
 
+/** Tope de contactos por petición en la carga masiva a BADACO. */
+const MAX_BATCH_CONTACTS = Number(process.env.TOOLS_MAX_BATCH_CONTACTS || 200);
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+
 /**
  * Caché de catálogos para el emparejado. Un lote puede traer 40 tarjetas y
  * cada una dispara una petición: sin caché serían 120 consultas.
@@ -48,6 +52,17 @@ async function loadMatchCatalogs(connection) {
 /** Invalida la caché (una empresa nueva debe poder emparejarse enseguida). */
 export function invalidateCardCatalogs() {
   catalogCache = { at: 0, data: null };
+}
+
+/** Recorta un valor de texto al ancho de su columna en `badaco_contactos`. */
+function text(value, max) {
+  const clean = String(value == null ? '' : value).trim().replace(/\s+/g, ' ');
+  return max ? clean.slice(0, max) : clean;
+}
+
+function toInt(value) {
+  const parsed = parseInt(value, 10);
+  return Number.isNaN(parsed) ? null : parsed;
 }
 
 /** Valida que un archivo subido sea una imagen soportada dentro del límite. */
@@ -205,6 +220,184 @@ export default class CardsController {
     } catch (error) {
       console.error('[Tools] cards rematch error:', error);
       return res.status(500).json({ result: 0, error: 'Failed to match the card against Badaco' });
+    }
+  }
+
+  /**
+   * POST /api/tools/cards/contacts — crea en BADACO uno o varios contactos ya
+   * revisados en la tabla, sin pasar por el formulario.
+   *
+   * Body: `{ contacts: [{ ref, label, name, email, bmc_id, ... }], dryRun }`.
+   * Con `dryRun` sólo se valida (lo usa la tabla para marcar los duplicados
+   * antes de que el usuario pulse "enviar").
+   *
+   * Cada contacto se inserta en su propia transacción: una fila con problemas
+   * no debe tumbar el resto del lote. La respuesta devuelve el resultado fila
+   * a fila (`ref` es el identificador que mandó el cliente) para que la tabla
+   * pueda decir exactamente qué línea falló y por qué.
+   */
+  static async createContacts(connection, req, res) {
+    if (!req.session?.toolsBadacoEnabled) {
+      return res.status(403).json({ result: 0, error: 'Badaco module is not enabled for this user' });
+    }
+
+    const dryRun = !!req.body?.dryRun;
+    const contacts = Array.isArray(req.body?.contacts) ? req.body.contacts : [];
+
+    if (!contacts.length) {
+      return res.status(400).json({ result: 0, error: 'No contacts were sent' });
+    }
+    if (contacts.length > MAX_BATCH_CONTACTS) {
+      return res.status(413).json({
+        result: 0,
+        error: `Too many contacts in a single request (max ${MAX_BATCH_CONTACTS})`
+      });
+    }
+
+    try {
+      const pool = await sql.connect(connection);
+      const userId = req.session?.userID;
+
+      const items = contacts.map((raw, position) => ({
+        ref: raw?.ref == null ? position : raw.ref,
+        label: text(raw?.label) || `Card ${position + 1}`,
+        contactId: null,
+        error: null,
+        data: {
+          bmc_id: toInt(raw?.bmc_id),
+          name: text(raw?.name, 100),
+          email: text(raw?.email, 100).toLowerCase(),
+          job_title: text(raw?.job_title, 75),
+          bmjl_id: toInt(raw?.bmjl_id),
+          country: text(raw?.country, 10) || null,
+          address: text(raw?.address, 250) || null,
+          phone_number: text(raw?.phone_number, 50) || null
+        }
+      }));
+
+      // 1) Campos obligatorios y duplicados dentro del propio lote.
+      const seen = new Map();
+      for (const item of items) {
+        const missing = [];
+        if (!item.data.name) missing.push('Name');
+        if (!item.data.email) missing.push('Email');
+        if (!item.data.bmc_id) missing.push('Company');
+
+        if (missing.length) {
+          item.error = {
+            code: 'missing_fields',
+            fields: missing,
+            message: `Missing required ${missing.length > 1 ? 'fields' : 'field'}: ${missing.join(', ')}.`
+          };
+          continue;
+        }
+        if (!EMAIL_RE.test(item.data.email)) {
+          item.error = {
+            code: 'invalid_email',
+            fields: ['Email'],
+            message: `"${item.data.email}" is not a valid email address.`
+          };
+          continue;
+        }
+
+        const twin = seen.get(item.data.email);
+        if (twin) {
+          item.error = {
+            code: 'duplicate_batch',
+            fields: ['Email'],
+            message: `The email ${item.data.email} is repeated in this batch — "${twin.label}" already uses it.`
+          };
+          continue;
+        }
+        seen.set(item.data.email, item);
+      }
+
+      // 2) La empresa enlazada tiene que seguir existiendo.
+      const pendingCompanies = [...new Set(items.filter((i) => !i.error).map((i) => i.data.bmc_id))];
+      const companyExists = new Map();
+      for (const id of pendingCompanies) {
+        companyExists.set(id, await BadacoModel.checkCompanyExists(pool, id));
+      }
+      for (const item of items) {
+        if (item.error) continue;
+        if (!companyExists.get(item.data.bmc_id)) {
+          item.error = {
+            code: 'unknown_company',
+            fields: ['Company'],
+            message: 'The linked company no longer exists in Badaco. Pick another one or create it again.'
+          };
+        }
+      }
+
+      // 3) Correos que ya están en BADACO (una sola consulta para todo el lote).
+      const existing = await BadacoModel.findContactsByEmails(
+        pool,
+        items.filter((i) => !i.error).map((i) => i.data.email)
+      );
+      const byEmail = new Map(existing.map((c) => [String(c.email || '').trim().toLowerCase(), c]));
+      for (const item of items) {
+        if (item.error) continue;
+        const hit = byEmail.get(item.data.email);
+        if (hit) {
+          item.error = {
+            code: 'duplicate_badaco',
+            fields: ['Email'],
+            message: `${item.data.email} already belongs to ${hit.name || 'another contact'}` +
+              `${hit.company_name ? ` (${hit.company_name})` : ''} in Badaco.`,
+            contactId: hit.contact_id
+          };
+        }
+      }
+
+      // 4) Alta. En `dryRun` sólo se valida.
+      if (!dryRun) {
+        for (const item of items) {
+          if (item.error) continue;
+          const transaction = new sql.Transaction(pool);
+          try {
+            await transaction.begin();
+            item.contactId = await BadacoModel.createContact(transaction, {
+              ...item.data,
+              event: null,
+              contact_rl_id: null,
+              contactos_asociados: [],
+              uingreso: userId
+            });
+            await transaction.commit();
+          } catch (error) {
+            try { await transaction.rollback(); } catch (_) { /* la transacción ya murió */ }
+            console.error('[Tools] cards createContacts insert error:', error);
+            item.error = {
+              code: 'insert_failed',
+              fields: [],
+              message: `Badaco rejected this contact: ${error.message || 'unknown error'}`
+            };
+          }
+        }
+      }
+
+      const results = items.map((item) => ({
+        ref: item.ref,
+        label: item.label,
+        status: item.error ? 'error' : (dryRun ? 'ready' : 'created'),
+        contact_id: item.contactId,
+        code: item.error ? item.error.code : null,
+        fields: item.error ? item.error.fields : [],
+        message: item.error ? item.error.message : null,
+        existing_contact_id: item.error ? (item.error.contactId || null) : null
+      }));
+
+      return res.json({
+        result: 1,
+        dryRun,
+        created: results.filter((r) => r.status === 'created').length,
+        ready: results.filter((r) => r.status === 'ready').length,
+        failed: results.filter((r) => r.status === 'error').length,
+        results
+      });
+    } catch (error) {
+      console.error('[Tools] cards createContacts error:', error);
+      return res.status(500).json({ result: 0, error: 'Failed to send the contacts to Badaco' });
     }
   }
 }

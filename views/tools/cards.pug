@@ -62,16 +62,32 @@ block layout-content
                 if badacoEnabled
                   //- Resumen del emparejado contra los catálogos de BADACO
                   div.pc-review
-                    div.pc-review__text
-                      i.fas.fa-wand-magic-sparkles.me-1
-                      | Company, Job Level and Country are linked to Badaco: you see the name, we save the id.
-                      | Review the highlighted cells before creating the contacts.
+                    div.pc-review__intro
+                      i.fas.fa-wand-magic-sparkles.pc-review__icon
+                      div.pc-review__text
+                        strong Company, Job Level and Country are linked to Badaco.
+                        |  You see the name, we save the id. Review the highlighted cells before sending:
+                        |  Name, Email and Company are required, and the email must not already exist in Badaco.
                     div.pc-review__legend
+                      span.pc-review__legend-label Match quality:
                       span.pc-conf.pc-conf--high Matched
                       span.pc-conf.pc-conf--medium Likely
                       span.pc-conf.pc-conf--low Review
                       span.pc-conf.pc-conf--none Not found
                   div#pcSummary.pc-summary
+
+                  //- Carga masiva a BADACO
+                  div.pc-bulk
+                    div.pc-bulk__info
+                      i.fas.fa-cloud-arrow-up.pc-bulk__icon
+                      span#pcBulkText.pc-bulk__text Send every reviewed row to Badaco in one go. Rows with problems are reported back, never silently skipped.
+                    div.pc-bulk__actions
+                      button#pcRecheckBtn.btn.btn-outline-secondary.btn-sm(type="button" title="Re-check required fields and duplicated emails against Badaco")
+                        i.fas.fa-rotate.me-1
+                        | Re-check
+                      button#pcUploadAllBtn.btn.btn-primary.btn-sm(type="button" disabled)
+                        i.fas.fa-cloud-arrow-up.me-1
+                        span#pcUploadAllLabel Send all to Badaco
 
                 div.pc-table-wrap
                   table.pc-table
@@ -81,6 +97,7 @@ block layout-content
                         each column in cardColumns
                           th= column.label
                         if badacoEnabled
+                          th Status
                           th.text-center Actions
                     tbody#pcTableBody
 
