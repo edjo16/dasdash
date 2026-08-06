@@ -5,8 +5,12 @@ import USERModel from '../../USERS/model/USER.js';
 import Rules from '../../USERS/rule/DevTeam.js';
 import EventsModel from '../model/events.js'
 import UserPrefsModel from '../../USERS/model/UserPrefs.js';
+import { badacoCatalogs, invalidateBadacoCache } from '../services/badaco-cache.js';
 
 const BADACO_CONTACTS_MODULE = 'badaco_contacts';
+
+/** Filas por lote al exportar a Excel (ver downloadExcel). */
+const EXCEL_BATCH_SIZE = Number(process.env.BADACO_EXCEL_BATCH_SIZE || 2000);
 
 export default class BadacoController {
     constructor() { }
@@ -19,28 +23,46 @@ export default class BadacoController {
         
         try {
             const UserID = req.session?.userID || req.body.UserID;
-            const devteam = await Rules.validateTeam(req.session?.iddevteam, UserID);
-            const usuarioData = await USERModel.obtenerDatosUsuario(pool, UserID);
-            const usuario = await USERModel.obtenerDatosUsuario(pool, UserID);
-            const users = await USERModel.getAllUserActive(pool, "1");
-            const grupousuarios = devteam ? await USERModel.getGroupUsers(pool) : [];
             if (!UserID) {
                 return res.redirect("/sinID");
             }
 
-            // Get companies for filter
-            const companies = await BadacoModel.getAllCompanies(pool);
-            const jobLevels = await BadacoModel.getAllJobLevels(pool);
-            const countries = await BadacoModel.getUniqueCountries(pool);
-            // Catalogs consumed by the company modal (create/edit)
-            const relationships = await BadacoModel.getAllRelationships(pool);
-            const countriesAll = await USERModel.getCountries(pool);
-            // Catalogs consumed by the contact modal (create/edit)
-            const grupousuarios_active = await USERModel.getAllUserActive(pool, usuarioData.compania);
-            const events = await EventsModel.readforms(pool, 100, 0, devteam, UserID, null, null, null);
-            const regions = await BadacoModel.getUniqueRegions(pool);
-            // Saved column visibility preferences for this user (null = defaults)
-            const columnPrefs = await UserPrefsModel.getPrefs(pool, UserID, BADACO_CONTACTS_MODULE);
+            // Primero lo que condiciona al resto: el perfil da la compañía con
+            // la que se filtran los usuarios activos.
+            const [devteam, usuarioData] = await Promise.all([
+                Rules.validateTeam(req.session?.iddevteam, UserID),
+                USERModel.obtenerDatosUsuario(pool, UserID)
+            ]);
+
+            // El resto son consultas independientes: van en paralelo (cada
+            // sql.Request toma su propia conexión del pool) en vez de una
+            // detrás de otra. Los catálogos salen de la caché de BADACO.
+            const [
+                users,
+                grupousuarios,
+                companies,
+                jobLevels,
+                countries,
+                relationships,
+                countriesAll,
+                grupousuarios_active,
+                events,
+                regions,
+                columnPrefs
+            ] = await Promise.all([
+                USERModel.getAllUserActive(pool, "1"),
+                devteam ? USERModel.getGroupUsers(pool) : Promise.resolve([]),
+                badacoCatalogs.companies(pool),
+                badacoCatalogs.jobLevels(pool),
+                badacoCatalogs.contactCountries(pool),
+                badacoCatalogs.relationships(pool),
+                badacoCatalogs.countries(pool),
+                USERModel.getAllUserActive(pool, usuarioData.compania),
+                EventsModel.readforms(pool, 100, 0, devteam, UserID, null, null, null),
+                badacoCatalogs.regionNames(pool),
+                // Saved column visibility preferences for this user (null = defaults)
+                UserPrefsModel.getPrefs(pool, UserID, BADACO_CONTACTS_MODULE)
+            ]);
 
             res.render('badaco/badaco_contacts_list', {
                 title: 'BADACO - Contact Database',
@@ -90,13 +112,19 @@ export default class BadacoController {
             if (event) filters.event = parseInt(event);
             if (region) filters.region = region;
             
-            const limitNum = parseInt(limit) || 15;
-            const pageNum = parseInt(page) || 1;
+            // Tope defensivo: la lista pagina de 15 en 15, pero el parámetro
+            // llega por querystring y nadie debe poder pedir 500.000 filas.
+            const limitNum = Math.min(Math.max(parseInt(limit) || 15, 1), 200);
+            const pageNum = Math.max(parseInt(page) || 1, 1);
             const offsetNum = (pageNum - 1) * limitNum;
-            
-            const contacts = await BadacoModel.getAllContacts(pool, filters, limitNum, offsetNum);
-            const total = await BadacoModel.getContactsCount(pool, filters);
-            
+
+            // Una sola consulta: filas + total (COUNT(*) OVER()).
+            const { rows: contacts, total: pageTotal } = await BadacoModel.getAllContacts(pool, filters, limitNum, offsetNum);
+
+            // Sin filas no hay total que leer (página más allá del final o
+            // resultado vacío): sólo en ese caso se consulta el conteo aparte.
+            const total = contacts.length ? pageTotal : await BadacoModel.getContactsCount(pool, filters);
+
             res.json({
                 success: true,
                 data: contacts,
@@ -120,22 +148,29 @@ export default class BadacoController {
         
         try {
             const UserID = req.session?.userID || req.body.UserID;
-            const usuarioData = await USERModel.obtenerDatosUsuario(pool, UserID);
-            
             if (!UserID) {
                 return res.redirect("/sinID");
             }
 
-            const companies = await BadacoModel.getAllCompanies(pool);
-            const jobLevels = await BadacoModel.getAllJobLevels(pool);
-            const relationships = await BadacoModel.getAllRelationships(pool);
-            const countriesAll = await USERModel.getCountries(pool);
-            const relationshipType = await BadacoModel.getCompanyType(pool);
-            const regions = await BadacoModel.getCompanyRegion(pool);
-            const grupousuarios_active = await USERModel.getAllUserActive(pool,usuarioData.compania);
-            const devteam = await Rules.validateTeam(req.session?.iddevteam, UserID);
-            const grupousuarios = devteam ? await USERModel.getGroupUsers(pool) : [];
-            const events = await EventsModel.readforms(pool, 100, 0, devteam, UserID, null, null, null);
+            const [usuarioData, devteam] = await Promise.all([
+                USERModel.obtenerDatosUsuario(pool, UserID),
+                Rules.validateTeam(req.session?.iddevteam, UserID)
+            ]);
+
+            const [
+                companies, jobLevels, relationships, countriesAll,
+                relationshipType, regions, grupousuarios_active, grupousuarios, events
+            ] = await Promise.all([
+                badacoCatalogs.companies(pool),
+                badacoCatalogs.jobLevels(pool),
+                badacoCatalogs.relationships(pool),
+                badacoCatalogs.countries(pool),
+                badacoCatalogs.companyTypes(pool),
+                badacoCatalogs.companyRegions(pool),
+                USERModel.getAllUserActive(pool, usuarioData.compania),
+                devteam ? USERModel.getGroupUsers(pool) : Promise.resolve([]),
+                EventsModel.readforms(pool, 100, 0, devteam, UserID, null, null, null)
+            ]);
 
             res.render('badaco/badaco_contacts_form', {
                 title: 'BADACO - New Contact',
@@ -177,31 +212,36 @@ export default class BadacoController {
         try {
             const UserID = req.session?.userID || req.body.UserID;
             const contactId = req.params.id;
-            const usuarioData = await USERModel.obtenerDatosUsuario(pool, UserID);
-            
             if (!UserID) {
                 return res.redirect("/sinID");
             }
 
-            const contact =await BadacoModel.getContactById(pool, contactId);
-            
+            const [usuarioData, devteam, contact, prevNext] = await Promise.all([
+                USERModel.obtenerDatosUsuario(pool, UserID),
+                Rules.validateTeam(req.session?.iddevteam, UserID),
+                BadacoModel.getContactById(pool, contactId),
+                // Navegación anterior/siguiente: no depende del contacto en sí
+                BadacoModel.getPrevNextContact(pool, contactId)
+            ]);
+
             if (!contact) {
                 return res.status(404).send('Contact not found');
             }
 
-            // Get previous and next contact IDs for navigation
-            const prevNext = await BadacoModel.getPrevNextContact(pool, contactId);
-
-            const companies = await BadacoModel.getAllCompanies(pool);
-            const jobLevels = await BadacoModel.getAllJobLevels(pool);
-            const relationships = await BadacoModel.getAllRelationships(pool);
-            const countriesAll = await USERModel.getCountries(pool);
-            const relationshipType = await BadacoModel.getCompanyType(pool);
-            const regions = await BadacoModel.getCompanyRegion(pool);
-            const grupousuarios_active = await USERModel.getAllUserActive(pool,usuarioData.compania);
-            const devteam = await Rules.validateTeam(req.session?.iddevteam, UserID);
-            const grupousuarios = devteam ? await USERModel.getGroupUsers(pool) : [];
-            const events = await EventsModel.readforms(pool, 100, 0, devteam, UserID, null, null, null);
+            const [
+                companies, jobLevels, relationships, countriesAll,
+                relationshipType, regions, grupousuarios_active, grupousuarios, events
+            ] = await Promise.all([
+                badacoCatalogs.companies(pool),
+                badacoCatalogs.jobLevels(pool),
+                badacoCatalogs.relationships(pool),
+                badacoCatalogs.countries(pool),
+                badacoCatalogs.companyTypes(pool),
+                badacoCatalogs.companyRegions(pool),
+                USERModel.getAllUserActive(pool, usuarioData.compania),
+                devteam ? USERModel.getGroupUsers(pool) : Promise.resolve([]),
+                EventsModel.readforms(pool, 100, 0, devteam, UserID, null, null, null)
+            ]);
 
             res.render('badaco/badaco_contacts_form', {
                 title: 'BADACO - Edit Contact',
@@ -275,11 +315,14 @@ export default class BadacoController {
             };
             
             const contactId = await BadacoModel.createContact(transaction, data);
-            
+
             await transaction.commit();
-            
-            res.json({ 
-                success: true, 
+            // El filtro de países de la lista se arma con los países que usan
+            // los contactos: un alta puede estrenar uno.
+            invalidateBadacoCache('contact');
+
+            res.json({
+                success: true,
                 message: 'Contact created successfully',
                 contact_id: contactId
             });
@@ -336,10 +379,11 @@ export default class BadacoController {
             };
             
             await BadacoModel.updateContact(transaction, contactId, data);
-            
+
             await transaction.commit();
-            
-            res.json({ 
+            invalidateBadacoCache('contact');
+
+            res.json({
                 success: true, 
                 message: 'Contact updated successfully'
             });
@@ -400,9 +444,9 @@ export default class BadacoController {
         const pool = await sql.connect(connection);
         
         try {
-            const companies = await BadacoModel.getAllCompanies(pool);
-            
-            res.json({ 
+            const companies = await badacoCatalogs.companies(pool);
+
+            res.json({
                 success: true, 
                 data: companies 
             });
@@ -423,9 +467,9 @@ export default class BadacoController {
         const pool = await sql.connect(connection);
         
         try {
-            const jobLevels = await BadacoModel.getAllJobLevels(pool);
-            
-            res.json({ 
+            const jobLevels = await badacoCatalogs.jobLevels(pool);
+
+            res.json({
                 success: true, 
                 data: jobLevels 
             });
@@ -473,9 +517,9 @@ export default class BadacoController {
         const pool = await sql.connect(connection);
         
         try {
-            const relationships = await BadacoModel.getAllRelationships(pool);
-            
-            res.json({ 
+            const relationships = await badacoCatalogs.relationships(pool);
+
+            res.json({
                 success: true, 
                 data: relationships 
             });
@@ -511,11 +555,12 @@ export default class BadacoController {
             };
             
             const companyId = await BadacoModel.createCompany(transaction, data);
-            
+
             await transaction.commit();
-            
-            res.json({ 
-                success: true, 
+            invalidateBadacoCache('company');
+
+            res.json({
+                success: true,
                 message: 'Company created successfully',
                 bmc_id: companyId
             });
@@ -604,11 +649,12 @@ export default class BadacoController {
             };
             
             await BadacoModel.updateCompany(transaction, companyId, data);
-            
+
             await transaction.commit();
-            
-            res.json({ 
-                success: true, 
+            invalidateBadacoCache('company');
+
+            res.json({
+                success: true,
                 message: 'Company updated successfully'
             });
 
@@ -639,10 +685,11 @@ export default class BadacoController {
             };
             
             const jobLevelId = await BadacoModel.createJobLevel(transaction, data);
-            
+
             await transaction.commit();
-            
-            res.json({ 
+            invalidateBadacoCache('jobLevel');
+
+            res.json({
                 success: true, 
                 message: 'Job Level created successfully',
                 bmjl_id: jobLevelId
@@ -659,18 +706,26 @@ export default class BadacoController {
     }
 
     /**
-     * Download contacts to Excel
+     * Descarga de los contactos filtrados a Excel.
+     *
+     * Se genera en streaming y por lotes: las filas se leen de
+     * `BADACO_EXCEL_BATCH_SIZE` en `BADACO_EXCEL_BATCH_SIZE` y se escriben
+     * directo en la respuesta, así que ni la app ni la base de datos tienen
+     * que sostener el resultado completo en memoria. Antes se pedían hasta
+     * 100.000 contactos de una vez (más una consulta por contacto para sus
+     * colaboradores) y se armaba el libro entero en RAM antes de enviar nada.
+     *
+     * Tampoco se abre transacción: son lecturas, y una transacción abierta
+     * mientras se genera el archivo mantiene bloqueos sobre la tabla.
      */
     static async downloadExcel(connection, req, res) {
-        await sql.connect(connection);
-        const transaction = new sql.Transaction();
-        
+        const pool = await sql.connect(connection);
+
         try {
-            await transaction.begin();
             const UserID = req.session?.userID || req.body.UserID;
-            const data = req.body.data;
+            const data = req.body.data || {};
             const filters = {};
-            
+
             if (data.search) filters.search = data.search;
             if (data.bmc_id) filters.bmc_id = parseInt(data.bmc_id);
             if (data.bmjl_id) filters.bmjl_id = parseInt(data.bmjl_id);
@@ -679,24 +734,16 @@ export default class BadacoController {
             if (data.job_title) filters.job_title = data.job_title;
             if (data.event) filters.event = parseInt(data.event);
             if (data.region) filters.region = data.region;
-            
-            // Get all contacts with filters (no pagination for Excel)
-            const contacts = await BadacoModel.getAllContacts(transaction, filters, 100000, 0);
-            const usuarioData = UserID ? await USERModel.getGroupUsers(transaction): [];
-            const regions =  await BadacoModel.getRegions(transaction)
 
-            await transaction.commit();
-            
-            if (contacts.length === 0) {
-                return res.status(400).send('No data to export');
-            }
-            
-            // Import ExcelJS dynamically
+            // Códigos de usuario -> nombre. Un Map: antes era un find() por
+            // cada colaborador de cada fila (búsqueda lineal dentro del bucle).
+            const groupUsers = UserID ? await USERModel.getGroupUsers(pool) : [];
+            // Las claves se normalizan a texto: el código guardado en
+            // badaco_activere_contactos es varchar y el UserID puede venir
+            // numérico, y con comparación estricta no casaban nunca.
+            const userNames = new Map(groupUsers.map(([code, name]) => [String(code), name]));
+
             const ExcelJS = (await import('exceljs')).default;
-            const workbook = new ExcelJS.Workbook();
-            const worksheet = workbook.addWorksheet('Contacts');
-            
-            // Define columns - Name, Email, Company first, then the rest
             const columns = [
                 { header: 'Company', key: 'company_name', width: 30 },
                 { header: 'Name', key: 'name', width: 30 },
@@ -709,67 +756,81 @@ export default class BadacoController {
                 { header: 'Regions', key: 'regions', width: 20 },
                 { header: 'Phone', key: 'phone_number', width: 20 },
                 { header: 'Contact Active Re', key: 'contact_re', width: 20 }
-
             ];
-            
-            worksheet.columns = columns;
-            
-            // Add title in row 1 (before headers)
-            worksheet.insertRow(1, []);
-            worksheet.mergeCells('A1:G1');
-            worksheet.getCell('A1').value = 'BADACO - Contact Database';
-            worksheet.getCell('A1').font = { bold: true, size: 14 };
-            worksheet.getCell('A1').alignment = { horizontal: 'center' };
-            
-            // Add empty row
-            worksheet.insertRow(2, []);
-            
-            // Headers are now in row 3
-            // Style header row
-            worksheet.getRow(3).font = { bold: true, color: { argb: 'FFFFFF' } };
-            worksheet.getRow(3).fill = { 
-                type: 'pattern', 
-                pattern: 'solid', 
-                fgColor: { argb: '00586f' }
+
+            let workbook = null;
+            let worksheet = null;
+
+            // El libro se crea al llegar el primer lote: si el filtro no
+            // devuelve nada todavía se puede responder con un 400 limpio,
+            // porque aún no se ha escrito ni una cabecera.
+            const startWorkbook = () => {
+                res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+                res.setHeader('Content-Disposition', 'attachment; filename=badaco-contacts.xlsx');
+
+                workbook = new ExcelJS.stream.xlsx.WorkbookWriter({ stream: res, useStyles: true });
+                worksheet = workbook.addWorksheet('Contacts');
+                // Sin `header` en las columnas: las tres primeras filas
+                // (título, blanco, cabecera) se escriben a mano, en orden,
+                // porque en streaming no se puede insertar hacia atrás.
+                worksheet.columns = columns.map((column) => ({ key: column.key, width: column.width }));
+
+                const title = worksheet.addRow(['BADACO - Contact Database']);
+                worksheet.mergeCells('A1:G1');
+                title.font = { bold: true, size: 14 };
+                title.alignment = { horizontal: 'center' };
+                title.commit();
+
+                worksheet.addRow([]).commit();
+
+                const header = worksheet.addRow(columns.map((column) => column.header));
+                header.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+                header.eachCell((cell) => {
+                    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF00586F' } };
+                });
+                header.commit();
             };
 
-            // Add data rows starting from row 4
-            contacts.forEach((contact) => {
-                const domain = contact.email ? contact.email.split('@')[1]: null
-                const region = contact.company_country_name ? regions.find( (region => region.xnombre_pais_ingles === contact.company_country_name)) : ''
-                const contactos_asociados = (contact.contactos_asociados || [])
-                    .map(userCode => {
-                        const usuario = usuarioData.find(([codigo]) => codigo === userCode);
-                        return usuario?.[1];
-                    })
-                    .filter(Boolean)
-                    .join(', ');
+            await BadacoModel.forEachContactBatch(pool, filters, EXCEL_BATCH_SIZE, async (rows) => {
+                if (!workbook) startWorkbook();
 
-                worksheet.addRow({
-                    company_name: contact.company_name || '',
-                    name: contact.name || '',
-                    email: contact.email || '',
-                    domain:domain || '',
-                    job_title: contact.job_title || '',
-                    job_level_name: contact.job_level_name || '',
-                    relationship: contact.relationship || '',
-                    country: contact.company_country_name  || '',
-                    regions: region.xnombre_continente_ingles || '',
-                    phone_number: contact.phone_number || '',
-                    contact_re: contactos_asociados  || ''
-                });
+                for (const contact of rows) {
+                    const domain = contact.email ? contact.email.split('@')[1] : '';
+                    const asignados = (contact.contactos_asociados || [])
+                        .map((userCode) => userNames.get(String(userCode)))
+                        .filter(Boolean)
+                        .join(', ');
+
+                    worksheet.addRow({
+                        company_name: contact.company_name || '',
+                        name: contact.name || '',
+                        email: contact.email || '',
+                        domain: domain || '',
+                        job_title: contact.job_title || '',
+                        job_level_name: contact.job_level_name || '',
+                        relationship: contact.relationship || '',
+                        country: contact.company_country_name || '',
+                        // Ya viene resuelta en la consulta (continente del
+                        // país de la empresa): no hace falta buscarla en m_pais.
+                        regions: contact.company_region || '',
+                        phone_number: contact.phone_number || '',
+                        contact_re: asignados
+                    }).commit();
+                }
             });
-            // Set response headers
-            res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-            res.setHeader('Content-Disposition', 'attachment; filename=badaco-contacts.xlsx');
-            
-            // Write to response
-            await workbook.xlsx.write(res);
-            res.end();
-            
+
+            if (!workbook) {
+                return res.status(400).send('No data to export');
+            }
+
+            worksheet.commit();
+            await workbook.commit();   // cierra la respuesta
+
         } catch (error) {
-            try { await transaction.rollback(); } catch (_) {}
             console.error('Error generating Excel file:', error);
+            // Si ya empezó a bajar el archivo no se puede devolver un 500:
+            // se corta la respuesta para que el navegador lo dé por fallido.
+            if (res.headersSent) return res.destroy(error);
             res.status(500).send('Error generating Excel file');
         }
     }
@@ -820,9 +881,11 @@ export default class BadacoController {
     static async getExternalReferenceData(connection, req, res) {
         const pool = await sql.connect(connection);
         try {
-            const companies     = await BadacoModel.getAllCompanies(pool);
-            const jobLevels     = await BadacoModel.getAllJobLevels(pool);
-            const relationships = await BadacoModel.getAllRelationships(pool);
+            const [companies, jobLevels, relationships] = await Promise.all([
+                badacoCatalogs.companies(pool),
+                badacoCatalogs.jobLevels(pool),
+                badacoCatalogs.relationships(pool)
+            ]);
             res.json({
                 success: true,
                 data: { companies, jobLevels, relationships },
@@ -869,6 +932,7 @@ export default class BadacoController {
 
             const companyId = await BadacoModel.createCompany(transaction, data);
             await transaction.commit();
+            invalidateBadacoCache('company');
 
             res.status(201).json({
                 success: true,
@@ -951,6 +1015,7 @@ export default class BadacoController {
 
             const contactId = await BadacoModel.createContact(transaction, data);
             await transaction.commit();
+            invalidateBadacoCache('contact');
 
             res.status(201).json({
                 success: true,

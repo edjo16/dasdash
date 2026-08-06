@@ -41,4 +41,20 @@ router.post('/api/tools/cards/contacts', requireAuth, async (req, res) => {
   await CardsController.createContacts(sqlConfig, req, res);
 });
 
+// API: archiva la imagen de la tarjeta contra un contacto ya creado
+// (alta hecha desde el formulario completo de BADACO).
+router.post('/api/tools/cards/files', requireAuth, async (req, res) => {
+  await CardsController.attachFiles(sqlConfig, req, res);
+});
+
+// API: imagen archivada de una tarjeta.
+router.get('/api/tools/cards/files/:id', requireAuth, async (req, res) => {
+  await CardsController.getFile(sqlConfig, req, res);
+});
+
+// API: imágenes archivadas de un contacto.
+router.get('/api/tools/cards/contacts/:id/files', requireAuth, async (req, res) => {
+  await CardsController.listContactFiles(sqlConfig, req, res);
+});
+
 export default router;

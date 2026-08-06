@@ -3,198 +3,254 @@ import sql from 'mssql';
 export default class BadacoModel {
     constructor() { }
 
+    /**
+     * Separador con el que se concatenan los colaboradores asignados dentro
+     * de la consulta (STRING_AGG) para deshacerlos en JS. Se elige un
+     * carácter que no puede aparecer en un código de usuario.
+     */
+    static ASSIGNEE_SEPARATOR = '|';
+
     // ==================== CONTACTOS ====================
 
     /**
-     * Get all contacts with filters and pagination
+     * Traduce los filtros de la lista a una cláusula WHERE parametrizada.
+     *
+     * Devuelve también QUÉ tablas necesita el filtro (`needs`): la consulta
+     * de paginación sólo une lo imprescindible para filtrar, y deja los
+     * catálogos decorativos para el segundo paso, cuando ya sólo quedan las
+     * filas de la página. Ver `getAllContacts`.
      */
-    static async getAllContacts(transaction, filters = {}, limit = 100, offset = 0) {
-        const request = new sql.Request(transaction);
-        let whereClause = 'WHERE 1=1';
+    static _buildContactFilters(request, filters = {}) {
+        const conditions = ['1 = 1'];
+        const needs = { company: false, companyCountry: false };
 
-        // Search filter
         if (filters.search) {
-            whereClause += ` AND (
-                c.name LIKE @search OR 
-                c.email LIKE @search OR 
+            conditions.push(`(
+                c.name LIKE @search OR
+                c.email LIKE @search OR
                 c.job_title LIKE @search OR
                 comp.nombre LIKE @search
-            )`;
-            request.input('search', sql.VarChar, `%${filters.search}%`);
+            )`);
+            request.input('search', sql.NVarChar(200), `%${filters.search}%`);
+            needs.company = true;   // la búsqueda mira también el nombre de la empresa
         }
 
-        // Company filter
         if (filters.bmc_id) {
-            whereClause += ` AND c.bmc_id = @bmc_id`;
+            conditions.push('c.bmc_id = @bmc_id');
             request.input('bmc_id', sql.Int, filters.bmc_id);
         }
 
-        // Job Level filter
         if (filters.bmjl_id) {
-            whereClause += ` AND c.bmjl_id = @bmjl_id`;
+            conditions.push('c.bmjl_id = @bmjl_id');
             request.input('bmjl_id', sql.Int, filters.bmjl_id);
         }
 
-        // Country filter
         if (filters.country) {
-            whereClause += ` AND c.country = @country`;
-            request.input('country', sql.VarChar, filters.country);
+            conditions.push('c.country = @country');
+            request.input('country', sql.VarChar(10), filters.country);
         }
 
-        // Relationship filter
         if (filters.bmrl_id) {
-            whereClause += ` AND c.contact_rl_id = @bmrl_id`;
+            conditions.push('c.contact_rl_id = @bmrl_id');
             request.input('bmrl_id', sql.Int, filters.bmrl_id);
         }
 
-        // Job title filter (specific text match, independent of general search)
         if (filters.job_title) {
-            whereClause += ` AND c.job_title LIKE @job_title`;
-            request.input('job_title', sql.VarChar, `%${filters.job_title}%`);
+            conditions.push('c.job_title LIKE @job_title');
+            request.input('job_title', sql.NVarChar(200), `%${filters.job_title}%`);
         }
 
-        // Event filter
         if (filters.event) {
-            whereClause += ` AND c.event = @event`;
+            conditions.push('c.event = @event');
             request.input('event', sql.Int, filters.event);
         }
 
-        // Region filter (continent of the company's country, as in the Excel export)
+        // Región = continente del país de la empresa (igual que en el Excel)
         if (filters.region) {
-            whereClause += ` AND spm.xnombre_continente_ingles = @region`;
-            request.input('region', sql.VarChar, filters.region);
+            conditions.push('spm.xnombre_continente_ingles = @region');
+            request.input('region', sql.VarChar(100), filters.region);
+            needs.company = true;
+            needs.companyCountry = true;
         }
 
+        return { whereClause: conditions.join(' AND '), needs };
+    }
+
+    /**
+     * Contactos de la lista, con filtros y paginación.
+     *
+     * Estrategia (la clave para que escale): la consulta va en dos pasos
+     * dentro de una sola ida al servidor.
+     *
+     *   1. CTE `page`: filtra, ordena y pagina tocando SÓLO
+     *      `badaco_contactos` (más `badaco_mcompany`/`m_pais` si el filtro
+     *      los necesita) y devuelve nada más que los `contact_id` de la
+     *      página. Es lo único que crece con el tamaño de la tabla, y con
+     *      los índices de `sql/badaco_performance.sql` se resuelve con
+     *      seeks. `COUNT(*) OVER ()` trae de paso el total de filas
+     *      filtradas, así que no hace falta una segunda consulta de conteo.
+     *
+     *   2. La consulta externa une los catálogos y agrega los colaboradores
+     *      asignados SÓLO para esas filas (15 por defecto). Antes esto se
+     *      hacía sobre todo el conjunto filtrado, y encima con una consulta
+     *      extra por contacto (N+1: 15 filas = 16 idas al servidor; el
+     *      Excel con 100.000 contactos = 100.001).
+     *
+     * @returns {Promise<{rows: Array, total: number}>}
+     */
+    static async getAllContacts(transaction, filters = {}, limit = 100, offset = 0) {
+        const request = new sql.Request(transaction);
+        const { whereClause, needs } = BadacoModel._buildContactFilters(request, filters);
+
+        const pageJoins = [
+            needs.company ? 'LEFT JOIN badaco_mcompany AS comp ON c.bmc_id = comp.bmc_id' : '',
+            needs.companyCountry ? 'LEFT JOIN m_pais AS spm ON spm.cpais = comp.pais' : ''
+        ].filter(Boolean).join('\n            ');
+
         const query = `
-        SELECT
-    c.contact_id,
-    c.bmc_id,
-    c.email,
-    c.name,
-    c.job_title,
-    c.bmjl_id,
-    c.address,
-    c.phone_number,
-    c.event,
-    c.fingreso,
-    c.uingreso,
-    c.contact_rl_id,
-    c.fmodificado,
-    c.umodificado,
-    comp.nombre AS company_name,
-    jl.name     AS job_level_name,
-    br.NAME     AS relationship,
-    spc.cpais               AS contact_country_code,
-    spc.xnombre_pais_ingles AS contact_country_name,
-
-    spm.cpais               AS company_country_code,
-    spm.xnombre_pais_ingles AS company_country_name,
-    spm.xnombre_continente_ingles AS company_region
-
-FROM badaco_contactos AS c
-LEFT JOIN badaco_mcompany  AS comp ON c.bmc_id = comp.bmc_id
-LEFT JOIN badaco_mjoblevel AS jl   ON c.bmjl_id = jl.bmjl_id
-LEFT JOIN badaco_mrelationship AS br on c.contact_rl_id = br.bmrl_id
-LEFT JOIN m_pais        AS spc  ON spc.cpais = c.country
-LEFT JOIN m_pais        AS spm  ON spm.cpais = comp.pais
-LEFT JOIN (SELECT contact_id, STRING_AGG(contact, ', ') AS contactos
-FROM badaco_activere_contactos
-GROUP BY contact_id) bc ON bc.contact_id = c.contact_id
-${whereClause}
-ORDER BY c.contact_id ASC
-OFFSET @offset ROWS
-FETCH NEXT @limit ROWS ONLY;
+            WITH page AS (
+                SELECT c.contact_id, COUNT(*) OVER () AS total_rows
+                FROM badaco_contactos AS c
+                ${pageJoins}
+                WHERE ${whereClause}
+                ORDER BY c.contact_id ASC
+                OFFSET @offset ROWS
+                FETCH NEXT @limit ROWS ONLY
+            )
+            SELECT
+                c.contact_id,
+                c.bmc_id,
+                c.email,
+                c.name,
+                c.job_title,
+                c.bmjl_id,
+                c.address,
+                c.phone_number,
+                c.event,
+                c.fingreso,
+                c.uingreso,
+                c.contact_rl_id,
+                c.fmodificado,
+                c.umodificado,
+                comp.nombre AS company_name,
+                jl.name     AS job_level_name,
+                br.name     AS relationship,
+                spc.cpais               AS contact_country_code,
+                spc.xnombre_pais_ingles AS contact_country_name,
+                spm.cpais               AS company_country_code,
+                spm.xnombre_pais_ingles AS company_country_name,
+                spm.xnombre_continente_ingles AS company_region,
+                asoc.contactos_asociados,
+                p.total_rows
+            FROM page AS p
+            INNER JOIN badaco_contactos AS c ON c.contact_id = p.contact_id
+            LEFT JOIN badaco_mcompany      AS comp ON c.bmc_id = comp.bmc_id
+            LEFT JOIN badaco_mjoblevel     AS jl   ON c.bmjl_id = jl.bmjl_id
+            LEFT JOIN badaco_mrelationship AS br   ON c.contact_rl_id = br.bmrl_id
+            LEFT JOIN m_pais AS spc ON spc.cpais = c.country
+            LEFT JOIN m_pais AS spm ON spm.cpais = comp.pais
+            OUTER APPLY (
+                SELECT STRING_AGG(CAST(bac.contact AS NVARCHAR(MAX)), '${BadacoModel.ASSIGNEE_SEPARATOR}') AS contactos_asociados
+                FROM badaco_activere_contactos AS bac
+                WHERE bac.contact_id = c.contact_id
+            ) AS asoc
+            ORDER BY c.contact_id ASC;
         `;
 
         request.input('limit', sql.Int, limit);
         request.input('offset', sql.Int, offset);
 
         const { recordset } = await request.query(query);
-        // Obtener contactos asociados para cada contacto
-        for (let contact of recordset) {
-            const activeReq = new sql.Request(transaction);
-            const activeQuery = `SELECT bac.contact_id, bac.contact FROM approvals.dbo.badaco_activere_contactos bac WHERE bac.contact_id = @contact_id`;
-            activeReq.input('contact_id', sql.Int, contact.contact_id);
-            const { recordset: asociados } = await activeReq.query(activeQuery);
-            contact.contactos_asociados = asociados.map(a => a.contact);
-        }
-        return recordset;
+
+        const rows = recordset.map((row) => {
+            const { total_rows, contactos_asociados, ...contact } = row;
+            contact.contactos_asociados = contactos_asociados
+                ? String(contactos_asociados).split(BadacoModel.ASSIGNEE_SEPARATOR)
+                : [];
+            return contact;
+        });
+
+        return { rows, total: recordset.length ? recordset[0].total_rows : 0 };
     }
 
     /**
-     * Lightweight contact list for pickers (no pagination)
+     * Recorre TODOS los contactos que cumplen el filtro en lotes, sin
+     * cargarlos de golpe en memoria. Lo usa la exportación a Excel.
+     *
+     * @param {number} batchSize filas por ida al servidor
+     * @param {(rows: Array, info: {total: number, fetched: number}) => Promise<void>} onBatch
+     * @returns {Promise<number>} filas procesadas
      */
-    static async getContactsForPicker(transaction) {
-        const { recordset } = await new sql.Request(transaction)
-            .query(`SELECT c.contact_id, c.name, c.job_title,
-                comp.nombre as company_name
-                FROM badaco_contactos c
-                LEFT JOIN badaco_mcompany comp ON c.bmc_id = comp.bmc_id
-                ORDER BY c.name ASC`);
+    static async forEachContactBatch(transaction, filters, batchSize, onBatch) {
+        const size = Math.max(1, Math.min(Number(batchSize) || 2000, 10000));
+        let offset = 0;
+        let total = 0;
+
+        for (;;) {
+            const { rows, total: filtered } = await BadacoModel.getAllContacts(transaction, filters, size, offset);
+            if (offset === 0) total = filtered;
+            if (!rows.length) break;
+
+            offset += rows.length;
+            await onBatch(rows, { total, fetched: offset });
+
+            if (rows.length < size || offset >= total) break;
+        }
+
+        return offset;
+    }
+
+    /**
+     * Lista ligera de contactos para los selectores.
+     * Sin argumentos mantiene el comportamiento histórico (todos, ordenados
+     * por nombre); con `search`/`limit` sólo devuelve lo que se busca, que es
+     * lo que hay que usar en pantallas nuevas.
+     */
+    static async getContactsForPicker(transaction, options = {}) {
+        const request = new sql.Request(transaction);
+        const conditions = [];
+
+        if (options.search) {
+            conditions.push('(c.name LIKE @search OR comp.nombre LIKE @search)');
+            request.input('search', sql.NVarChar(200), `%${options.search}%`);
+        }
+
+        const limit = options.limit ? Math.max(1, Math.min(Number(options.limit), 5000)) : null;
+        const top = limit ? `TOP (${limit})` : '';
+        const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+
+        const { recordset } = await request.query(`
+            SELECT ${top} c.contact_id, c.name, c.job_title, comp.nombre AS company_name
+            FROM badaco_contactos AS c
+            LEFT JOIN badaco_mcompany AS comp ON c.bmc_id = comp.bmc_id
+            ${where}
+            ORDER BY c.name ASC
+        `);
         return recordset;
     }
 
     /**
-     * Get total count of contacts
+     * Total de contactos que cumplen el filtro.
+     *
+     * La lista ya NO lo usa (getAllContacts devuelve el total en la misma
+     * consulta con COUNT(*) OVER()); queda como respaldo para cuando se pide
+     * una pagina vacia mas alla del final y para llamadas externas.
      */
     static async getContactsCount(transaction, filters = {}) {
         const request = new sql.Request(transaction);
-        let whereClause = 'WHERE 1=1';
+        const { whereClause, needs } = BadacoModel._buildContactFilters(request, filters);
 
-        if (filters.search) {
-            whereClause += ` AND (
-                c.name LIKE @search OR 
-                c.email LIKE @search OR 
-                c.job_title LIKE @search OR
-                comp.nombre LIKE @search
-            )`;
-            request.input('search', sql.VarChar, `%${filters.search}%`);
-        }
+        const joins = [
+            needs.company ? 'LEFT JOIN badaco_mcompany AS comp ON c.bmc_id = comp.bmc_id' : '',
+            needs.companyCountry ? 'LEFT JOIN m_pais AS spm ON spm.cpais = comp.pais' : ''
+        ].filter(Boolean).join(String.fromCharCode(10) + '            ');
 
-        if (filters.bmc_id) {
-            whereClause += ` AND c.bmc_id = @bmc_id`;
-            request.input('bmc_id', sql.Int, filters.bmc_id);
-        }
-
-        if (filters.bmjl_id) {
-            whereClause += ` AND c.bmjl_id = @bmjl_id`;
-            request.input('bmjl_id', sql.Int, filters.bmjl_id);
-        }
-
-        if (filters.country) {
-            whereClause += ` AND c.country = @country`;
-            request.input('country', sql.VarChar, filters.country);
-        }
-
-        if (filters.bmrl_id) {
-            whereClause += ` AND c.contact_rl_id = @bmrl_id`;
-            request.input('bmrl_id', sql.Int, filters.bmrl_id);
-        }
-
-        if (filters.job_title) {
-            whereClause += ` AND c.job_title LIKE @job_title`;
-            request.input('job_title', sql.VarChar, `%${filters.job_title}%`);
-        }
-
-        if (filters.event) {
-            whereClause += ` AND c.event = @event`;
-            request.input('event', sql.Int, filters.event);
-        }
-
-        if (filters.region) {
-            whereClause += ` AND spm.xnombre_continente_ingles = @region`;
-            request.input('region', sql.VarChar, filters.region);
-        }
-
-        const query = `
-            SELECT COUNT(*) as total
-            FROM badaco_contactos c
-            LEFT JOIN badaco_mcompany comp ON c.bmc_id = comp.bmc_id
-            LEFT JOIN m_pais spm ON spm.cpais = comp.pais
-            ${whereClause}
-        `;
-
-        const { recordset } = await request.query(query);
+        const { recordset } = await request.query(`
+            SELECT COUNT(*) AS total
+            FROM badaco_contactos AS c
+            ${joins}
+            WHERE ${whereClause}
+        `);
         return recordset[0].total;
     }
 
@@ -285,11 +341,15 @@ FETCH NEXT @limit ROWS ONLY;
             return '@email' + i;
         });
 
+        // Sin LOWER() sobre la columna: aplicar una función al campo impide
+        // usar IX_badaco_contactos_email y fuerza recorrer la tabla entera.
+        // La comparación sigue siendo insensible a mayúsculas porque esa es
+        // la intercalación (collation) por defecto del servidor.
         const query = `
             SELECT c.contact_id, c.email, c.name, comp.nombre AS company_name
             FROM badaco_contactos AS c
             LEFT JOIN badaco_mcompany AS comp ON c.bmc_id = comp.bmc_id
-            WHERE LOWER(c.email) IN (${params.join(', ')})
+            WHERE c.email IN (${params.join(', ')})
         `;
 
         const { recordset } = await request.query(query);
@@ -416,6 +476,23 @@ FETCH NEXT @limit ROWS ONLY;
             ORDER BY nombre ASC
         `;
         const { recordset } = await request.query(query);
+        return recordset;
+    }
+
+    /**
+     * Empresas en versión mínima (id + nombre + país) para los desplegables
+     * y los emparejados. La lista completa trae ocho columnas por fila y se
+     * serializa entera en el HTML de la página; para elegir en un combo sólo
+     * hacen falta éstas.
+     */
+    static async getCompanyOptions(transaction) {
+        const request = new sql.Request(transaction);
+        const { recordset } = await request.query(`
+            SELECT bc.bmc_id, bc.nombre, bc.pais, mpais.xnombre_pais_ingles
+            FROM badaco_mcompany AS bc
+            LEFT JOIN m_pais AS mpais ON mpais.cpais = bc.pais
+            ORDER BY bc.nombre ASC
+        `);
         return recordset;
     }
 

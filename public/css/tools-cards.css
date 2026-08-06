@@ -153,13 +153,38 @@
 }
 
 .pc-table__file {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
   max-width: 180px;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
   color: var(--text-muted);
   font-size: 0.75rem;
   padding: 0.25rem 0.6rem;
+}
+
+/* Nombre del archivo: se recorta para dejar sitio a la imagen archivada. */
+.pc-file__name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Acceso a la foto ya guardada en //<DB_SERVER>/BADACO/<id>. */
+.pc-file__link {
+  flex: none;
+  color: var(--bs-primary);
+  text-decoration: none;
+}
+
+.pc-file__link:hover {
+  opacity: 0.75;
+}
+
+.pc-file__warn {
+  flex: none;
+  color: var(--bs-warning);
 }
 
 .pc-table__input {

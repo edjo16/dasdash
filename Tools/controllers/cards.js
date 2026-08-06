@@ -17,8 +17,18 @@ import Rules from '../../USERS/rule/DevTeam.js';
 import USERModel from '../../USERS/model/USER.js';
 import BadacoModel from '../../mercadeo/model/BadacoModel.js';
 import EventsModel from '../../mercadeo/model/events.js';
+import CardFilesModel from '../models/card-files.js';
+import { badacoCatalogs, invalidateBadacoCache } from '../../mercadeo/services/badaco-cache.js';
 import { extractCard, CARD_FIELDS, CARD_COLUMNS } from '../services/card-service.js';
 import { matchCardToBadaco } from '../services/badaco-match.js';
+import {
+  stageCardImage,
+  readStagedFile,
+  discardStaged,
+  storeCardFile,
+  readStoredFile,
+  cardsRootPath
+} from '../services/card-storage.js';
 
 const MAX_FILE_BYTES = Number(process.env.TOOLS_MAX_FILE_BYTES || 25 * 1024 * 1024); // 25 MB
 const IMAGE_MIME = new Set(['image/png', 'image/jpeg', 'image/jpg', 'image/webp']);
@@ -29,29 +39,26 @@ const MAX_BATCH_CONTACTS = Number(process.env.TOOLS_MAX_BATCH_CONTACTS || 200);
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
 /**
- * Caché de catálogos para el emparejado. Un lote puede traer 40 tarjetas y
- * cada una dispara una petición: sin caché serían 120 consultas.
+ * Catálogos para el emparejado. Un lote puede traer 40 tarjetas y cada una
+ * dispara una petición: sin caché serían 120 consultas.
+ *
+ * Se usa la caché compartida de BADACO (`mercadeo/services/badaco-cache.js`)
+ * en vez de una propia, para que una empresa creada desde aquí aparezca al
+ * instante en la lista de contactos y al revés.
  */
-const CATALOG_TTL_MS = Number(process.env.TOOLS_CATALOG_TTL_MS || 5 * 60 * 1000);
-let catalogCache = { at: 0, data: null };
-
 async function loadMatchCatalogs(connection) {
-  if (catalogCache.data && Date.now() - catalogCache.at < CATALOG_TTL_MS) {
-    return catalogCache.data;
-  }
   const pool = await sql.connect(connection);
   const [companies, jobLevels, countries] = await Promise.all([
-    BadacoModel.getAllCompanies(pool),
-    BadacoModel.getAllJobLevels(pool),
-    USERModel.getCountries(pool)
+    badacoCatalogs.companies(pool),
+    badacoCatalogs.jobLevels(pool),
+    badacoCatalogs.countries(pool)
   ]);
-  catalogCache = { at: Date.now(), data: { companies, jobLevels, countries } };
-  return catalogCache.data;
+  return { companies, jobLevels, countries };
 }
 
 /** Invalida la caché (una empresa nueva debe poder emparejarse enseguida). */
 export function invalidateCardCatalogs() {
-  catalogCache = { at: 0, data: null };
+  invalidateBadacoCache('company', 'jobLevel', 'relationship');
 }
 
 /** Recorta un valor de texto al ancho de su columna en `badaco_contactos`. */
@@ -76,14 +83,82 @@ function validateImage(file) {
   return null;
 }
 
+/**
+ * Archiva las imágenes aparcadas de una tarjeta y las deja relacionadas con el
+ * contacto recién creado.
+ *
+ * El orden importa: primero se inserta la fila en `card_files` (su id es el
+ * nombre de la carpeta) y después se escribe el archivo. Si el disco falla se
+ * borra la fila, para no dejar registros que apunten a nada.
+ *
+ * Nunca lanza: un contacto ya creado no se deshace porque su foto no se pudo
+ * guardar. Lo que no se pudo archivar vuelve como `warning`.
+ *
+ * @param {*} pool
+ * @param {number} contactId
+ * @param {Array<{side: string, token: string}>} images
+ * @param {string} userId
+ * @returns {Promise<{files: Array, warning: string|null}>}
+ */
+export async function saveContactCardImages(pool, contactId, images, userId) {
+  const files = [];
+  const problems = [];
+
+  for (const image of images || []) {
+    if (!image?.token) continue;
+
+    let cfId = null;
+    try {
+      const staged = await readStagedFile(image.token);
+      if (!staged) {
+        problems.push(`the ${image.side} image is no longer available on the server`);
+        continue;
+      }
+
+      cfId = await CardFilesModel.create(pool, {
+        contact_id: contactId,
+        side: image.side,
+        file_name: staged.fileName,
+        mime_type: staged.mimeType,
+        file_size: staged.size,
+        uingreso: userId
+      });
+
+      const fullPath = await storeCardFile(cfId, staged.fileName, staged.buffer);
+      await CardFilesModel.markStored(pool, cfId, fullPath);
+      await discardStaged(image.token);
+
+      files.push({
+        cf_id: cfId,
+        side: image.side,
+        file_name: staged.fileName,
+        url: `/api/tools/cards/files/${cfId}`
+      });
+    } catch (error) {
+      console.error('[Tools] cards saveContactCardImages error:', error);
+      if (cfId) {
+        try { await CardFilesModel.remove(pool, cfId); } catch (_) { /* ya no hay nada que limpiar */ }
+      }
+      problems.push(`the ${image.side} image could not be archived (${error.message || 'unknown error'})`);
+    }
+  }
+
+  return {
+    files,
+    warning: problems.length ? `The contact was created, but ${problems.join(' and ')}.` : null
+  };
+}
+
 export default class CardsController {
   /** GET /tools/cards — renderiza la página de la herramienta. */
   static async getCardsPage(connection, req, res) {
     const UserID = req.session?.userID;
     try {
       const pool = await sql.connect(connection);
-      const usuario = await USERModel.obtenerDatosUsuario(pool, UserID);
-      const devteam = await Rules.validateTeam(UserID, req.session?.iddevteam);
+      const [usuario, devteam] = await Promise.all([
+        USERModel.obtenerDatosUsuario(pool, UserID),
+        Rules.validateTeam(UserID, req.session?.iddevteam)
+      ]);
       const grupousuarios = devteam ? await USERModel.findDevTeam(pool, UserID) : [];
 
       // Solo se cargan los catálogos de BADACO para usuarios con acceso al módulo
@@ -96,14 +171,15 @@ export default class CardsController {
 
       let companies = [], jobLevels = [], relationships = [], allCountries = [], events = [], grupousuarios_active = [];
       if (badacoEnabled) {
-        [companies, jobLevels, relationships, allCountries, grupousuarios_active] = await Promise.all([
-          BadacoModel.getAllCompanies(pool),
-          BadacoModel.getAllJobLevels(pool),
-          BadacoModel.getAllRelationships(pool),
-          USERModel.getCountries(pool),
-          USERModel.getAllUserActive(pool, usuario.compania)
+        let eventsResult;
+        [companies, jobLevels, relationships, allCountries, grupousuarios_active, eventsResult] = await Promise.all([
+          badacoCatalogs.companies(pool),
+          badacoCatalogs.jobLevels(pool),
+          badacoCatalogs.relationships(pool),
+          badacoCatalogs.countries(pool),
+          USERModel.getAllUserActive(pool, usuario.compania),
+          EventsModel.readforms(pool, 100, 0, devteam, UserID, null, null, null)
         ]);
-        const eventsResult = await EventsModel.readforms(pool, 100, 0, devteam, UserID, null, null, null);
         events = eventsResult.recordset || [];
       }
 
@@ -182,13 +258,26 @@ export default class CardsController {
         }
       }
 
+      // La imagen se aparca aquí y el alta del contacto la mueve a
+      // //<DB_SERVER>/BADACO/<id>. Sólo tiene sentido si el usuario puede
+      // crear contactos, y si el recurso compartido falla se sigue adelante
+      // sin archivarla (`image` viaja como null).
+      let image = null;
+      let backImage = null;
+      if (req.session?.toolsBadacoEnabled) {
+        image = await stageCardImage(front.data, front.name);
+        if (back) backImage = await stageCardImage(back.data, back.name);
+      }
+
       return res.json({
         result: 1,
         data: extraction.data,
         match,
         raw: extraction.raw,
         fileName: front.name,
-        backFileName: back ? back.name : null
+        backFileName: back ? back.name : null,
+        image,
+        backImage
       });
     } catch (error) {
       console.error('[Tools] cards extract error:', error);
@@ -263,6 +352,13 @@ export default class CardsController {
         label: text(raw?.label) || `Card ${position + 1}`,
         contactId: null,
         error: null,
+        // Imágenes aparcadas en /extract que hay que archivar si el alta sale bien.
+        images: [
+          { side: 'front', token: text(raw?.image_token) },
+          { side: 'back', token: text(raw?.back_image_token) }
+        ].filter((image) => image.token),
+        files: [],
+        fileWarning: null,
         data: {
           bmc_id: toInt(raw?.bmc_id),
           name: text(raw?.name, 100),
@@ -364,6 +460,12 @@ export default class CardsController {
               uingreso: userId
             });
             await transaction.commit();
+
+            // Fuera de la transacción: el archivo se escribe en el servidor de
+            // archivos, y un problema ahí no debe deshacer el contacto.
+            const saved = await saveContactCardImages(pool, item.contactId, item.images, userId);
+            item.files = saved.files;
+            item.fileWarning = saved.warning;
           } catch (error) {
             try { await transaction.rollback(); } catch (_) { /* la transacción ya murió */ }
             console.error('[Tools] cards createContacts insert error:', error);
@@ -376,6 +478,12 @@ export default class CardsController {
         }
       }
 
+      // Un alta puede estrenar un país: el filtro de la lista de BADACO se
+      // arma con los países que usan los contactos.
+      if (!dryRun && items.some((item) => item.contactId)) {
+        invalidateBadacoCache('contact');
+      }
+
       const results = items.map((item) => ({
         ref: item.ref,
         label: item.label,
@@ -384,7 +492,9 @@ export default class CardsController {
         code: item.error ? item.error.code : null,
         fields: item.error ? item.error.fields : [],
         message: item.error ? item.error.message : null,
-        existing_contact_id: item.error ? (item.error.contactId || null) : null
+        existing_contact_id: item.error ? (item.error.contactId || null) : null,
+        files: item.files,
+        file_warning: item.fileWarning
       }));
 
       return res.json({
@@ -398,6 +508,115 @@ export default class CardsController {
     } catch (error) {
       console.error('[Tools] cards createContacts error:', error);
       return res.status(500).json({ result: 0, error: 'Failed to send the contacts to Badaco' });
+    }
+  }
+
+  /**
+   * POST /api/tools/cards/files — archiva la imagen de una tarjeta contra un
+   * contacto que ya existe.
+   *
+   * Lo usa la acción "abrir el formulario completo" de la tabla: ese alta la
+   * hace el modal de BADACO, así que la imagen se adjunta después, cuando el
+   * modal devuelve el `contact_id`.
+   *
+   * Body: `{ contact_id, image_token, back_image_token }`.
+   */
+  static async attachFiles(connection, req, res) {
+    if (!req.session?.toolsBadacoEnabled) {
+      return res.status(403).json({ result: 0, error: 'Badaco module is not enabled for this user' });
+    }
+
+    const contactId = toInt(req.body?.contact_id);
+    if (!contactId) {
+      return res.status(400).json({ result: 0, error: 'A valid contact_id is required' });
+    }
+
+    const images = [
+      { side: 'front', token: text(req.body?.image_token) },
+      { side: 'back', token: text(req.body?.back_image_token) }
+    ].filter((image) => image.token);
+
+    if (!images.length) {
+      return res.status(400).json({ result: 0, error: 'No card image was sent' });
+    }
+
+    try {
+      const pool = await sql.connect(connection);
+      const saved = await saveContactCardImages(pool, contactId, images, req.session?.userID);
+      return res.json({ result: 1, files: saved.files, warning: saved.warning });
+    } catch (error) {
+      console.error('[Tools] cards attachFiles error:', error);
+      return res.status(500).json({ result: 0, error: 'Failed to archive the card image' });
+    }
+  }
+
+  /**
+   * GET /api/tools/cards/files/:id — devuelve la imagen archivada.
+   * El archivo vive fuera de /public, así que se sirve desde aquí (con sesión).
+   */
+  static async getFile(connection, req, res) {
+    if (!req.session?.toolsBadacoEnabled) {
+      return res.status(403).json({ result: 0, error: 'Badaco module is not enabled for this user' });
+    }
+
+    const cfId = toInt(req.params?.id);
+    if (!cfId) {
+      return res.status(400).json({ result: 0, error: 'Invalid file id' });
+    }
+
+    try {
+      const pool = await sql.connect(connection);
+      const record = await CardFilesModel.getById(pool, cfId);
+      if (!record) {
+        return res.status(404).json({ result: 0, error: 'Card image not found' });
+      }
+
+      const file = await readStoredFile(record);
+      if (!file) {
+        return res.status(404).json({ result: 0, error: 'The card image is no longer on the file server' });
+      }
+
+      res.setHeader('Content-Type', file.mimeType);
+      res.setHeader('Content-Disposition', `inline; filename="${String(file.fileName).replace(/"/g, '')}"`);
+      return res.send(file.buffer);
+    } catch (error) {
+      console.error('[Tools] cards getFile error:', error);
+      return res.status(500).json({ result: 0, error: 'Failed to read the card image' });
+    }
+  }
+
+  /**
+   * GET /api/tools/cards/contacts/:id/files — imágenes archivadas de un
+   * contacto (útil para la ficha de BADACO y para comprobar el archivado).
+   */
+  static async listContactFiles(connection, req, res) {
+    if (!req.session?.toolsBadacoEnabled) {
+      return res.status(403).json({ result: 0, error: 'Badaco module is not enabled for this user' });
+    }
+
+    const contactId = toInt(req.params?.id);
+    if (!contactId) {
+      return res.status(400).json({ result: 0, error: 'Invalid contact id' });
+    }
+
+    try {
+      const pool = await sql.connect(connection);
+      const files = await CardFilesModel.listByContact(pool, contactId);
+      return res.json({
+        result: 1,
+        root: cardsRootPath(),
+        files: files.map((file) => ({
+          cf_id: file.cf_id,
+          side: file.side,
+          file_name: file.file_name,
+          file_path: file.file_path,
+          status: file.status,
+          url: `/api/tools/cards/files/${file.cf_id}`
+        }))
+      });
+    } catch (error) {
+      console.error('[Tools] cards listContactFiles error:', error);
+      return res.status(500).json({ result: 0, error: 'Failed to list the card images' });
     }
   }
 }

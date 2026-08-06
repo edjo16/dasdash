@@ -306,7 +306,7 @@
         var row;
         try {
           var result = await extractCard(card);
-          row = makeRow(fileLabel, result.data, result.match);
+          row = makeRow(fileLabel, result.data, result.match, result.images);
         } catch (err) {
           console.error(err);
           failures++;
@@ -348,11 +348,20 @@
     if (!res.ok || data.result !== 1) {
       throw new Error(data.error || 'Extraction failed (' + res.status + ')');
     }
-    return { data: data.data || {}, match: data.match || null };
+    // El servidor deja la imagen aparcada y devuelve un token: el alta del
+    // contacto lo usa para archivarla junto a la ficha en Badaco.
+    return {
+      data: data.data || {},
+      match: data.match || null,
+      images: {
+        front: (data.image && data.image.token) || null,
+        back: (data.backImage && data.backImage.token) || null
+      }
+    };
   }
 
   /** Construye una fila del modelo a partir de la respuesta del servidor. */
-  function makeRow(file, data, match) {
+  function makeRow(file, data, match, images) {
     var row = {
       id: nextRowId++,
       file: file,
@@ -365,6 +374,9 @@
       status: 'draft', // draft | ready | error | saving | saved
       issue: null,     // { code, message, fields }
       contactId: null,
+      images: images || { front: null, back: null }, // tokens de las imágenes aparcadas
+      files: [],       // imágenes ya archivadas (las devuelve el alta)
+      fileWarning: null,
       el: null
     };
     DATA_KEYS.forEach(function (key) { row.data[key] = data[key] || ''; });
@@ -395,8 +407,8 @@
 
     var tdFile = document.createElement('td');
     tdFile.className = 'pc-table__file';
-    tdFile.textContent = row.file || '';
-    tdFile.title = row.file || '';
+    row.fileCell = tdFile;
+    renderFileCell(row);
     tr.appendChild(tdFile);
 
     COLUMNS.forEach(function (column) {
@@ -446,6 +458,41 @@
 
     els.tableBody.appendChild(tr);
     updateSummary();
+  }
+
+  /**
+   * Celda "File": el nombre de la imagen y, una vez creado el contacto, el
+   * enlace a la foto ya archivada en Badaco (o el aviso de que no se pudo).
+   */
+  function renderFileCell(row) {
+    var cell = row.fileCell;
+    if (!cell) return;
+    cell.innerHTML = '';
+    cell.title = row.file || '';
+
+    var name = document.createElement('span');
+    name.className = 'pc-file__name';
+    name.textContent = row.file || '';
+    cell.appendChild(name);
+
+    (row.files || []).forEach(function (file) {
+      var link = document.createElement('a');
+      link.className = 'pc-file__link';
+      link.href = file.url;
+      link.target = '_blank';
+      link.rel = 'noopener';
+      link.title = 'Card image saved in Badaco (' + file.side + '): ' + file.file_name;
+      link.innerHTML = '<i class="fas fa-image"></i>';
+      cell.appendChild(link);
+    });
+
+    if (row.fileWarning) {
+      var warn = document.createElement('span');
+      warn.className = 'pc-file__warn';
+      warn.title = row.fileWarning;
+      warn.innerHTML = '<i class="fas fa-triangle-exclamation"></i>';
+      cell.appendChild(warn);
+    }
   }
 
   function textInput(row, key) {
@@ -740,7 +787,41 @@
     state.pendingContact = null;
     if (!row) return;
     markSaved(row, contact && contact.contact_id);
+    // El alta la hizo el formulario, así que la imagen se adjunta ahora.
+    attachCardImages(row, contact && contact.contact_id);
   };
+
+  /**
+   * Archiva la imagen de la tarjeta contra un contacto creado desde el
+   * formulario completo. El contacto ya existe: si esto falla sólo se avisa en
+   * la celda del archivo.
+   */
+  async function attachCardImages(row, contactId) {
+    var images = row.images || {};
+    if (!contactId || (!images.front && !images.back)) return;
+
+    try {
+      var res = await fetch('/api/tools/cards/files', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contact_id: contactId,
+          image_token: images.front,
+          back_image_token: images.back
+        })
+      });
+      var data = await res.json().catch(function () { return {}; });
+      if (!res.ok || data.result !== 1) throw new Error(data.error || 'Could not archive the card image');
+
+      row.files = data.files || [];
+      row.fileWarning = data.warning || null;
+    } catch (error) {
+      console.error('attach card image failed', error);
+      row.fileWarning = 'The contact was created, but its card image could not be archived.';
+    }
+    row.images = { front: null, back: null };
+    renderFileCell(row);
+  }
 
   /* ---------------- Alta directa en BADACO ---------------- */
 
@@ -785,7 +866,11 @@
       address: row.data.address,
       bmc_id: row.links.company,
       bmjl_id: row.links.jobLevel,
-      country: row.links.country
+      country: row.links.country,
+      // Tokens de las imágenes aparcadas en /extract: el servidor las archiva
+      // en //<DB_SERVER>/BADACO/<id> sólo si el contacto llega a crearse.
+      image_token: row.images && row.images.front,
+      back_image_token: row.images && row.images.back
     };
   }
 
@@ -885,6 +970,10 @@
       var row = byRef[result.ref];
       if (!row) return;
       if (result.status === 'created') {
+        row.files = result.files || [];
+        row.fileWarning = result.file_warning || null;
+        row.images = { front: null, back: null }; // ya consumidas por el servidor
+        renderFileCell(row);
         markSaved(row, result.contact_id);
       } else if (result.status === 'error') {
         row.contactId = result.existing_contact_id || row.contactId;

@@ -145,8 +145,29 @@ con `score >= 0.80`; por debajo se proponen candidatos y decide el usuario.
 | Método | Ruta | Descripción |
 |---|---|---|
 | GET  | `/tools/cards` | Página de la herramienta (Pug). |
-| POST | `/api/tools/cards/extract` | Multipart: `front` (imagen), `back` (opcional). Devuelve `{ data, match, raw }`. |
+| POST | `/api/tools/cards/extract` | Multipart: `front` (imagen), `back` (opcional). Devuelve `{ data, match, raw, image, backImage }`. |
 | POST | `/api/tools/cards/rematch` | JSON: `{ data, refresh? }`. Re-resuelve las llaves de BADACO sin volver a llamar a la IA. |
+| POST | `/api/tools/cards/contacts` | JSON: `{ contacts: [...], dryRun? }`. Alta en BADACO fila a fila (con `dryRun` sólo valida). |
+| POST | `/api/tools/cards/files` | JSON: `{ contact_id, image_token, back_image_token }`. Archiva la imagen contra un contacto ya creado. |
+| GET  | `/api/tools/cards/files/:id` | Devuelve la imagen archivada (`card_files.cf_id`). |
+| GET  | `/api/tools/cards/contacts/:id/files` | Imágenes archivadas de un contacto. |
+
+### Archivo de la imagen de la tarjeta
+
+La foto con la que se creó el contacto se guarda en el servidor de archivos, no
+en la base de datos:
+
+```
+//<DB_SERVER>/BADACO/<cf_id>/<archivo>      cf_id = card_files.cf_id
+//<DB_SERVER>/BADACO/_staging/<token>/...   copia temporal (TTL 24 h)
+```
+
+`/extract` aparca la imagen y devuelve un `token`; el alta del contacto
+(`/contacts`, o `/files` cuando el alta la hace el modal de BADACO) inserta la
+fila en `card_files` — su id da nombre a la carpeta — y mueve el archivo. Si la
+escritura falla se borra la fila y el contacto **igual queda creado**: el motivo
+vuelve en `file_warning` y la tabla lo muestra en la columna File. Los tokens
+que nunca se convierten en contacto los borra la limpieza de `_staging`.
 
 Todas las rutas están protegidas con `requireAuth`. El emparejado sólo se
 adjunta a usuarios con acceso al módulo BADACO (`Business Developer`,
@@ -157,8 +178,11 @@ adjunta a usuarios con acceso al módulo BADACO (`Business Developer`,
 ```
 Tools/
   controllers/cards.js          Orquestación (render + endpoints + caché de catálogos)
+  models/card-files.js          Tabla card_files (contacto <-> imagen), se autocrea
   services/card-service.js      Visión IA + parseCardData + mergeCardData
   services/badaco-match.js      Emparejado difuso texto -> bmc_id / bmjl_id / cpais
+  services/card-storage.js      Staging y archivo de las imágenes en //<DB_SERVER>/BADACO
+sql/card_files.sql              Script de referencia de la tabla
 views/tools/cards.pug           UI
 public/css/tools-cards.css      Estilos (complementa tools-translator.css)
 public/tools/cards.js           Frontend (subida múltiple, pares frente/dorso,
@@ -174,6 +198,9 @@ public/tools/cards.js           Frontend (subida múltiple, pares frente/dorso,
 | `TOOLS_VISION_JSON` | `1` | `0` desactiva el `format: 'json'` del proveedor (modelos que no lo soportan). |
 | `TOOLS_VISION_TIMEOUT_MS` | `180000` (3 min) | Timeout por imagen. |
 | `TOOLS_CATALOG_TTL_MS` | `300000` (5 min) | Vida de la caché de catálogos usada por el emparejado. |
+| `BADACO_FILES_SERVER` | `DB_SERVER` | Servidor donde se archivan las imágenes (`//<host>/BADACO`). |
+| `BADACO_FILES_ROOT` | `//<BADACO_FILES_SERVER>/BADACO` | Raíz completa, si el recurso compartido no se llama `BADACO`. |
+| `TOOLS_CARD_STAGING_TTL_MS` | `86400000` (24 h) | Vida de una imagen aparcada que nunca llegó a ser contacto. |
 
 > Nota: si `AI_MODEL` no es multimodal, configurar `TOOLS_VISION_MODEL`
 > apuntando a un modelo de visión disponible en el mismo servidor Ollama.
