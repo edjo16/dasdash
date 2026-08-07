@@ -450,6 +450,48 @@ export default class BadacoModel {
         }
         return true;
     }
+    /**
+     * Actualiza un contacto con lo que trae una tarjeta de presentación.
+     *
+     * A diferencia de `updateContact` (el formulario completo), aquí sólo se
+     * tocan los campos que la tarjeta puede aportar: el evento, la relación y
+     * los colaboradores asignados se quedan como estaban, porque la
+     * herramienta de tarjetas no los pregunta y borrarlos sería perder datos.
+     *
+     * Cada campo se escribe con COALESCE: lo que la tarjeta no leyó (llega
+     * null) no pisa el valor que ya había en BADACO. El email no se toca: es
+     * la llave con la que se encontró el contacto.
+     */
+    static async updateContactFromCard(transaction, contactId, data) {
+        const request = new sql.Request(transaction);
+        const query = `
+            UPDATE badaco_contactos SET
+                bmc_id = COALESCE(@bmc_id, bmc_id),
+                name = COALESCE(@name, name),
+                job_title = COALESCE(@job_title, job_title),
+                bmjl_id = COALESCE(@bmjl_id, bmjl_id),
+                country = COALESCE(@country, country),
+                address = COALESCE(@address, address),
+                phone_number = COALESCE(@phone_number, phone_number),
+                fmodificado = GETDATE(),
+                umodificado = @umodificado
+            WHERE contact_id = @contactId
+        `;
+
+        request.input('contactId', sql.Int, contactId);
+        request.input('bmc_id', sql.Int, data.bmc_id || null);
+        request.input('name', sql.VarChar, data.name || null);
+        request.input('job_title', sql.VarChar, data.job_title || null);
+        request.input('bmjl_id', sql.Int, data.bmjl_id || null);
+        request.input('country', sql.VarChar, data.country || null);
+        request.input('address', sql.VarChar, data.address || null);
+        request.input('phone_number', sql.VarChar, data.phone_number || null);
+        request.input('umodificado', sql.VarChar, data.umodificado);
+
+        await request.query(query);
+        return true;
+    }
+
     // ==================== COUNTRIES ====================
         static async getRegions(transaction) {
         const request = new sql.Request(transaction);

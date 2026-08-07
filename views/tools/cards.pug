@@ -8,9 +8,23 @@ block layout-content
         ol.breadcrumb.mb-4
           li.breadcrumb-item.active Upload business card photos, extract the contact data with AI, review it and download it as Excel.
 
-        div.tools-translator
+        //- Barra que devuelve la sección de ingesta cuando está plegada.
+        div#pcUploadBar.pc-uploadbar.d-none
+          button#pcShowUploadBtn.btn.btn-outline-primary.btn-sm(type="button")
+            i.fas.fa-cloud-arrow-up.me-1
+            | Upload cards
+          span.pc-uploadbar__hint The upload panel is hidden so the contacts table can use the full width.
+
+        div#pcLayout.tools-translator.pc-layout
           //- Panel izquierdo: carga y configuración
-          div.tt-panel.tt-panel--input
+          div#pcInputPanel.tt-panel.tt-panel--input
+            div.pc-panel-head
+              span.pc-panel-head__title
+                i.fas.fa-cloud-arrow-up.me-2
+                | Upload cards
+              button#pcCollapseBtn.pc-panel-head__toggle(type="button" title="Hide this section — you can reopen it at any time")
+                i.fas.fa-chevron-left
+
             //- Zona drag & drop (múltiples imágenes)
             div#pcDropzone.tt-dropzone(tabindex="0" role="button" aria-label="Upload card images")
               input#pcFileInput.tt-file-input(type="file" accept=".png,.jpg,.jpeg,.webp" multiple)
@@ -67,7 +81,8 @@ block layout-content
                       div.pc-review__text
                         strong Company, Job Level and Country are linked to Badaco.
                         |  You see the name, we save the id. Review the highlighted cells before sending:
-                        |  Name, Email and Company are required, and the email must not already exist in Badaco.
+                        |  Name, Email and Company are required. If the email already exists in Badaco you can
+                        |  update that contact instead of creating a new one.
                         |  The card photo is archived with the contact — once created, open it from the
                         |  File column.
                     div.pc-review__legend
@@ -84,6 +99,9 @@ block layout-content
                       i.fas.fa-cloud-arrow-up.pc-bulk__icon
                       span#pcBulkText.pc-bulk__text Send every reviewed row to Badaco in one go. Rows with problems are reported back, never silently skipped.
                     div.pc-bulk__actions
+                      label#pcUpdateExistingWrap.pc-bulk__switch(title="When the email already exists in Badaco, update that contact with the card data instead of rejecting the row")
+                        input#pcUpdateExisting.pc-bulk__switch-input(type="checkbox")
+                        span.pc-bulk__switch-text Update contacts that already exist
                       button#pcRecheckBtn.btn.btn-outline-secondary.btn-sm(type="button" title="Re-check required fields and duplicated emails against Badaco")
                         i.fas.fa-rotate.me-1
                         | Re-check

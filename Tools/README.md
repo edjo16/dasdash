@@ -139,6 +139,25 @@ con `score >= 0.80`; por debajo se proponen candidatos y decide el usuario.
    pre-llenado; al guardarla, la fila queda enlazada al `bmc_id` nuevo.
 6. El botón de cada fila abre el modal de contacto con los ids ya resueltos, o
    se descarga todo en Excel/CSV (incluye `bmc_id`, `bmjl_id` y `country_code`).
+7. La sección de carga se pliega (botón de su cabecera, y sola al terminar la
+   extracción) para que la tabla use todo el ancho; la barra superior
+   "Upload cards" la devuelve.
+
+### Correos que ya están en BADACO
+
+Por defecto una fila cuyo email ya existe se rechaza (`duplicate_badaco`). El
+usuario puede decidir **actualizar** ese contacto en vez de crear uno nuevo:
+fila a fila ("Update the existing one", también en el informe de fallos) o para
+todo el lote con el interruptor "Update contacts that already exist". Eso viaja
+como `update_existing: true` por contacto.
+
+La actualización usa `BadacoModel.updateContactFromCard`: sólo escribe los
+campos que aporta la tarjeta (`bmc_id`, `name`, `job_title`, `bmjl_id`,
+`country`, `address`, `phone_number`, con `COALESCE`, así que lo que la tarjeta
+no leyó no borra lo que había). El evento, la relación y los colaboradores
+asignados del contacto **no se tocan**, y la foto de la tarjeta se archiva
+igual que en un alta. Con `dryRun` la respuesta trae `mode: 'update'` y
+`existing_contact_id`, que es lo que la tabla anuncia antes de enviar.
 
 ### Endpoints
 
@@ -147,7 +166,7 @@ con `score >= 0.80`; por debajo se proponen candidatos y decide el usuario.
 | GET  | `/tools/cards` | Página de la herramienta (Pug). |
 | POST | `/api/tools/cards/extract` | Multipart: `front` (imagen), `back` (opcional). Devuelve `{ data, match, raw, image, backImage }`. |
 | POST | `/api/tools/cards/rematch` | JSON: `{ data, refresh? }`. Re-resuelve las llaves de BADACO sin volver a llamar a la IA. |
-| POST | `/api/tools/cards/contacts` | JSON: `{ contacts: [...], dryRun? }`. Alta en BADACO fila a fila (con `dryRun` sólo valida). |
+| POST | `/api/tools/cards/contacts` | JSON: `{ contacts: [...], dryRun? }`. Alta en BADACO fila a fila (con `dryRun` sólo valida). Cada contacto acepta `update_existing` para actualizar el que ya tenga ese email en vez de rechazar la fila. |
 | POST | `/api/tools/cards/files` | JSON: `{ contact_id, image_token, back_image_token }`. Archiva la imagen contra un contacto ya creado. |
 | GET  | `/api/tools/cards/files/:id` | Devuelve la imagen archivada (`card_files.cf_id`). |
 | GET  | `/api/tools/cards/contacts/:id/files` | Imágenes archivadas de un contacto. |

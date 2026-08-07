@@ -320,6 +320,10 @@ export default class CardsController {
    * Con `dryRun` sólo se valida (lo usa la tabla para marcar los duplicados
    * antes de que el usuario pulse "enviar").
    *
+   * Si el correo ya existe en BADACO la fila se rechaza, salvo que traiga
+   * `update_existing: true`: entonces se actualiza ese contacto con los datos
+   * de la tarjeta (sólo los campos que la tarjeta aporta) en vez de crear uno.
+   *
    * Cada contacto se inserta en su propia transacción: una fila con problemas
    * no debe tumbar el resto del lote. La respuesta devuelve el resultado fila
    * a fila (`ref` es el identificador que mandó el cliente) para que la tabla
@@ -352,6 +356,13 @@ export default class CardsController {
         label: text(raw?.label) || `Card ${position + 1}`,
         contactId: null,
         error: null,
+        // `update_existing` es la decisión del usuario ante un correo repetido:
+        // sin ella la fila se rechaza, con ella se actualiza el contacto que ya
+        // está en BADACO en vez de crear uno nuevo.
+        allowUpdate: !!raw?.update_existing,
+        mode: 'create',
+        existingId: null,
+        existingName: null,
         // Imágenes aparcadas en /extract que hay que archivar si el alta sale bien.
         images: [
           { side: 'front', token: text(raw?.image_token) },
@@ -434,15 +445,24 @@ export default class CardsController {
       for (const item of items) {
         if (item.error) continue;
         const hit = byEmail.get(item.data.email);
-        if (hit) {
-          item.error = {
-            code: 'duplicate_badaco',
-            fields: ['Email'],
-            message: `${item.data.email} already belongs to ${hit.name || 'another contact'}` +
-              `${hit.company_name ? ` (${hit.company_name})` : ''} in Badaco.`,
-            contactId: hit.contact_id
-          };
+        if (!hit) continue;
+
+        // El usuario ya dijo qué hacer con los repetidos: actualizarlos.
+        if (item.allowUpdate) {
+          item.mode = 'update';
+          item.existingId = hit.contact_id;
+          item.existingName = hit.name || null;
+          continue;
         }
+
+        item.error = {
+          code: 'duplicate_badaco',
+          fields: ['Email'],
+          message: `${item.data.email} already belongs to ${hit.name || 'another contact'}` +
+            `${hit.company_name ? ` (${hit.company_name})` : ''} in Badaco. ` +
+            'Tick "update" on this row if you want the card data to overwrite it.',
+          contactId: hit.contact_id
+        };
       }
 
       // 4) Alta. En `dryRun` sólo se valida.
@@ -452,13 +472,23 @@ export default class CardsController {
           const transaction = new sql.Transaction(pool);
           try {
             await transaction.begin();
-            item.contactId = await BadacoModel.createContact(transaction, {
-              ...item.data,
-              event: null,
-              contact_rl_id: null,
-              contactos_asociados: [],
-              uingreso: userId
-            });
+            if (item.mode === 'update') {
+              // Sólo los campos de la tarjeta: evento, relación y
+              // colaboradores asignados del contacto se respetan.
+              await BadacoModel.updateContactFromCard(transaction, item.existingId, {
+                ...item.data,
+                umodificado: userId
+              });
+              item.contactId = item.existingId;
+            } else {
+              item.contactId = await BadacoModel.createContact(transaction, {
+                ...item.data,
+                event: null,
+                contact_rl_id: null,
+                contactos_asociados: [],
+                uingreso: userId
+              });
+            }
             await transaction.commit();
 
             // Fuera de la transacción: el archivo se escribe en el servidor de
@@ -487,12 +517,15 @@ export default class CardsController {
       const results = items.map((item) => ({
         ref: item.ref,
         label: item.label,
-        status: item.error ? 'error' : (dryRun ? 'ready' : 'created'),
+        status: item.error ? 'error' : (dryRun ? 'ready' : (item.mode === 'update' ? 'updated' : 'created')),
+        // Qué se hará (o se hizo) con la fila: la tabla lo anuncia antes de enviar.
+        mode: item.mode,
         contact_id: item.contactId,
         code: item.error ? item.error.code : null,
         fields: item.error ? item.error.fields : [],
         message: item.error ? item.error.message : null,
-        existing_contact_id: item.error ? (item.error.contactId || null) : null,
+        existing_contact_id: item.error ? (item.error.contactId || null) : item.existingId,
+        existing_name: item.existingName,
         files: item.files,
         file_warning: item.fileWarning
       }));
@@ -501,6 +534,7 @@ export default class CardsController {
         result: 1,
         dryRun,
         created: results.filter((r) => r.status === 'created').length,
+        updated: results.filter((r) => r.status === 'updated').length,
         ready: results.filter((r) => r.status === 'ready').length,
         failed: results.filter((r) => r.status === 'error').length,
         results
