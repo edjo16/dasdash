@@ -1,0 +1,845 @@
+extends ../layout
+include ../ui/filter-bar
+include ../mixins/data-table
+include ../mixins/breadcrumb
+
+block layout-content
+  div#layoutSidenav_content
+    main
+      div.container-fluid.px-4
+        +app-breadcrumb({
+          homeHref: '/',
+          items: [{ label: title, active: true }]
+        })
+
+        div#alertContainer
+
+        //- Country filter: the countries actually used by companies (no extra query)
+        - var countryMap = {}
+        - (typeof companies !== 'undefined' ? companies : []).forEach(function(c) { if (c.pais && c.xnombre_pais_ingles && !countryMap[c.pais]) countryMap[c.pais] = String(c.xnombre_pais_ingles).trim(); })
+        - var countryItems = Object.keys(countryMap).map(function(k) { return { value: k, label: countryMap[k] }; }).sort(function(a, b) { return a.label.localeCompare(b.label); })
+        - var relationshipItems = (typeof relationships !== 'undefined' ? relationships : []).map(function(rel) { return { value: rel.bmrl_id, label: rel.name }; })
+        - var regionItems = (typeof regions !== 'undefined' ? regions : []).map(function(region) { return { value: region, label: region }; })
+
+        //- Column catalog: the first five are the module defaults, the rest are optional extras
+        - var allColumns = [{key:'company',label:'Company'},{key:'contacts',label:'Contacts'},{key:'country',label:'Country'},{key:'region',label:'Region'},{key:'relationship',label:'Relationship'},{key:'website',label:'Website'},{key:'email',label:'Email'},{key:'phone',label:'Phone'},{key:'domain',label:'Domain'}]
+        - var defaultColumns = ['company','contacts','country','region','relationship']
+        - var savedColumns = (typeof columnPrefs !== 'undefined' && columnPrefs && Array.isArray(columnPrefs.columns)) ? columnPrefs.columns.filter(function(k){ return allColumns.some(function(c){ return c.key === k; }); }) : null
+        - var activeColumns = (savedColumns && savedColumns.length > 0) ? savedColumns : defaultColumns
+
+        //- ══ Companies list ═══════════════════════════════════════════════
+        div#companiesView
+          +fb-bar
+            button#newCompanyBtn.fb-btn.badaco-create-btn(type='button' onclick='openNewCompanyModal()')
+              i.fas.fa-plus
+              span New Company
+            //- Every filter lives in the floating panel under the Filter button
+            +fb-dropdown({id: 'companyFilters', label: 'Filter', panelWidth: '290px'})
+              +fb-select({id: 'countryFilter', icon: 'fa-globe-americas', items: countryItems, placeholder: 'All Countries', placeholderDisabled: false, filterLabel: 'Country'})
+              +fb-select({id: 'regionFilter', icon: 'fa-map', items: regionItems, placeholder: 'All Regions', placeholderDisabled: false, filterLabel: 'Region'})
+              +fb-select({id: 'relationshipFilter', icon: 'fa-handshake', items: relationshipItems, placeholder: 'All Relationships', placeholderDisabled: false, filterLabel: 'Relationship'})
+              +fb-select({id: 'hasContactsFilter', icon: 'fa-users', items: [{value: 'with', label: 'With contacts'}, {value: 'without', label: 'Without contacts'}], placeholder: 'Any contact count', placeholderDisabled: false, filterLabel: 'Contacts'})
+            //- Column visibility picker (persisted per user)
+            +fb-columns-picker({id: 'columnsPicker', label: 'Columns', columns: allColumns.map(function(c){ return { key: c.key, label: c.label, checked: activeColumns.indexOf(c.key) !== -1 }; })})
+            +fb-actions
+              +fb-download-btn({onclick: 'downloadExcel(event)'})
+              +fb-search({id: 'searchInput', placeholder: 'Search'})
+              +fb-view-toggle({id: 'badacoCompaniesViewMode', tableId: 'companiesTable', ariaLabel: 'Select companies data view'})
+              +fb-reset-btn({onclick: 'resetFilters()'})
+              +fb-page-size({id: 'pageSizeSelector', sizes: [15, 25, 50], defaultSize: 15})
+              +fb-pagination({onPrev: 'changePage(currentPage - 1)', onNext: 'changePage(currentPage + 1)'})
+
+          +data-table('companiesTable', 'totalCount', { internalViewToggle: false })
+            thead
+              tr
+                each col in allColumns
+                  if activeColumns.indexOf(col.key) !== -1
+                    th= col.label
+            tbody.bg-white
+              tr
+                td.text-center(colspan=activeColumns.length)
+                  i.fas.fa-spinner.fa-spin.me-2
+                  | Loading companies...
+
+        //- ══ Company detail: the contacts of one company ══════════════════
+        div#companyDetailView(hidden)
+          div.badaco-detail-head
+            button.badaco-back-btn(type='button' onclick='backToCompanies()')
+              i.fas.fa-arrow-left
+              span Companies
+            div.badaco-detail-title
+              h4#detailCompanyName Loading…
+              div#detailCompanyMeta.badaco-detail-meta
+            div.badaco-detail-actions
+              button.fb-btn(type='button' onclick='editCurrentCompany()')
+                i.fas.fa-pencil-alt
+                span Edit Company
+              button.fb-btn.badaco-create-btn(type='button' onclick='newContactForCompany()')
+                i.fas.fa-plus
+                span New Contact
+
+          +fb-bar
+            +fb-actions
+              +fb-download-btn({onclick: 'downloadCompanyContactsExcel(event)'})
+              +fb-search({id: 'contactSearchInput', placeholder: 'Search contacts'})
+              +fb-view-toggle({id: 'badacoCompanyContactsViewMode', tableId: 'companyContactsTable', ariaLabel: 'Select contacts data view'})
+              +fb-page-size({id: 'contactPageSizeSelector', sizes: [15, 25, 50], defaultSize: 15})
+              +fb-pagination({onPrev: 'changeContactPage(contactPage - 1)', onNext: 'changeContactPage(contactPage + 1)'})
+
+          +data-table('companyContactsTable', 'contactTotalCount', { internalViewToggle: false })
+            thead
+              tr
+                th Name
+                th Job Title
+                th Job Level
+                th Email
+                th Phone
+                th Country
+                th Relationship
+            tbody.bg-white
+              tr
+                td.text-center(colspan='7')
+                  i.fas.fa-spinner.fa-spin.me-2
+                  | Loading contacts...
+
+  include ./badaco_company_modal
+  include ./badaco_contact_modal
+
+  style.
+    .badaco-create-btn {
+      background-color: #00586f;
+      border-color: #00586f;
+      color: #ffffff;
+    }
+
+    .badaco-create-btn:hover {
+      background-color: #004456;
+      border-color: #004456;
+      color: #ffffff;
+    }
+
+    #companiesTable,
+    #companyContactsTable {
+      min-width: 900px;
+    }
+
+    #companiesTable > thead,
+    #companyContactsTable > thead {
+      background-color: #00586f;
+      color: #ffffff;
+    }
+
+    #companiesTable th,
+    #companyContactsTable th {
+      font-size: 1em;
+    }
+
+    #companiesTable th.is-sortable {
+      cursor: pointer;
+      white-space: nowrap;
+      user-select: none;
+    }
+
+    #companiesTable th.is-sortable .badaco-sort-icon {
+      margin-left: 6px;
+      font-size: 0.75em;
+      opacity: 0.55;
+    }
+
+    #companiesTable th.is-sorted .badaco-sort-icon {
+      opacity: 1;
+    }
+
+    .fb-page-btn.disabled,
+    .fb-page-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    #companiesTable tbody tr,
+    #companyContactsTable tbody tr {
+      cursor: pointer;
+    }
+
+    #companiesTable tbody tr:hover,
+    #companyContactsTable tbody tr:hover {
+      background-color: #f8f9fa;
+    }
+
+    .badge {
+      font-size: 0.75rem;
+      padding: 0.35rem 0.65rem;
+    }
+
+    .table td {
+      vertical-align: middle;
+    }
+
+    .badaco-contact-count {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background-color: #e6f4f1;
+      color: #00586f;
+      border-radius: 999px;
+      padding: 0.3rem 0.7rem;
+      font-weight: 600;
+      font-size: 0.8rem;
+    }
+
+    .badaco-contact-count.is-empty {
+      background-color: #f1f3f5;
+      color: #868e96;
+      font-weight: 500;
+    }
+
+    /* ── Company detail header ── */
+    .badaco-detail-head {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      flex-wrap: wrap;
+      background-color: #ffffff;
+      border: 1px solid #e9ecef;
+      border-radius: 10px;
+      padding: 14px 16px;
+      margin-bottom: 14px;
+    }
+
+    .badaco-back-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: none;
+      border: 1px solid #dee2e6;
+      border-radius: 8px;
+      padding: 6px 12px;
+      font-size: 0.82rem;
+      color: #00586f;
+    }
+
+    .badaco-back-btn:hover {
+      background-color: #e6f4f1;
+      border-color: #00586f;
+    }
+
+    .badaco-detail-title {
+      flex: 1 1 240px;
+      min-width: 0;
+    }
+
+    .badaco-detail-title h4 {
+      margin: 0;
+      font-size: 1.15rem;
+      color: #00586f;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .badaco-detail-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px 14px;
+      margin-top: 4px;
+      font-size: 0.8rem;
+      color: #6c757d;
+    }
+
+    .badaco-detail-meta span {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .badaco-detail-meta i {
+      color: #00586f;
+    }
+
+    .badaco-detail-actions {
+      display: flex;
+      gap: 8px;
+      margin-left: auto;
+    }
+
+  script.
+    // ── Companies list state ─────────────────────────────────────────
+    let currentPage = 1;
+    let pageSize = 15;
+    let totalPages = 1;
+    let currentFilters = {};
+    let currentSort = 'name';
+    let lastRows = [];
+    // The contact counters go stale when a contact is created/moved while the
+    // detail view is open: reload the list only when we go back to it.
+    let companiesDirty = false;
+
+    // ── Company detail state ─────────────────────────────────────────
+    let currentCompanyId = null;
+    let contactPage = 1;
+    let contactPageSize = 15;
+    let contactTotalPages = 1;
+    let contactFilters = {};
+
+    function escapeHtml(value) {
+      return String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
+    // ── Lookup maps ──────────────────────────────────────────────────
+    const RELATIONSHIP_NAMES = {};
+    const _relationshipList = !{JSON.stringify((typeof relationships !== 'undefined' ? relationships : []).map(function(r){ return { id: r.bmrl_id, name: r.name }; }))};
+    _relationshipList.forEach(r => { RELATIONSHIP_NAMES[String(r.id)] = r.name; });
+
+    // ── Column configuration ─────────────────────────────────────────
+    const COLUMN_DEFS = [
+      { key: 'company',      label: 'Company',      sort: 'name', render: c => c.nombre ? `<strong>${escapeHtml(c.nombre)}</strong>` : '-' },
+      { key: 'contacts',     label: 'Contacts',     sort: 'contacts', render: c => {
+          const count = Number(c.contact_count) || 0;
+          return `<span class="badaco-contact-count${count ? '' : ' is-empty'}"><i class="fas fa-users"></i>${count}</span>`;
+        } },
+      { key: 'country',      label: 'Country',      render: c => c.country_name ? escapeHtml(c.country_name) : '-' },
+      { key: 'region',       label: 'Region',       render: c => c.region ? escapeHtml(c.region) : '-' },
+      { key: 'relationship', label: 'Relationship', render: c => c.relationship ? `<span class="badge bg-info">${escapeHtml(c.relationship)}</span>` : '-' },
+      { key: 'website',      label: 'Website',      render: c => c.website ? `<a href="${escapeHtml(normalizeUrl(c.website))}" target="_blank" rel="noopener" onclick="event.stopPropagation()">${escapeHtml(c.website)}</a>` : '-' },
+      { key: 'email',        label: 'Email',        render: c => c.email ? `<a href="mailto:${escapeHtml(c.email)}" onclick="event.stopPropagation()">${escapeHtml(c.email)}</a>` : '-' },
+      { key: 'phone',        label: 'Phone',        render: c => c.telefono ? escapeHtml(c.telefono) : '-' },
+      { key: 'domain',       label: 'Domain',       render: c => c.domain ? escapeHtml(c.domain) : '-' }
+    ];
+    let visibleColumns = !{JSON.stringify(activeColumns)};
+
+    function normalizeUrl(url) {
+      const value = String(url || '').trim();
+      return /^https?:\/\//i.test(value) ? value : 'https://' + value;
+    }
+
+    function getVisibleDefs() {
+      return COLUMN_DEFS.filter(def => visibleColumns.includes(def.key));
+    }
+
+    function renderHeader() {
+      const thead = document.querySelector('#companiesTable thead');
+      thead.innerHTML = '<tr>' + getVisibleDefs().map(def => {
+        if (!def.sort) return `<th>${def.label}</th>`;
+        // Sortable: ascending / descending on the same column, defaults to the
+        // most useful direction (A→Z for names, most contacts first for counts)
+        const asc = def.sort === 'name' ? 'name' : 'contacts_asc';
+        const desc = def.sort === 'name' ? 'name_desc' : 'contacts_desc';
+        const isSorted = currentSort === asc || currentSort === desc;
+        const icon = !isSorted ? 'fa-sort' : (currentSort === asc ? 'fa-sort-up' : 'fa-sort-down');
+        return `<th class="is-sortable${isSorted ? ' is-sorted' : ''}" data-sort-key="${def.sort}">${def.label}<i class="fas ${icon} badaco-sort-icon"></i></th>`;
+      }).join('') + '</tr>';
+
+      thead.querySelectorAll('th[data-sort-key]').forEach(th => {
+        th.addEventListener('click', () => toggleSort(th.getAttribute('data-sort-key')));
+      });
+    }
+
+    function toggleSort(sortKey) {
+      const asc = sortKey === 'name' ? 'name' : 'contacts_asc';
+      const desc = sortKey === 'name' ? 'name_desc' : 'contacts_desc';
+      // First click on a column: the default direction. Clicking again flips it.
+      const preferred = sortKey === 'name' ? asc : desc;
+      currentSort = currentSort === preferred ? (preferred === asc ? desc : asc) : preferred;
+      currentPage = 1;
+      renderHeader();
+      loadCompanies();
+    }
+
+    // ── Column preferences (persisted per user) ──────────────────────
+    let savePrefsTimeout;
+    function saveColumnPrefs() {
+      clearTimeout(savePrefsTimeout);
+      savePrefsTimeout = setTimeout(async () => {
+        try {
+          await fetch('/badaco/api/user-prefs', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ module: 'badaco_companies', columns: visibleColumns })
+          });
+        } catch (error) {
+          console.error('Error saving column preferences:', error);
+        }
+      }, 600);
+    }
+
+    function onColumnToggle(checkbox) {
+      const checked = Array.from(document.querySelectorAll('#columnsPicker input[type="checkbox"]:checked')).map(i => i.value);
+      if (checked.length === 0) {
+        // Keep at least one column visible
+        checkbox.checked = true;
+        return;
+      }
+      visibleColumns = COLUMN_DEFS.map(def => def.key).filter(key => checked.includes(key));
+      renderHeader();
+      renderTable(lastRows);
+      saveColumnPrefs();
+    }
+
+    // ── Companies: data loading ──────────────────────────────────────
+    async function loadCompanies() {
+      try {
+        const params = new URLSearchParams({
+          limit: pageSize,
+          page: currentPage,
+          sort: currentSort,
+          ...currentFilters
+        });
+
+        const response = await fetch(`/badaco/api/companies-list?${params}`);
+        const data = await response.json();
+
+        if (data.success) {
+          const rows = Array.isArray(data.data) ? data.data : [];
+          totalPages = Math.max(Number(data.totalPages) || 1, 1);
+          companiesDirty = false;
+          renderTable(rows);
+          updatePaginationButtons();
+          updateTotalCount(Number(data.total) || 0, Number(data.page) || currentPage, Number(data.limit) || pageSize, rows.length);
+        } else {
+          showAlert('Error loading companies: ' + data.error, 'danger');
+        }
+      } catch (error) {
+        console.error('Error:', error);
+        showAlert('Error loading companies', 'danger');
+      }
+    }
+
+    function changePage(newPage) {
+      if (newPage < 1 || newPage > totalPages) return;
+      currentPage = newPage;
+      loadCompanies();
+    }
+
+    function updatePaginationButtons() {
+      const bar = document.querySelector('#companiesView .fb-pagination');
+      if (!bar) return;
+      const prevBtn = bar.querySelector('.fb-page-btn[aria-label="Previous"]');
+      const nextBtn = bar.querySelector('.fb-page-btn[aria-label="Next"]');
+      if (!prevBtn || !nextBtn) return;
+
+      prevBtn.disabled = currentPage <= 1;
+      prevBtn.classList.toggle('disabled', prevBtn.disabled);
+
+      nextBtn.disabled = currentPage >= totalPages;
+      nextBtn.classList.toggle('disabled', nextBtn.disabled);
+    }
+
+    function updateTotalCount(total, page, limit, count) {
+      const start = total === 0 ? 0 : (page - 1) * limit + 1;
+      const end = total === 0 ? 0 : (page - 1) * limit + count;
+      document.getElementById('totalCount').textContent = `Showing ${start} to ${end} of ${total} companies (Page ${page} of ${totalPages})`;
+    }
+
+    function renderTable(companies) {
+      lastRows = companies || [];
+      const tbody = document.querySelector('#companiesTable tbody');
+      const defs = getVisibleDefs();
+
+      if (lastRows.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="${defs.length}" class="text-center">No companies found</td></tr>`;
+        return;
+      }
+
+      tbody.innerHTML = lastRows.map(company => `
+        <tr onclick="openCompanyDetail('${escapeHtml(String(company.bmc_id || ''))}')">
+          ${defs.map(def => `<td>${def.render(company)}</td>`).join('')}
+        </tr>
+      `).join('');
+    }
+
+    // ── Company detail: the contacts of one company ──────────────────
+    async function openCompanyDetail(bmcId, options) {
+      const id = String(bmcId || '');
+      if (!id) return;
+
+      currentCompanyId = id;
+      contactPage = 1;
+      contactFilters = {};
+
+      const contactSearch = document.getElementById('contactSearchInput');
+      if (contactSearch) contactSearch.value = '';
+
+      document.getElementById('companiesView').hidden = true;
+      document.getElementById('companyDetailView').hidden = false;
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+
+      // The hash keeps the browser Back button working and makes the drill-down
+      // linkable (/badaco-companies#company=12)
+      if (!(options && options.skipHash)) window.location.hash = 'company=' + id;
+
+      document.getElementById('detailCompanyName').textContent = 'Loading…';
+      document.getElementById('detailCompanyMeta').innerHTML = '';
+      document.querySelector('#companyContactsTable tbody').innerHTML =
+        '<tr><td colspan="7" class="text-center"><i class="fas fa-spinner fa-spin me-2"></i>Loading contacts...</td></tr>';
+
+      loadCompanyHeader();
+      loadCompanyContacts();
+    }
+
+    function backToCompanies(options) {
+      currentCompanyId = null;
+      document.getElementById('companyDetailView').hidden = true;
+      document.getElementById('companiesView').hidden = false;
+
+      if (!(options && options.skipHash) && window.location.hash) {
+        history.replaceState(null, '', window.location.pathname + window.location.search);
+      }
+      // Contact counters may have changed while the detail view was open
+      if (companiesDirty) loadCompanies();
+    }
+
+    async function loadCompanyHeader() {
+      const id = currentCompanyId;
+      try {
+        const response = await fetch('/badaco/companies/' + encodeURIComponent(id));
+        const data = await response.json();
+        if (currentCompanyId !== id) return;   // the user already navigated away
+
+        if (!data.success || !data.company) {
+          showAlert('Company not found', 'danger');
+          backToCompanies();
+          return;
+        }
+
+        const company = data.company;
+        document.getElementById('detailCompanyName').textContent = company.nombre || '(no name)';
+
+        const meta = [];
+        if (company.xnombre_pais_ingles) meta.push(`<span><i class="fas fa-globe-americas"></i>${escapeHtml(String(company.xnombre_pais_ingles).trim())}</span>`);
+        if (company.bmrl_id != null && RELATIONSHIP_NAMES[String(company.bmrl_id)]) meta.push(`<span><i class="fas fa-handshake"></i>${escapeHtml(RELATIONSHIP_NAMES[String(company.bmrl_id)])}</span>`);
+        if (company.website) meta.push(`<span><i class="fas fa-link"></i><a href="${escapeHtml(normalizeUrl(company.website))}" target="_blank" rel="noopener">${escapeHtml(company.website)}</a></span>`);
+        if (company.email) meta.push(`<span><i class="fas fa-envelope"></i><a href="mailto:${escapeHtml(company.email)}">${escapeHtml(company.email)}</a></span>`);
+        if (company.telefono) meta.push(`<span><i class="fas fa-phone"></i>${escapeHtml(company.telefono)}</span>`);
+        document.getElementById('detailCompanyMeta').innerHTML = meta.join('');
+      } catch (error) {
+        console.error('Error loading company:', error);
+        showAlert('Error loading company', 'danger');
+      }
+    }
+
+    async function loadCompanyContacts() {
+      const id = currentCompanyId;
+      if (!id) return;
+
+      try {
+        const params = new URLSearchParams({
+          limit: contactPageSize,
+          page: contactPage,
+          bmc_id: id,
+          ...contactFilters
+        });
+
+        const response = await fetch(`/badaco/api/contacts?${params}`);
+        const data = await response.json();
+        if (currentCompanyId !== id) return;
+
+        if (data.success) {
+          const rows = Array.isArray(data.data) ? data.data : [];
+          contactTotalPages = Math.max(Number(data.totalPages) || 1, 1);
+          renderCompanyContacts(rows);
+          updateContactPaginationButtons();
+
+          const total = Number(data.total) || 0;
+          const page = Number(data.page) || contactPage;
+          const limit = Number(data.limit) || contactPageSize;
+          const start = total === 0 ? 0 : (page - 1) * limit + 1;
+          const end = total === 0 ? 0 : (page - 1) * limit + rows.length;
+          document.getElementById('contactTotalCount').textContent =
+            `Showing ${start} to ${end} of ${total} contacts (Page ${page} of ${contactTotalPages})`;
+        } else {
+          showAlert('Error loading contacts: ' + data.error, 'danger');
+        }
+      } catch (error) {
+        console.error('Error:', error);
+        showAlert('Error loading contacts', 'danger');
+      }
+    }
+
+    function renderCompanyContacts(contacts) {
+      const tbody = document.querySelector('#companyContactsTable tbody');
+
+      if (!contacts.length) {
+        tbody.innerHTML = '<tr><td colspan="7" class="text-center">No contacts found for this company</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = contacts.map(contact => `
+        <tr onclick="openContactModal('${escapeHtml(String(contact.contact_id || ''))}')">
+          <td>${contact.name ? `<strong>${escapeHtml(contact.name)}</strong>` : '-'}</td>
+          <td>${contact.job_title ? escapeHtml(contact.job_title) : '-'}</td>
+          <td>${contact.job_level_name ? `<span class="badge bg-info">${escapeHtml(contact.job_level_name)}</span>` : '-'}</td>
+          <td>${contact.email ? `<a href="mailto:${escapeHtml(contact.email)}" onclick="event.stopPropagation()">${escapeHtml(contact.email)}</a>` : '-'}</td>
+          <td>${contact.phone_number ? escapeHtml(contact.phone_number) : '-'}</td>
+          <td>${contact.contact_country_name ? escapeHtml(contact.contact_country_name) : '-'}</td>
+          <td>${contact.relationship ? escapeHtml(contact.relationship) : '-'}</td>
+        </tr>
+      `).join('');
+    }
+
+    function changeContactPage(newPage) {
+      if (newPage < 1 || newPage > contactTotalPages) return;
+      contactPage = newPage;
+      loadCompanyContacts();
+    }
+
+    function updateContactPaginationButtons() {
+      const bar = document.querySelector('#companyDetailView .fb-pagination');
+      if (!bar) return;
+      const prevBtn = bar.querySelector('.fb-page-btn[aria-label="Previous"]');
+      const nextBtn = bar.querySelector('.fb-page-btn[aria-label="Next"]');
+      if (!prevBtn || !nextBtn) return;
+
+      prevBtn.disabled = contactPage <= 1;
+      prevBtn.classList.toggle('disabled', prevBtn.disabled);
+
+      nextBtn.disabled = contactPage >= contactTotalPages;
+      nextBtn.classList.toggle('disabled', nextBtn.disabled);
+    }
+
+    // Detail actions — both reuse the shared modals
+    function editCurrentCompany() {
+      if (currentCompanyId) openCompanyModal(currentCompanyId);
+    }
+
+    function newContactForCompany() {
+      if (currentCompanyId) openNewContactModal({ bmc_id: currentCompanyId });
+    }
+
+    // ── Deep link / browser Back (#company=<id>) ─────────────────────
+    function applyHash() {
+      const match = /^#company=(\d+)$/.exec(window.location.hash);
+      if (match) {
+        if (String(currentCompanyId) !== match[1]) openCompanyDetail(match[1], { skipHash: true });
+      } else if (currentCompanyId) {
+        backToCompanies({ skipHash: true });
+      }
+    }
+
+    // ── Active-filter badge on the Filter button ─────────────────────
+    const PANEL_FILTER_IDS = ['countryFilter', 'regionFilter', 'relationshipFilter', 'hasContactsFilter'];
+    function updateFilterBadge() {
+      const active = PANEL_FILTER_IDS.filter(id => {
+        const el = document.getElementById(id);
+        return el && el.value.trim() !== '';
+      }).length;
+      if (typeof window.fbDdSetCount === 'function') window.fbDdSetCount('companyFilters', active);
+    }
+
+    // Called by the company modal after a successful create/update
+    window._badacoCompanyRefresh = function(company) {
+      loadCompanies();
+      // The detail header shows the name/contact data that was just edited
+      if (currentCompanyId && String(company.bmc_id) === String(currentCompanyId)) loadCompanyHeader();
+    };
+
+    // Called by the contact modal after a successful create/update
+    window._badacoContactRefresh = function() {
+      companiesDirty = true;
+      if (currentCompanyId) loadCompanyContacts();
+      else loadCompanies();
+    };
+
+    // ── Excel export ─────────────────────────────────────────────────
+    // El servidor devuelve 400 cuando el filtro no da ninguna fila, así que la
+    // respuesta se comprueba antes de tratarla como archivo: si no, el
+    // navegador se descargaría el texto del error con extensión .xlsx.
+    async function downloadExcelFile(url, payload, fileName, button) {
+      const originalHtml = button ? button.innerHTML : '';
+      if (button) {
+        button.disabled = true;
+        button.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+      }
+
+      try {
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ data: payload, type: 'excel' })
+        });
+
+        if (!response.ok) {
+          showAlert(response.status === 400
+            ? 'There is nothing to export with the current filters.'
+            : 'There was an error generating the Excel file.', response.status === 400 ? 'warning' : 'danger');
+          return;
+        }
+
+        const blobUrl = URL.createObjectURL(await response.blob());
+        const link = document.createElement('a');
+        link.href = blobUrl;
+        link.download = fileName;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(blobUrl);
+      } catch (error) {
+        console.error('Error downloading file:', error);
+        showAlert('There was an error generating the Excel file.', 'danger');
+      } finally {
+        if (button) {
+          button.disabled = false;
+          button.innerHTML = originalHtml;
+        }
+      }
+    }
+
+    function fileStamp() {
+      return new Date().toISOString().replace(/[:.]/g, '-');
+    }
+
+    // Companies report: same filters and same order the user is looking at
+    function downloadExcel(e) {
+      if (e && typeof e.preventDefault === 'function') e.preventDefault();
+      const button = e ? e.currentTarget : null;
+      downloadExcelFile(
+        '/badaco/companies/download-excel',
+        Object.assign({ sort: currentSort }, currentFilters),
+        'badaco-companies-' + fileStamp() + '.xlsx',
+        button
+      );
+    }
+
+    // Contacts of the company being viewed — reuses the contacts export,
+    // which already filters by bmc_id
+    function downloadCompanyContactsExcel(e) {
+      if (e && typeof e.preventDefault === 'function') e.preventDefault();
+      if (!currentCompanyId) return;
+      const button = e ? e.currentTarget : null;
+      const name = (document.getElementById('detailCompanyName').textContent || 'company')
+        .trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
+      downloadExcelFile(
+        '/badaco/download-excel',
+        Object.assign({ bmc_id: currentCompanyId }, contactFilters),
+        'badaco-contacts-' + (name || 'company') + '-' + fileStamp() + '.xlsx',
+        button
+      );
+    }
+
+    // Show alert
+    function showAlert(message, type) {
+      const alertContainer = document.getElementById('alertContainer');
+      alertContainer.innerHTML = `
+        <div class="alert alert-${type} alert-dismissible fade show" role="alert">
+          ${message}
+          <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+      `;
+
+      setTimeout(() => {
+        alertContainer.innerHTML = '';
+      }, 5000);
+    }
+
+    // Reset filters
+    function resetFilters() {
+      currentFilters = {};
+      currentPage = 1;
+      pageSize = 15;
+      currentSort = 'name';
+      document.getElementById('searchInput').value = '';
+      PANEL_FILTER_IDS.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.value = '';
+      });
+      document.getElementById('pageSizeSelector').value = '15';
+      updateFilterBadge();
+      renderHeader();
+      loadCompanies();
+    }
+
+    // Wire a select-style filter inside the panel to a currentFilters key
+    function bindFilter(id, filterKey) {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.addEventListener('change', function() {
+        if (this.value) {
+          currentFilters[filterKey] = this.value;
+        } else {
+          delete currentFilters[filterKey];
+        }
+        currentPage = 1;
+        updateFilterBadge();
+        loadCompanies();
+      });
+    }
+
+    // Event listeners
+    document.addEventListener('DOMContentLoaded', function() {
+      renderHeader();
+      loadCompanies();
+
+      const pageSizeSelector = document.getElementById('pageSizeSelector');
+      const searchInput = document.getElementById('searchInput');
+      const contactPageSizeSelector = document.getElementById('contactPageSizeSelector');
+      const contactSearchInput = document.getElementById('contactSearchInput');
+
+      if (pageSizeSelector) {
+        pageSizeSelector.addEventListener('change', function() {
+          pageSize = parseInt(this.value, 10);
+          currentPage = 1;
+          loadCompanies();
+        });
+      }
+
+      let searchTimeout;
+      if (searchInput) {
+        searchInput.addEventListener('input', function() {
+          clearTimeout(searchTimeout);
+          searchTimeout = setTimeout(() => {
+            const normalizedSearch = this.value.trim();
+            if (normalizedSearch) {
+              currentFilters.search = normalizedSearch;
+            } else {
+              delete currentFilters.search;
+            }
+            currentPage = 1;
+            loadCompanies();
+          }, 500);
+        });
+      }
+
+      // Floating-panel filters
+      bindFilter('countryFilter', 'pais');
+      bindFilter('regionFilter', 'region');
+      bindFilter('relationshipFilter', 'bmrl_id');
+      bindFilter('hasContactsFilter', 'hasContacts');
+
+      // Column visibility picker
+      document.querySelectorAll('#columnsPicker input[type="checkbox"]').forEach(checkbox => {
+        checkbox.addEventListener('change', function() { onColumnToggle(this); });
+      });
+
+      // Detail view: page size + search inside the company's contacts
+      if (contactPageSizeSelector) {
+        contactPageSizeSelector.addEventListener('change', function() {
+          contactPageSize = parseInt(this.value, 10);
+          contactPage = 1;
+          loadCompanyContacts();
+        });
+      }
+
+      let contactSearchTimeout;
+      if (contactSearchInput) {
+        contactSearchInput.addEventListener('input', function() {
+          clearTimeout(contactSearchTimeout);
+          contactSearchTimeout = setTimeout(() => {
+            const normalized = this.value.trim();
+            if (normalized) {
+              contactFilters.search = normalized;
+            } else {
+              delete contactFilters.search;
+            }
+            contactPage = 1;
+            loadCompanyContacts();
+          }, 500);
+        });
+      }
+
+      updateFilterBadge();
+      window.addEventListener('hashchange', applyHash);
+      applyHash();
+    });

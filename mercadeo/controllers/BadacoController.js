@@ -8,6 +8,11 @@ import UserPrefsModel from '../../USERS/model/UserPrefs.js';
 import { badacoCatalogs, invalidateBadacoCache } from '../services/badaco-cache.js';
 
 const BADACO_CONTACTS_MODULE = 'badaco_contacts';
+const BADACO_COMPANIES_MODULE = 'badaco_companies';
+
+/** Módulos con preferencias de columnas; el resto se ignora (viene del cliente). */
+const BADACO_PREF_MODULES = new Set([BADACO_CONTACTS_MODULE, BADACO_COMPANIES_MODULE]);
+const prefsModule = (value) => (BADACO_PREF_MODULES.has(value) ? value : BADACO_CONTACTS_MODULE);
 
 /** Filas por lote al exportar a Excel (ver downloadExcel). */
 const EXCEL_BATCH_SIZE = Number(process.env.BADACO_EXCEL_BATCH_SIZE || 2000);
@@ -136,6 +141,117 @@ export default class BadacoController {
 
         } catch (error) {
             console.error('Error in getContactsData:', error);
+            res.status(500).json({ success: false, error: error.message });
+        }
+    }
+
+    /**
+     * Render the companies list view (compañías + contador de contactos)
+     */
+    static async getCompaniesList(connection, req, res) {
+        const pool = await sql.connect(connection);
+
+        try {
+            const UserID = req.session?.userID || req.body.UserID;
+            if (!UserID) {
+                return res.redirect("/sinID");
+            }
+
+            const [devteam, usuarioData] = await Promise.all([
+                Rules.validateTeam(req.session?.iddevteam, UserID),
+                USERModel.obtenerDatosUsuario(pool, UserID)
+            ]);
+
+            // Los mismos catálogos que la lista de contactos: esta vista reutiliza
+            // tal cual los modales de compañía y de contacto, que se alimentan de ellos.
+            const [
+                companies,
+                jobLevels,
+                relationships,
+                countriesAll,
+                grupousuarios,
+                grupousuarios_active,
+                events,
+                regions,
+                columnPrefs
+            ] = await Promise.all([
+                badacoCatalogs.companies(pool),
+                badacoCatalogs.jobLevels(pool),
+                badacoCatalogs.relationships(pool),
+                badacoCatalogs.countries(pool),
+                // El selector de usuario del layout (sólo dev team) lo necesita
+                devteam ? USERModel.getGroupUsers(pool) : Promise.resolve([]),
+                USERModel.getAllUserActive(pool, usuarioData.compania),
+                EventsModel.readforms(pool, 100, 0, devteam, UserID, null, null, null),
+                badacoCatalogs.regionNames(pool),
+                UserPrefsModel.getPrefs(pool, UserID, BADACO_COMPANIES_MODULE)
+            ]);
+
+            res.render('badaco/badaco_companies_list', {
+                title: 'BADACO - Companies',
+                userProfile: {
+                    UserName: usuarioData.UserName,
+                    UserID: UserID,
+                    UsuarioID: UserID,
+                    UserEmail: usuarioData.UserEmail
+                },
+                userMenu: usuarioData.Menu,
+                companies: companies,
+                jobLevels: jobLevels,
+                allCountries: countriesAll,
+                relationships: relationships,
+                usuarios: grupousuarios,
+                grupousuarios_active: grupousuarios_active,
+                events: events.recordset || [],
+                regions: regions,
+                columnPrefs: columnPrefs,
+                devteam: devteam
+            });
+
+        } catch (error) {
+            console.error('Error in getCompaniesList:', error);
+            res.status(500).send('Error loading companies list');
+        }
+    }
+
+    /**
+     * Get companies data with contact counts (API, paginado)
+     */
+    static async getCompaniesTableData(connection, req, res) {
+        const pool = await sql.connect(connection);
+
+        try {
+            const { search, pais, bmrl_id, region, hasContacts, sort, limit, page } = req.query;
+
+            const filters = {};
+            if (search) filters.search = search;
+            if (pais) filters.pais = pais;
+            if (bmrl_id) filters.bmrl_id = parseInt(bmrl_id);
+            if (region) filters.region = region;
+            if (hasContacts === 'with' || hasContacts === 'without') filters.hasContacts = hasContacts;
+            if (sort) filters.sort = sort;
+
+            const limitNum = Math.min(Math.max(parseInt(limit) || 15, 1), 200);
+            const pageNum = Math.max(parseInt(page) || 1, 1);
+            const offsetNum = (pageNum - 1) * limitNum;
+
+            const { rows: companies, total: pageTotal } = await BadacoModel.getCompaniesWithContactCount(pool, filters, limitNum, offsetNum);
+
+            // Sin filas no hay total que leer (página más allá del final o
+            // resultado vacío): sólo entonces se consulta el conteo aparte.
+            const total = companies.length ? pageTotal : await BadacoModel.getCompaniesCount(pool, filters);
+
+            res.json({
+                success: true,
+                data: companies,
+                total: total,
+                limit: limitNum,
+                page: pageNum,
+                totalPages: Math.ceil(total / limitNum)
+            });
+
+        } catch (error) {
+            console.error('Error in getCompaniesTableData:', error);
             res.status(500).json({ success: false, error: error.message });
         }
     }
@@ -706,17 +822,77 @@ export default class BadacoController {
     }
 
     /**
+     * Esqueleto común de las exportaciones a Excel de BADACO (contactos y
+     * compañías).
+     *
+     * Se genera en streaming: las filas se escriben directo en la respuesta,
+     * así que ni la app ni la base de datos tienen que sostener el resultado
+     * completo en memoria. Antes de esto se pedían hasta 100.000 filas de una
+     * vez y se armaba el libro entero en RAM antes de enviar nada.
+     *
+     * El libro se crea con la PRIMERA fila, no antes: mientras no se haya
+     * escrito ni una cabecera la respuesta sigue limpia y quien llama puede
+     * devolver un 400 en vez de un archivo vacío. Por eso `produce` recibe un
+     * `addRow` en lugar de la hoja.
+     *
+     * @param {object} res respuesta de Express (es el stream de salida)
+     * @param {{fileName: string, sheetName: string, title: string, columns: Array<{header: string, key: string, width: number}>}} options
+     * @param {(addRow: (row: object) => void) => Promise<void>} produce
+     * @returns {Promise<boolean>} false si no se escribió ninguna fila
+     */
+    static async _streamExcel(res, options, produce) {
+        const { fileName, sheetName, title, columns } = options;
+        const ExcelJS = (await import('exceljs')).default;
+
+        let workbook = null;
+        let worksheet = null;
+
+        const startWorkbook = () => {
+            res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+            res.setHeader('Content-Disposition', `attachment; filename=${fileName}`);
+
+            workbook = new ExcelJS.stream.xlsx.WorkbookWriter({ stream: res, useStyles: true });
+            worksheet = workbook.addWorksheet(sheetName);
+            // Sin `header` en las columnas: las tres primeras filas (título,
+            // blanco, cabecera) se escriben a mano, en orden, porque en
+            // streaming no se puede insertar hacia atrás.
+            worksheet.columns = columns.map((column) => ({ key: column.key, width: column.width }));
+
+            const titleRow = worksheet.addRow([title]);
+            worksheet.mergeCells(1, 1, 1, columns.length);
+            titleRow.font = { bold: true, size: 14 };
+            titleRow.alignment = { horizontal: 'center' };
+            titleRow.commit();
+
+            worksheet.addRow([]).commit();
+
+            const header = worksheet.addRow(columns.map((column) => column.header));
+            header.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+            header.eachCell((cell) => {
+                cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF00586F' } };
+            });
+            header.commit();
+        };
+
+        await produce((row) => {
+            if (!workbook) startWorkbook();
+            worksheet.addRow(row).commit();
+        });
+
+        if (!workbook) return false;
+
+        worksheet.commit();
+        await workbook.commit();   // cierra la respuesta
+        return true;
+    }
+
+    /**
      * Descarga de los contactos filtrados a Excel.
      *
-     * Se genera en streaming y por lotes: las filas se leen de
-     * `BADACO_EXCEL_BATCH_SIZE` en `BADACO_EXCEL_BATCH_SIZE` y se escriben
-     * directo en la respuesta, así que ni la app ni la base de datos tienen
-     * que sostener el resultado completo en memoria. Antes se pedían hasta
-     * 100.000 contactos de una vez (más una consulta por contacto para sus
-     * colaboradores) y se armaba el libro entero en RAM antes de enviar nada.
-     *
-     * Tampoco se abre transacción: son lecturas, y una transacción abierta
-     * mientras se genera el archivo mantiene bloqueos sobre la tabla.
+     * Las filas se leen de `BADACO_EXCEL_BATCH_SIZE` en
+     * `BADACO_EXCEL_BATCH_SIZE` y se van escribiendo según llegan (ver
+     * `_streamExcel`). No se abre transacción: son lecturas, y una transacción
+     * abierta mientras se genera el archivo mantiene bloqueos sobre la tabla.
      */
     static async downloadExcel(connection, req, res) {
         const pool = await sql.connect(connection);
@@ -743,93 +919,125 @@ export default class BadacoController {
             // numérico, y con comparación estricta no casaban nunca.
             const userNames = new Map(groupUsers.map(([code, name]) => [String(code), name]));
 
-            const ExcelJS = (await import('exceljs')).default;
-            const columns = [
-                { header: 'Company', key: 'company_name', width: 30 },
-                { header: 'Name', key: 'name', width: 30 },
-                { header: 'Email', key: 'email', width: 30 },
-                { header: 'Domain', key: 'domain', width: 30 },
-                { header: 'Job Title', key: 'job_title', width: 25 },
-                { header: 'Job Level', key: 'job_level_name', width: 20 },
-                { header: 'Relationship', key: 'relationship', width: 20 },
-                { header: 'Country', key: 'country', width: 20 },
-                { header: 'Regions', key: 'regions', width: 20 },
-                { header: 'Phone', key: 'phone_number', width: 20 },
-                { header: 'Contact Active Re', key: 'contact_re', width: 20 }
-            ];
+            const wrote = await BadacoController._streamExcel(res, {
+                fileName: 'badaco-contacts.xlsx',
+                sheetName: 'Contacts',
+                title: 'BADACO - Contact Database',
+                columns: [
+                    { header: 'Company', key: 'company_name', width: 30 },
+                    { header: 'Name', key: 'name', width: 30 },
+                    { header: 'Email', key: 'email', width: 30 },
+                    { header: 'Domain', key: 'domain', width: 30 },
+                    { header: 'Job Title', key: 'job_title', width: 25 },
+                    { header: 'Job Level', key: 'job_level_name', width: 20 },
+                    { header: 'Relationship', key: 'relationship', width: 20 },
+                    { header: 'Country', key: 'country', width: 20 },
+                    { header: 'Regions', key: 'regions', width: 20 },
+                    { header: 'Phone', key: 'phone_number', width: 20 },
+                    { header: 'Contact Active Re', key: 'contact_re', width: 20 }
+                ]
+            }, async (addRow) => {
+                await BadacoModel.forEachContactBatch(pool, filters, EXCEL_BATCH_SIZE, async (rows) => {
+                    for (const contact of rows) {
+                        const domain = contact.email ? contact.email.split('@')[1] : '';
+                        const asignados = (contact.contactos_asociados || [])
+                            .map((userCode) => userNames.get(String(userCode)))
+                            .filter(Boolean)
+                            .join(', ');
 
-            let workbook = null;
-            let worksheet = null;
-
-            // El libro se crea al llegar el primer lote: si el filtro no
-            // devuelve nada todavía se puede responder con un 400 limpio,
-            // porque aún no se ha escrito ni una cabecera.
-            const startWorkbook = () => {
-                res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-                res.setHeader('Content-Disposition', 'attachment; filename=badaco-contacts.xlsx');
-
-                workbook = new ExcelJS.stream.xlsx.WorkbookWriter({ stream: res, useStyles: true });
-                worksheet = workbook.addWorksheet('Contacts');
-                // Sin `header` en las columnas: las tres primeras filas
-                // (título, blanco, cabecera) se escriben a mano, en orden,
-                // porque en streaming no se puede insertar hacia atrás.
-                worksheet.columns = columns.map((column) => ({ key: column.key, width: column.width }));
-
-                const title = worksheet.addRow(['BADACO - Contact Database']);
-                worksheet.mergeCells('A1:G1');
-                title.font = { bold: true, size: 14 };
-                title.alignment = { horizontal: 'center' };
-                title.commit();
-
-                worksheet.addRow([]).commit();
-
-                const header = worksheet.addRow(columns.map((column) => column.header));
-                header.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-                header.eachCell((cell) => {
-                    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF00586F' } };
+                        addRow({
+                            company_name: contact.company_name || '',
+                            name: contact.name || '',
+                            email: contact.email || '',
+                            domain: domain || '',
+                            job_title: contact.job_title || '',
+                            job_level_name: contact.job_level_name || '',
+                            relationship: contact.relationship || '',
+                            country: contact.company_country_name || '',
+                            // Ya viene resuelta en la consulta (continente del
+                            // país de la empresa): no hace falta buscarla en m_pais.
+                            regions: contact.company_region || '',
+                            phone_number: contact.phone_number || '',
+                            contact_re: asignados
+                        });
+                    }
                 });
-                header.commit();
-            };
-
-            await BadacoModel.forEachContactBatch(pool, filters, EXCEL_BATCH_SIZE, async (rows) => {
-                if (!workbook) startWorkbook();
-
-                for (const contact of rows) {
-                    const domain = contact.email ? contact.email.split('@')[1] : '';
-                    const asignados = (contact.contactos_asociados || [])
-                        .map((userCode) => userNames.get(String(userCode)))
-                        .filter(Boolean)
-                        .join(', ');
-
-                    worksheet.addRow({
-                        company_name: contact.company_name || '',
-                        name: contact.name || '',
-                        email: contact.email || '',
-                        domain: domain || '',
-                        job_title: contact.job_title || '',
-                        job_level_name: contact.job_level_name || '',
-                        relationship: contact.relationship || '',
-                        country: contact.company_country_name || '',
-                        // Ya viene resuelta en la consulta (continente del
-                        // país de la empresa): no hace falta buscarla en m_pais.
-                        regions: contact.company_region || '',
-                        phone_number: contact.phone_number || '',
-                        contact_re: asignados
-                    }).commit();
-                }
             });
 
-            if (!workbook) {
+            if (!wrote) {
                 return res.status(400).send('No data to export');
             }
-
-            worksheet.commit();
-            await workbook.commit();   // cierra la respuesta
 
         } catch (error) {
             console.error('Error generating Excel file:', error);
             // Si ya empezó a bajar el archivo no se puede devolver un 500:
             // se corta la respuesta para que el navegador lo dé por fallido.
+            if (res.headersSent) return res.destroy(error);
+            res.status(500).send('Error generating Excel file');
+        }
+    }
+
+    /**
+     * Descarga de las compañías filtradas a Excel, con el número de contactos
+     * de cada una. Mismos filtros y mismo orden que la vista de compañías, así
+     * que el archivo es exactamente lo que el usuario está viendo en pantalla.
+     */
+    static async downloadCompaniesExcel(connection, req, res) {
+        const pool = await sql.connect(connection);
+
+        try {
+            const data = req.body.data || {};
+            const filters = {};
+
+            if (data.search) filters.search = data.search;
+            if (data.pais) filters.pais = data.pais;
+            if (data.bmrl_id) filters.bmrl_id = parseInt(data.bmrl_id);
+            if (data.region) filters.region = data.region;
+            if (data.hasContacts === 'with' || data.hasContacts === 'without') filters.hasContacts = data.hasContacts;
+            if (data.sort) filters.sort = data.sort;
+
+            const wrote = await BadacoController._streamExcel(res, {
+                fileName: 'badaco-companies.xlsx',
+                sheetName: 'Companies',
+                title: 'BADACO - Companies',
+                columns: [
+                    { header: 'Company', key: 'nombre', width: 35 },
+                    { header: 'Contacts', key: 'contact_count', width: 12 },
+                    { header: 'Country', key: 'country_name', width: 22 },
+                    { header: 'Region', key: 'region', width: 20 },
+                    { header: 'Relationship', key: 'relationship', width: 20 },
+                    { header: 'Website', key: 'website', width: 30 },
+                    { header: 'Email', key: 'email', width: 30 },
+                    { header: 'Domain', key: 'domain', width: 25 },
+                    { header: 'Phone', key: 'telefono', width: 20 },
+                    { header: 'Address', key: 'address', width: 40 }
+                ]
+            }, async (addRow) => {
+                await BadacoModel.forEachCompanyBatch(pool, filters, EXCEL_BATCH_SIZE, async (rows) => {
+                    for (const company of rows) {
+                        addRow({
+                            nombre: company.nombre || '',
+                            // Numérico a propósito: en Excel se puede sumar y ordenar
+                            contact_count: Number(company.contact_count) || 0,
+                            country_name: company.country_name || '',
+                            region: company.region || '',
+                            relationship: company.relationship || '',
+                            website: company.website || '',
+                            email: company.email || '',
+                            domain: company.domain || '',
+                            telefono: company.telefono || '',
+                            address: company.address || ''
+                        });
+                    }
+                });
+            });
+
+            if (!wrote) {
+                return res.status(400).send('No data to export');
+            }
+
+        } catch (error) {
+            console.error('Error generating companies Excel file:', error);
             if (res.headersSent) return res.destroy(error);
             res.status(500).send('Error generating Excel file');
         }
@@ -845,7 +1053,7 @@ export default class BadacoController {
             if (!UserID) {
                 return res.status(401).json({ success: false, error: 'Not authenticated' });
             }
-            const prefs = await UserPrefsModel.getPrefs(pool, UserID, BADACO_CONTACTS_MODULE);
+            const prefs = await UserPrefsModel.getPrefs(pool, UserID, prefsModule(req.query.module));
             res.json({ success: true, prefs: prefs });
         } catch (error) {
             console.error('Error in getUserPrefs:', error);
@@ -867,7 +1075,7 @@ export default class BadacoController {
             if (!Array.isArray(columns) || columns.length === 0) {
                 return res.status(400).json({ success: false, error: '"columns" must be a non-empty array' });
             }
-            await UserPrefsModel.savePrefs(pool, UserID, BADACO_CONTACTS_MODULE, { columns: columns.map(String) });
+            await UserPrefsModel.savePrefs(pool, UserID, prefsModule(req.body.module), { columns: columns.map(String) });
             res.json({ success: true });
         } catch (error) {
             console.error('Error in saveUserPrefs:', error);

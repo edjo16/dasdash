@@ -41,6 +41,32 @@ router.get('/badaco-contacts', ...badacoManageGuards, async (req, res) => {
 
 /**
  * @openapi
+ * /badaco-companies:
+ *   get:
+ *     summary: GET Companies List View
+ *     description: Vista de compañías con el contador de contactos de cada una
+ *     tags:
+ *       - BADACO API
+ *     parameters:
+ *       - in: query
+ *         name: p
+ *         schema:
+ *           type: string
+ *         description: UserID del usuario logueado
+ *     responses:
+ *       200:
+ *         description: Vista de lista de compañías renderizada
+ *       401:
+ *         description: Usuario no autorizado
+ *       500:
+ *         description: Error del servidor
+ */
+router.get('/badaco-companies', ...badacoManageGuards, async (req, res) => {
+    await BadacoController.getCompaniesList(sqlConfig, req, res);
+});
+
+/**
+ * @openapi
  * /badaco-contacts/create:
  *   get:
  *     summary: GET Contact Create Form
@@ -174,6 +200,58 @@ router.get('/badaco/api/check-email', ...badacoManageGuards, async (req, res) =>
  */
 router.get('/badaco/api/companies', ...badacoManageGuards, async (req, res) => {
     await BadacoController.getCompaniesAPI(sqlConfig, req, res);
+});
+
+/**
+ * @openapi
+ * /badaco/api/companies-list:
+ *   get:
+ *     summary: GET Companies Data (with contact counts)
+ *     description: Obtiene las compañías paginadas junto al número de contactos de cada una
+ *     tags:
+ *       - BADACO API
+ *     parameters:
+ *       - in: query
+ *         name: search
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: pais
+ *         schema:
+ *           type: string
+ *         description: Código de país (cpais)
+ *       - in: query
+ *         name: bmrl_id
+ *         schema:
+ *           type: integer
+ *       - in: query
+ *         name: region
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: hasContacts
+ *         schema:
+ *           type: string
+ *           enum: [with, without]
+ *       - in: query
+ *         name: sort
+ *         schema:
+ *           type: string
+ *           enum: [name, name_desc, contacts_asc, contacts_desc]
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: Datos de compañías
+ */
+router.get('/badaco/api/companies-list', ...badacoManageGuards, async (req, res) => {
+    await BadacoController.getCompaniesTableData(sqlConfig, req, res);
 });
 
 /**
@@ -506,6 +584,53 @@ router.post('/badaco/relationships/create', ...badacoManageGuards, async (req, r
  */
 router.post('/badaco/download-excel', ...badacoManageGuards, async (req, res) => {
     await BadacoController.downloadExcel(sqlConfig, req, res);
+});
+
+/**
+ * @openapi
+ * /badaco/companies/download-excel:
+ *   post:
+ *     summary: POST Download Companies to Excel
+ *     description: Descarga las compañías filtradas (con su número de contactos) en formato Excel
+ *     tags:
+ *       - BADACO API
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               data:
+ *                 type: object
+ *                 properties:
+ *                   search:
+ *                     type: string
+ *                   pais:
+ *                     type: string
+ *                   bmrl_id:
+ *                     type: integer
+ *                   region:
+ *                     type: string
+ *                   hasContacts:
+ *                     type: string
+ *                     enum: [with, without]
+ *                   sort:
+ *                     type: string
+ *                     enum: [name, name_desc, contacts_asc, contacts_desc]
+ *     responses:
+ *       200:
+ *         description: Archivo Excel generado exitosamente
+ *         content:
+ *           application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+ *             schema:
+ *               type: string
+ *               format: binary
+ *       400:
+ *         description: El filtro no devuelve ninguna compañía
+ */
+router.post('/badaco/companies/download-excel', ...badacoManageGuards, async (req, res) => {
+    await BadacoController.downloadCompaniesExcel(sqlConfig, req, res);
 });
 /**
  * @openapi

@@ -539,6 +539,186 @@ export default class BadacoModel {
     }
 
     /**
+     * Traduce los filtros de la vista de compañías a una cláusula WHERE
+     * parametrizada. Igual que `_buildContactFilters`, devuelve qué tablas
+     * necesita el filtro para no unir `m_pais` cuando nadie la mira.
+     */
+    static _buildCompanyFilters(request, filters = {}) {
+        const conditions = ['1 = 1'];
+        const needs = { country: false };
+
+        if (filters.search) {
+            conditions.push(`(
+                bc.nombre LIKE @search OR
+                bc.email LIKE @search OR
+                bc.domain LIKE @search OR
+                bc.website LIKE @search
+            )`);
+            request.input('search', sql.NVarChar(200), `%${filters.search}%`);
+        }
+
+        if (filters.pais) {
+            conditions.push('bc.pais = @pais');
+            request.input('pais', sql.VarChar(10), filters.pais);
+        }
+
+        if (filters.bmrl_id) {
+            conditions.push('bc.bmrl_id = @bmrl_id');
+            request.input('bmrl_id', sql.Int, filters.bmrl_id);
+        }
+
+        // Región = continente del país de la empresa (igual que en contactos)
+        if (filters.region) {
+            conditions.push('mp.xnombre_continente_ingles = @region');
+            request.input('region', sql.VarChar(100), filters.region);
+            needs.country = true;
+        }
+
+        return { whereClause: conditions.join(' AND '), needs };
+    }
+
+    /**
+     * Filtro por número de contactos: se aplica DESPUÉS de contar, así que va
+     * en su propia cláusula sobre el resultado agregado.
+     */
+    static _companyContactsCondition(hasContacts) {
+        if (hasContacts === 'with') return 'WHERE contact_count > 0';
+        if (hasContacts === 'without') return 'WHERE contact_count = 0';
+        return '';
+    }
+
+    /** Ordenaciones permitidas de la lista de compañías (nunca del cliente tal cual). */
+    static COMPANY_SORTS = {
+        name:          { inner: 'nombre ASC',                        outer: 'bc.nombre ASC' },
+        name_desc:     { inner: 'nombre DESC',                       outer: 'bc.nombre DESC' },
+        contacts_desc: { inner: 'contact_count DESC, nombre ASC',    outer: 'p.contact_count DESC, bc.nombre ASC' },
+        contacts_asc:  { inner: 'contact_count ASC, nombre ASC',     outer: 'p.contact_count ASC, bc.nombre ASC' }
+    };
+
+    /**
+     * Compañías con el número de contactos que cuelga de cada una, filtradas
+     * y paginadas.
+     *
+     * Mismo patrón de dos pasos que `getAllContacts`: el CTE `filtered` sólo
+     * toca `badaco_mcompany` (más `m_pais` si el filtro la pide) y resuelve el
+     * contador con una subconsulta correlacionada que se apoya en
+     * IX_badaco_contactos_bmc_id; `page` ordena, pagina y trae de paso el
+     * total con `COUNT(*) OVER ()`. Los catálogos decorativos se unen al final,
+     * ya sólo para las filas de la página.
+     *
+     * @returns {Promise<{rows: Array, total: number}>}
+     */
+    static async getCompaniesWithContactCount(transaction, filters = {}, limit = 15, offset = 0) {
+        const request = new sql.Request(transaction);
+        const { whereClause, needs } = BadacoModel._buildCompanyFilters(request, filters);
+        const order = BadacoModel.COMPANY_SORTS[filters.sort] || BadacoModel.COMPANY_SORTS.name;
+        const countryJoin = needs.country ? 'LEFT JOIN m_pais AS mp ON mp.cpais = bc.pais' : '';
+
+        const query = `
+            WITH filtered AS (
+                SELECT
+                    bc.bmc_id,
+                    bc.nombre,
+                    (SELECT COUNT(*) FROM badaco_contactos AS c WHERE c.bmc_id = bc.bmc_id) AS contact_count
+                FROM badaco_mcompany AS bc
+                ${countryJoin}
+                WHERE ${whereClause}
+            ),
+            page AS (
+                SELECT bmc_id, nombre, contact_count, COUNT(*) OVER () AS total_rows
+                FROM filtered
+                ${BadacoModel._companyContactsCondition(filters.hasContacts)}
+                ORDER BY ${order.inner}
+                OFFSET @offset ROWS
+                FETCH NEXT @limit ROWS ONLY
+            )
+            SELECT
+                bc.bmc_id,
+                bc.nombre,
+                bc.pais,
+                bc.bmrl_id,
+                bc.telefono,
+                bc.address,
+                bc.email,
+                bc.domain,
+                bc.website,
+                mp.xnombre_pais_ingles       AS country_name,
+                mp.xnombre_continente_ingles AS region,
+                br.name                      AS relationship,
+                p.contact_count,
+                p.total_rows
+            FROM page AS p
+            INNER JOIN badaco_mcompany AS bc ON bc.bmc_id = p.bmc_id
+            LEFT JOIN m_pais AS mp ON mp.cpais = bc.pais
+            LEFT JOIN badaco_mrelationship AS br ON br.bmrl_id = bc.bmrl_id
+            ORDER BY ${order.outer};
+        `;
+
+        request.input('limit', sql.Int, limit);
+        request.input('offset', sql.Int, offset);
+
+        const { recordset } = await request.query(query);
+        const rows = recordset.map(({ total_rows, ...company }) => company);
+
+        return { rows, total: recordset.length ? recordset[0].total_rows : 0 };
+    }
+
+    /**
+     * Recorre TODAS las compañías que cumplen el filtro en lotes, sin
+     * cargarlas de golpe en memoria. Lo usa la exportación a Excel, igual que
+     * `forEachContactBatch` para los contactos.
+     *
+     * @param {number} batchSize filas por ida al servidor
+     * @param {(rows: Array, info: {total: number, fetched: number}) => Promise<void>} onBatch
+     * @returns {Promise<number>} filas procesadas
+     */
+    static async forEachCompanyBatch(transaction, filters, batchSize, onBatch) {
+        const size = Math.max(1, Math.min(Number(batchSize) || 2000, 10000));
+        let offset = 0;
+        let total = 0;
+
+        for (;;) {
+            const { rows, total: filtered } = await BadacoModel.getCompaniesWithContactCount(transaction, filters, size, offset);
+            if (offset === 0) total = filtered;
+            if (!rows.length) break;
+
+            offset += rows.length;
+            await onBatch(rows, { total, fetched: offset });
+
+            if (rows.length < size || offset >= total) break;
+        }
+
+        return offset;
+    }
+
+    /**
+     * Total de compañías que cumplen el filtro.
+     *
+     * La lista no lo usa (getCompaniesWithContactCount ya devuelve el total en
+     * la misma consulta); hace falta cuando se pide una página vacía más allá
+     * del final, donde no hay fila de la que leerlo.
+     */
+    static async getCompaniesCount(transaction, filters = {}) {
+        const request = new sql.Request(transaction);
+        const { whereClause, needs } = BadacoModel._buildCompanyFilters(request, filters);
+        const countryJoin = needs.country ? 'LEFT JOIN m_pais AS mp ON mp.cpais = bc.pais' : '';
+
+        const { recordset } = await request.query(`
+            SELECT COUNT(*) AS total
+            FROM (
+                SELECT
+                    bc.bmc_id,
+                    (SELECT COUNT(*) FROM badaco_contactos AS c WHERE c.bmc_id = bc.bmc_id) AS contact_count
+                FROM badaco_mcompany AS bc
+                ${countryJoin}
+                WHERE ${whereClause}
+            ) AS filtered
+            ${BadacoModel._companyContactsCondition(filters.hasContacts)}
+        `);
+        return recordset[0].total;
+    }
+
+    /**
      * Get company by ID
      */
     // static async getCompanyById(transaction, companyId) {
