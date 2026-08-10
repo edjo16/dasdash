@@ -1,0 +1,225 @@
+diff --git a/APPROVALS/routes/approvals-routes.js b/APPROVALS/routes/approvals-routes.js
+index 9d296c5..36fbc24 100644
+--- a/APPROVALS/routes/approvals-routes.js
++++ b/APPROVALS/routes/approvals-routes.js
+@@ -6,6 +6,7 @@ import USERController from '../../USERS/controllers/Users.js';
+ import ApprovalFunctionsModel from '../../Approvals_functions/models/approval_functions.js'
+ import ApprovalFunctionsController from '../../Approvals_functions/controllers/approval_functions.js';
+ import DigitalSignaturesController from '../../Approvals_functions/controllers/digital_signatures.js';
++import ApprovalTranslationsController from '../../Approvals_functions/controllers/approval_translations.js';
+ import express from "express";
+ import { checkServerAvailability } from '../../Middleware/checkServerAvailability.js';
+ import { requireAuth } from '../../Middleware/requireAuth.js';
+@@ -648,6 +649,26 @@ router.get("/", checkServerAvailability, requireAuth, async (req, res) => {
+         await DigitalSignaturesController.serveSignedFile(sqlConfig, req, res);
+     })
+ 
++    // ── Document translation endpoints ───────────────────────────
++    router.get("/approval-translate/languages", requireAuth, async (req, res) => {
++        await ApprovalTranslationsController.getLanguages(sqlConfig, req, res);
++    })
++    router.post("/approval-translate/create", requireAuth, async (req, res) => {
++        await ApprovalTranslationsController.createTranslation(sqlConfig, req, res);
++    })
++    router.get("/approval-translate/list", requireAuth, async (req, res) => {
++        await ApprovalTranslationsController.listTranslations(sqlConfig, req, res);
++    })
++    router.get("/approval-translate/status", requireAuth, async (req, res) => {
++        await ApprovalTranslationsController.getStatus(sqlConfig, req, res);
++    })
++    router.get("/approval-translate/file", requireAuth, async (req, res) => {
++        await ApprovalTranslationsController.serveTranslationFile(sqlConfig, req, res);
++    })
++    router.post("/approval-translate/delete", requireAuth, async (req, res) => {
++        await ApprovalTranslationsController.deleteTranslation(sqlConfig, req, res);
++    })
++
+ /**
+  * @openapi
+  * /CopiarArchivosAuditoria:
+diff --git a/Approvals.js b/Approvals.js
+index e581103..40002eb 100644
+--- a/Approvals.js
++++ b/Approvals.js
+@@ -23,6 +23,7 @@ import usersRoutes from './USERS/routes/users-routes.js';
+ import badacoRoutes from './mercadeo/routes/badaco-routes.js';
+ import aiRoutes from './AI/routes/ai-routes.js';
+ import toolsRoutes from './Tools/routes/tools-routes.js'
++import { startTranslationJobRunner } from './Approvals_functions/services/translation-job-runner.js';
+ import { createRequire } from 'module';
+ import fs from 'fs';
+ import { session_config, sqlConfig } from "./dbConfig.js";
+@@ -142,6 +143,8 @@ app.use('/', aiRoutes);
+ sql.connect(sqlConfig).then((pool) => {
+     console.log('DB connection pool established');
+     observeDbPool(pool);
++    // Procesador en background de las traducciones de documentos (APPROVALS).
++    startTranslationJobRunner(sqlConfig);
+     app.listen(port, () => {
+         console.log(`Listening to requests on http://localhost:${port}`);
+         swaggerDocs(app, port);
+diff --git a/Approvals_functions/controllers/approval_functions.js b/Approvals_functions/controllers/approval_functions.js
+index 7a09232..280019a 100644
+--- a/Approvals_functions/controllers/approval_functions.js
++++ b/Approvals_functions/controllers/approval_functions.js
+@@ -19,6 +19,8 @@ import ChangesControlModel from '../../IT/model/ChangesControl.js';
+ import DigitalSignaturesModel from '../models/digital_signatures.js';
+ import Rules from '../../USERS/rule/DevTeam.js';
+ import { resolveApprovalFileFullPath } from '../shared/approval-file-routing.js';
++import ApprovalTranslationsModel from '../models/translations.js';
++import { isTranslatableFile } from '../services/translation-pdf-service.js';
+ import MsgReaderModule from '@kenjiuno/msgreader';
+ 
+ const MsgReader = MsgReaderModule.default || MsgReaderModule;
+@@ -482,6 +484,23 @@ export default class ApprovalFunctionsController {
+             let temp              = '';
+             const files           = [];
+ 
++            // Traducciones existentes por archivo (una sola consulta para todo
++            // el approval, en lugar de una por archivo).
++            const translationCounts = new Map();
++            try {
++                const counts = await ApprovalTranslationsModel.countByApproval(transaction, RowID);
++                for (const row of counts) {
++                    translationCounts.set(row.source_filename, {
++                        completed: Number(row.completed_count) || 0,
++                        pending: Number(row.pending_count) || 0,
++                    });
++                }
++            } catch (translationErr) {
++                // La lista de archivos no debe romperse si el modulo de
++                // traducciones aun no esta desplegado en esta base.
++                console.error('[Translations] count lookup failed:', translationErr.message);
++            }
++
+             for (const archivo of archivos) {
+                 // ── Section headers (by file tipo) ────────────────────────
+                 if (archivo.tipo == 1 && subtitulo_firma) {
+@@ -555,6 +574,8 @@ export default class ApprovalFunctionsController {
+                     ? `/pdf-sign/signed-file?RowID=${RowID}&filename=${encodeURIComponent(filename)}&version=latest&dl=1`
+                     : `/approval-file?RowID=${RowID}&filename=${encodeURIComponent(filename)}&dl=1`;
+ 
++                const translations = translationCounts.get(filename) || { completed: 0, pending: 0 };
++
+                 files.push({
+                     type: 'file',
+                     filename,
+@@ -566,6 +587,11 @@ export default class ApprovalFunctionsController {
+                     is_pdf,
+                     file_url: fileUrl,
+                     download_url: downloadUrl,
++                    // ── Traduccion de documentos ──────────────────────
++                    is_translatable: isTranslatableFile(filename),
++                    translation_count: translations.completed,
++                    translation_pending: translations.pending,
++                    has_translations: translations.completed > 0,
+                 });
+             }
+ 
+diff --git a/package.json b/package.json
+index ee08e52..3d4c730 100644
+--- a/package.json
++++ b/package.json
+@@ -22,6 +22,7 @@
+     "dependencies": {
+         "@azure/msal-node": "^3.1.0",
+         "@kenjiuno/msgreader": "^1.28.0",
++        "@pdf-lib/fontkit": "^1.1.1",
+         "body-parser": "^1.19.0",
+         "connect-mssql-v2": "^6.0.0",
+         "cors": "^2.8.5",
+diff --git a/public/scripts.js b/public/scripts.js
+index 6744968..9f5cd11 100644
+--- a/public/scripts.js
++++ b/public/scripts.js
+@@ -1146,6 +1146,55 @@ function openApprovalMsgViewer(RowID, filename) {
+     return false;
+ }
+ 
++/**
++ * Agrega los botones de traduccion a la fila de un archivo.
++ *
++ * - "Translate": abre el modal de seleccion de idioma (encola un job).
++ * - "Open translation": solo si el archivo ya tiene traducciones; abre el
++ *   listado, porque un mismo archivo puede tener varias.
++ *
++ * Toda la logica vive en window.ApprovalTranslations
++ * (public/js/approval-translations.js); aqui solo se cablean los botones.
++ */
++function appendTranslationActions(actionsContainer, rowId, item) {
++    if (!actionsContainer || !item || !item.is_translatable) return;
++    if (!window.ApprovalTranslations) return; // modulo no cargado en esta vista
++
++    var btnTranslate = document.createElement('a');
++    btnTranslate.href = '#';
++    btnTranslate.title = 'Translate this document';
++    btnTranslate.className = 'file_action_btn';
++    btnTranslate.innerHTML = '<i class="fas fa-language secondIcon"></i>';
++    btnTranslate.onclick = function (e) {
++        e.preventDefault();
++        window.ApprovalTranslations.openTranslateModal(rowId, item.filename);
++        return false;
++    };
++    actionsContainer.appendChild(btnTranslate);
++
++    var hasTranslations = item.has_translations || Number(item.translation_pending) > 0;
++    if (!hasTranslations) return;
++
++    var count = Number(item.translation_count) || 0;
++    var pending = Number(item.translation_pending) || 0;
++
++    var btnOpen = document.createElement('a');
++    btnOpen.href = '#';
++    btnOpen.title = pending > 0
++        ? 'Open translation (' + pending + ' in progress)'
++        : 'Open translation';
++    btnOpen.className = 'file_action_btn';
++    btnOpen.innerHTML = '<i class="fas fa-globe secondIcon"></i>' +
++        (count > 0 ? '<span class="file_translation_count">' + count + '</span>' : '') +
++        (pending > 0 ? '<i class="fas fa-spinner fa-spin secondIcon" style="margin-left:3px;"></i>' : '');
++    btnOpen.onclick = function (e) {
++        e.preventDefault();
++        window.ApprovalTranslations.openTranslationsModal(rowId, item.filename);
++        return false;
++    };
++    actionsContainer.appendChild(btnOpen);
++}
++
+ function ArchivosApproval(RowID = 0, options = {}) {
+     var id = 0;
+     var highlightFilename = '';
+@@ -1244,6 +1293,7 @@ function ArchivosApproval(RowID = 0, options = {}) {
+                         link.title = "Open image";
+                         link.innerHTML = '<i class="fas fa-external-link-alt secondIcon"></i>';
+                         actions.appendChild(link);
++                        appendTranslationActions(actions, id, item);
+                     } else if (item.is_pdf) {
+                         // PDFs: preview/sign (with version selector), browser, download
+                         var btnViewer = document.createElement("a");
+@@ -1276,6 +1326,7 @@ function ArchivosApproval(RowID = 0, options = {}) {
+                         actions.appendChild(btnViewer);
+                         actions.appendChild(btnBrowser);
+                         actions.appendChild(btnDownload);
++                        appendTranslationActions(actions, id, item);
+                     } else if (getApprovalFileExtension(item.filename) === '.msg') {
+                         var btnOpenMsg = document.createElement('a');
+                         btnOpenMsg.href = '#';
+diff --git a/views/layout.pug b/views/layout.pug
+index 1c6ce54..dfe8491 100644
+--- a/views/layout.pug
++++ b/views/layout.pug
+@@ -16,6 +16,7 @@ html(data-theme=userProfile.DarkMode == 1 ? "dark" : "light")
+     if(title=='Approval Details')
+       link(rel="stylesheet" href="/approvals-detalle-print.css")
+       link(rel="stylesheet" href="/css/pdf-viewer.css")
++      link(rel="stylesheet" href="/css/approval-translations.css")
+     if(title=='Performance Review Details')
+       link(rel="stylesheet" href="/approvals-detalle-print.css")
+     //- link(rel="stylesheet" href="/jsdelivr.css")
+@@ -632,4 +633,5 @@ html(data-theme=userProfile.DarkMode == 1 ? "dark" : "light")
+         }
+     if(title=='Approval Details')
+       script(src='/js/pdf-viewer-sign.js')
++      script(src='/js/approval-translations.js')
+     //- El visor de CRM (pdf-viewer-doc.js) se carga bajo demanda desde scripts_crm.js
+\ No newline at end of file
