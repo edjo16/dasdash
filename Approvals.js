@@ -23,6 +23,7 @@ import usersRoutes from './USERS/routes/users-routes.js';
 import badacoRoutes from './mercadeo/routes/badaco-routes.js';
 import aiRoutes from './AI/routes/ai-routes.js';
 import toolsRoutes from './Tools/routes/tools-routes.js'
+import { startTranslationJobRunner } from './Approvals_functions/services/translation-job-runner.js';
 import { createRequire } from 'module';
 import fs from 'fs';
 import { session_config, sqlConfig } from "./dbConfig.js";
@@ -142,6 +143,8 @@ app.use('/', aiRoutes);
 sql.connect(sqlConfig).then((pool) => {
     console.log('DB connection pool established');
     observeDbPool(pool);
+    // Procesador en background de las traducciones de documentos (APPROVALS).
+    startTranslationJobRunner(sqlConfig);
     app.listen(port, () => {
         console.log(`Listening to requests on http://localhost:${port}`);
         swaggerDocs(app, port);

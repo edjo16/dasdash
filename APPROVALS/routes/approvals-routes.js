@@ -6,6 +6,7 @@ import USERController from '../../USERS/controllers/Users.js';
 import ApprovalFunctionsModel from '../../Approvals_functions/models/approval_functions.js'
 import ApprovalFunctionsController from '../../Approvals_functions/controllers/approval_functions.js';
 import DigitalSignaturesController from '../../Approvals_functions/controllers/digital_signatures.js';
+import ApprovalTranslationsController from '../../Approvals_functions/controllers/approval_translations.js';
 import express from "express";
 import { checkServerAvailability } from '../../Middleware/checkServerAvailability.js';
 import { requireAuth } from '../../Middleware/requireAuth.js';
@@ -646,6 +647,26 @@ router.get("/", checkServerAvailability, requireAuth, async (req, res) => {
     })
     router.get("/pdf-sign/signed-file", requireAuth, async (req, res) => {
         await DigitalSignaturesController.serveSignedFile(sqlConfig, req, res);
+    })
+
+    // ── Document translation endpoints ───────────────────────────
+    router.get("/approval-translate/languages", requireAuth, async (req, res) => {
+        await ApprovalTranslationsController.getLanguages(sqlConfig, req, res);
+    })
+    router.post("/approval-translate/create", requireAuth, async (req, res) => {
+        await ApprovalTranslationsController.createTranslation(sqlConfig, req, res);
+    })
+    router.get("/approval-translate/list", requireAuth, async (req, res) => {
+        await ApprovalTranslationsController.listTranslations(sqlConfig, req, res);
+    })
+    router.get("/approval-translate/status", requireAuth, async (req, res) => {
+        await ApprovalTranslationsController.getStatus(sqlConfig, req, res);
+    })
+    router.get("/approval-translate/file", requireAuth, async (req, res) => {
+        await ApprovalTranslationsController.serveTranslationFile(sqlConfig, req, res);
+    })
+    router.post("/approval-translate/delete", requireAuth, async (req, res) => {
+        await ApprovalTranslationsController.deleteTranslation(sqlConfig, req, res);
     })
 
 /**

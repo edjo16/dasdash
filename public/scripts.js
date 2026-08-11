@@ -1146,6 +1146,55 @@ function openApprovalMsgViewer(RowID, filename) {
     return false;
 }
 
+/**
+ * Agrega los botones de traduccion a la fila de un archivo.
+ *
+ * - "Translate": abre el modal de seleccion de idioma (encola un job).
+ * - "Open translation": solo si el archivo ya tiene traducciones; abre el
+ *   listado, porque un mismo archivo puede tener varias.
+ *
+ * Toda la logica vive en window.ApprovalTranslations
+ * (public/js/approval-translations.js); aqui solo se cablean los botones.
+ */
+function appendTranslationActions(actionsContainer, rowId, item) {
+    if (!actionsContainer || !item || !item.is_translatable) return;
+    if (!window.ApprovalTranslations) return; // modulo no cargado en esta vista
+
+    var btnTranslate = document.createElement('a');
+    btnTranslate.href = '#';
+    btnTranslate.title = 'Translate this document';
+    btnTranslate.className = 'file_action_btn';
+    btnTranslate.innerHTML = '<i class="fas fa-language secondIcon"></i>';
+    btnTranslate.onclick = function (e) {
+        e.preventDefault();
+        window.ApprovalTranslations.openTranslateModal(rowId, item.filename);
+        return false;
+    };
+    actionsContainer.appendChild(btnTranslate);
+
+    var hasTranslations = item.has_translations || Number(item.translation_pending) > 0;
+    if (!hasTranslations) return;
+
+    var count = Number(item.translation_count) || 0;
+    var pending = Number(item.translation_pending) || 0;
+
+    var btnOpen = document.createElement('a');
+    btnOpen.href = '#';
+    btnOpen.title = pending > 0
+        ? 'Open translation (' + pending + ' in progress)'
+        : 'Open translation';
+    btnOpen.className = 'file_action_btn';
+    btnOpen.innerHTML = '<i class="fas fa-globe secondIcon"></i>' +
+        (count > 0 ? '<span class="file_translation_count">' + count + '</span>' : '') +
+        (pending > 0 ? '<i class="fas fa-spinner fa-spin secondIcon" style="margin-left:3px;"></i>' : '');
+    btnOpen.onclick = function (e) {
+        e.preventDefault();
+        window.ApprovalTranslations.openTranslationsModal(rowId, item.filename);
+        return false;
+    };
+    actionsContainer.appendChild(btnOpen);
+}
+
 function ArchivosApproval(RowID = 0, options = {}) {
     var id = 0;
     var highlightFilename = '';
@@ -1244,6 +1293,7 @@ function ArchivosApproval(RowID = 0, options = {}) {
                         link.title = "Open image";
                         link.innerHTML = '<i class="fas fa-external-link-alt secondIcon"></i>';
                         actions.appendChild(link);
+                        appendTranslationActions(actions, id, item);
                     } else if (item.is_pdf) {
                         // PDFs: preview/sign (with version selector), browser, download
                         var btnViewer = document.createElement("a");
@@ -1276,6 +1326,7 @@ function ArchivosApproval(RowID = 0, options = {}) {
                         actions.appendChild(btnViewer);
                         actions.appendChild(btnBrowser);
                         actions.appendChild(btnDownload);
+                        appendTranslationActions(actions, id, item);
                     } else if (getApprovalFileExtension(item.filename) === '.msg') {
                         var btnOpenMsg = document.createElement('a');
                         btnOpenMsg.href = '#';

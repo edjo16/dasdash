@@ -19,6 +19,8 @@ import ChangesControlModel from '../../IT/model/ChangesControl.js';
 import DigitalSignaturesModel from '../models/digital_signatures.js';
 import Rules from '../../USERS/rule/DevTeam.js';
 import { resolveApprovalFileFullPath } from '../shared/approval-file-routing.js';
+import ApprovalTranslationsModel from '../models/translations.js';
+import { isTranslatableFile } from '../services/translation-pdf-service.js';
 import MsgReaderModule from '@kenjiuno/msgreader';
 
 const MsgReader = MsgReaderModule.default || MsgReaderModule;
@@ -482,6 +484,23 @@ export default class ApprovalFunctionsController {
             let temp              = '';
             const files           = [];
 
+            // Traducciones existentes por archivo (una sola consulta para todo
+            // el approval, en lugar de una por archivo).
+            const translationCounts = new Map();
+            try {
+                const counts = await ApprovalTranslationsModel.countByApproval(transaction, RowID);
+                for (const row of counts) {
+                    translationCounts.set(row.source_filename, {
+                        completed: Number(row.completed_count) || 0,
+                        pending: Number(row.pending_count) || 0,
+                    });
+                }
+            } catch (translationErr) {
+                // La lista de archivos no debe romperse si el modulo de
+                // traducciones aun no esta desplegado en esta base.
+                console.error('[Translations] count lookup failed:', translationErr.message);
+            }
+
             for (const archivo of archivos) {
                 // ── Section headers (by file tipo) ────────────────────────
                 if (archivo.tipo == 1 && subtitulo_firma) {
@@ -555,6 +574,8 @@ export default class ApprovalFunctionsController {
                     ? `/pdf-sign/signed-file?RowID=${RowID}&filename=${encodeURIComponent(filename)}&version=latest&dl=1`
                     : `/approval-file?RowID=${RowID}&filename=${encodeURIComponent(filename)}&dl=1`;
 
+                const translations = translationCounts.get(filename) || { completed: 0, pending: 0 };
+
                 files.push({
                     type: 'file',
                     filename,
@@ -566,6 +587,11 @@ export default class ApprovalFunctionsController {
                     is_pdf,
                     file_url: fileUrl,
                     download_url: downloadUrl,
+                    // ── Traduccion de documentos ──────────────────────
+                    is_translatable: isTranslatableFile(filename),
+                    translation_count: translations.completed,
+                    translation_pending: translations.pending,
+                    has_translations: translations.completed > 0,
                 });
             }
 

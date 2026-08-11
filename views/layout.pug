@@ -16,6 +16,7 @@ html(data-theme=userProfile.DarkMode == 1 ? "dark" : "light")
     if(title=='Approval Details')
       link(rel="stylesheet" href="/approvals-detalle-print.css")
       link(rel="stylesheet" href="/css/pdf-viewer.css")
+      link(rel="stylesheet" href="/css/approval-translations.css")
     if(title=='Performance Review Details')
       link(rel="stylesheet" href="/approvals-detalle-print.css")
     //- link(rel="stylesheet" href="/jsdelivr.css")
@@ -632,4 +633,5 @@ html(data-theme=userProfile.DarkMode == 1 ? "dark" : "light")
         }
     if(title=='Approval Details')
       script(src='/js/pdf-viewer-sign.js')
+      script(src='/js/approval-translations.js')
     //- El visor de CRM (pdf-viewer-doc.js) se carga bajo demanda desde scripts_crm.js
