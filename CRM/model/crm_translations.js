@@ -1,0 +1,242 @@
+/* ============================================================
+   CRM — Translations model
+   ------------------------------------------------------------
+   Unica capa que conoce las tablas `crm_translations` y
+   `crm_translation_audit_log`. No resuelve rutas, no genera PDFs
+   y no valida permisos: eso vive en el servicio/controlador.
+
+   Espejo de Approvals_functions/models/translations.js, con la
+   diferencia de que aqui un archivo se identifica por
+   (crm_id, msg_id, source_filename).
+   ============================================================ */
+import sql from 'mssql';
+
+/** Estados posibles de un job de traduccion. */
+export const TRANSLATION_STATUS = Object.freeze({
+    PENDING: 'pending',
+    PROCESSING: 'processing',
+    COMPLETED: 'completed',
+    FAILED: 'failed',
+    CANCELLED: 'cancelled',
+});
+
+const SELECT_COLUMNS = `
+    id, crm_id, msg_id, source_filename, target_lang, source_lang, version,
+    translated_filename, file_path, file_hash, page_count, char_count,
+    extraction_method, status, error_message, created_by, created_by_name,
+    created_at, started_at, completed_at
+`;
+
+export default class CRMTranslationsModel {
+
+    /**
+     * Crea el registro del job en estado `pending`.
+     * La version se calcula por (crm_id, msg_id, source_filename, target_lang)
+     * para que un mismo archivo pueda re-traducirse al mismo idioma.
+     */
+    static async createJob(transaction, data) {
+        const request = new sql.Request(transaction);
+        request.input('crm_id', sql.Int, data.crm_id);
+        request.input('msg_id', sql.Int, data.msg_id);
+        request.input('source_filename', sql.NVarChar(500), data.source_filename);
+        request.input('target_lang', sql.NVarChar(20), data.target_lang);
+        request.input('source_lang', sql.NVarChar(20), data.source_lang || null);
+        request.input('created_by', sql.NVarChar(100), String(data.created_by ?? ''));
+        request.input('created_by_name', sql.NVarChar(200), data.created_by_name || null);
+
+        const result = await request.query(`
+            DECLARE @nextVersion INT = (
+                SELECT ISNULL(MAX(version), 0) + 1
+                FROM crm_translations
+                WHERE crm_id = @crm_id
+                  AND msg_id = @msg_id
+                  AND source_filename = @source_filename
+                  AND target_lang = @target_lang
+            );
+
+            INSERT INTO crm_translations
+                (crm_id, msg_id, source_filename, target_lang, source_lang, version,
+                 status, created_by, created_by_name)
+            OUTPUT INSERTED.id, INSERTED.version
+            VALUES
+                (@crm_id, @msg_id, @source_filename, @target_lang, @source_lang, @nextVersion,
+                 '${TRANSLATION_STATUS.PENDING}', @created_by, @created_by_name);
+        `);
+
+        return result.recordset[0];
+    }
+
+    static async getById(transaction, id) {
+        const request = new sql.Request(transaction);
+        request.input('id', sql.Int, id);
+        const result = await request.query(`
+            SELECT ${SELECT_COLUMNS} FROM crm_translations WHERE id = @id
+        `);
+        return result.recordset[0] || null;
+    }
+
+    /** Traducciones de un archivo concreto, mas recientes primero. */
+    static async listByFile(transaction, crmId, msgId, sourceFilename) {
+        const request = new sql.Request(transaction);
+        request.input('crm_id', sql.Int, crmId);
+        request.input('msg_id', sql.Int, msgId);
+        request.input('source_filename', sql.NVarChar(500), sourceFilename);
+        const result = await request.query(`
+            SELECT ${SELECT_COLUMNS}
+            FROM crm_translations
+            WHERE crm_id = @crm_id
+              AND msg_id = @msg_id
+              AND source_filename = @source_filename
+              AND status <> '${TRANSLATION_STATUS.CANCELLED}'
+            ORDER BY created_at DESC, id DESC
+        `);
+        return result.recordset || [];
+    }
+
+    /**
+     * Conteo por (mensaje, archivo) para pintar los botones de todos los
+     * mensajes del caso con una sola consulta. En CRM la lista de archivos
+     * llega como un string separado por `;` dentro de cada mensaje, asi que
+     * los contadores se piden aparte y se cruzan en el cliente.
+     */
+    static async countByCase(transaction, crmId) {
+        const request = new sql.Request(transaction);
+        request.input('crm_id', sql.Int, crmId);
+        const result = await request.query(`
+            SELECT
+                msg_id,
+                source_filename,
+                SUM(CASE WHEN status = '${TRANSLATION_STATUS.COMPLETED}' THEN 1 ELSE 0 END) AS completed_count,
+                SUM(CASE WHEN status IN ('${TRANSLATION_STATUS.PENDING}', '${TRANSLATION_STATUS.PROCESSING}') THEN 1 ELSE 0 END) AS pending_count
+            FROM crm_translations
+            WHERE crm_id = @crm_id
+              AND status <> '${TRANSLATION_STATUS.CANCELLED}'
+            GROUP BY msg_id, source_filename
+        `);
+        return result.recordset || [];
+    }
+
+    /** Job existente aun en curso para el mismo archivo+idioma (evita duplicados). */
+    static async findActiveJob(transaction, crmId, msgId, sourceFilename, targetLang) {
+        const request = new sql.Request(transaction);
+        request.input('crm_id', sql.Int, crmId);
+        request.input('msg_id', sql.Int, msgId);
+        request.input('source_filename', sql.NVarChar(500), sourceFilename);
+        request.input('target_lang', sql.NVarChar(20), targetLang);
+        const result = await request.query(`
+            SELECT TOP 1 ${SELECT_COLUMNS}
+            FROM crm_translations
+            WHERE crm_id = @crm_id
+              AND msg_id = @msg_id
+              AND source_filename = @source_filename
+              AND target_lang = @target_lang
+              AND status IN ('${TRANSLATION_STATUS.PENDING}', '${TRANSLATION_STATUS.PROCESSING}')
+            ORDER BY created_at DESC
+        `);
+        return result.recordset[0] || null;
+    }
+
+    /**
+     * Toma el siguiente job pendiente marcandolo como `processing` de forma
+     * atomica (UPDATE ... OUTPUT con readpast) para que varias instancias del
+     * runner no procesen el mismo registro.
+     */
+    static async claimNextPendingJob(transaction) {
+        const request = new sql.Request(transaction);
+        const result = await request.query(`
+            UPDATE TOP (1) t
+            SET status = '${TRANSLATION_STATUS.PROCESSING}',
+                started_at = GETDATE()
+            OUTPUT ${SELECT_COLUMNS.split(',').map(c => 'INSERTED.' + c.trim()).join(', ')}
+            FROM crm_translations AS t WITH (READPAST, UPDLOCK, ROWLOCK)
+            WHERE t.status = '${TRANSLATION_STATUS.PENDING}'
+        `);
+        return result.recordset[0] || null;
+    }
+
+    static async markCompleted(transaction, id, data) {
+        const request = new sql.Request(transaction);
+        request.input('id', sql.Int, id);
+        request.input('translated_filename', sql.NVarChar(500), data.translated_filename);
+        request.input('file_path', sql.NVarChar(1000), data.file_path);
+        request.input('file_hash', sql.NVarChar(128), data.file_hash || null);
+        request.input('page_count', sql.Int, data.page_count ?? null);
+        request.input('char_count', sql.Int, data.char_count ?? null);
+        request.input('extraction_method', sql.NVarChar(20), data.extraction_method || null);
+        await request.query(`
+            UPDATE crm_translations
+            SET status = '${TRANSLATION_STATUS.COMPLETED}',
+                translated_filename = @translated_filename,
+                file_path = @file_path,
+                file_hash = @file_hash,
+                page_count = @page_count,
+                char_count = @char_count,
+                extraction_method = @extraction_method,
+                error_message = NULL,
+                completed_at = GETDATE()
+            WHERE id = @id
+        `);
+    }
+
+    static async markFailed(transaction, id, errorMessage) {
+        const request = new sql.Request(transaction);
+        request.input('id', sql.Int, id);
+        request.input('error_message', sql.NVarChar(1000), String(errorMessage || '').slice(0, 1000));
+        await request.query(`
+            UPDATE crm_translations
+            SET status = '${TRANSLATION_STATUS.FAILED}',
+                error_message = @error_message,
+                completed_at = GETDATE()
+            WHERE id = @id
+        `);
+    }
+
+    /**
+     * Devuelve a `pending` los jobs que quedaron colgados en `processing`
+     * (por ejemplo si el proceso se reinicio a mitad de una traduccion).
+     */
+    static async requeueStaleJobs(transaction, staleMinutes = 30) {
+        const request = new sql.Request(transaction);
+        request.input('staleMinutes', sql.Int, staleMinutes);
+        const result = await request.query(`
+            UPDATE crm_translations
+            SET status = '${TRANSLATION_STATUS.PENDING}', started_at = NULL
+            WHERE status = '${TRANSLATION_STATUS.PROCESSING}'
+              AND started_at IS NOT NULL
+              AND DATEDIFF(MINUTE, started_at, GETDATE()) >= @staleMinutes
+        `);
+        return result.rowsAffected?.[0] || 0;
+    }
+
+    /** Borrado logico: la traduccion desaparece de la UI pero queda el rastro. */
+    static async cancel(transaction, id, crmId) {
+        const request = new sql.Request(transaction);
+        request.input('id', sql.Int, id);
+        request.input('crm_id', sql.Int, crmId);
+        const result = await request.query(`
+            UPDATE crm_translations
+            SET status = '${TRANSLATION_STATUS.CANCELLED}'
+            WHERE id = @id AND crm_id = @crm_id
+        `);
+        return result.rowsAffected?.[0] || 0;
+    }
+
+    static async insertAuditLog(transaction, data) {
+        const request = new sql.Request(transaction);
+        request.input('translation_id', sql.Int, data.translation_id ?? null);
+        request.input('crm_id', sql.Int, data.crm_id);
+        request.input('msg_id', sql.Int, data.msg_id);
+        request.input('source_filename', sql.NVarChar(500), data.source_filename);
+        request.input('action', sql.NVarChar(50), data.action);
+        request.input('user_id', sql.NVarChar(100), String(data.user_id ?? ''));
+        request.input('user_name', sql.NVarChar(200), data.user_name || null);
+        request.input('ip_address', sql.NVarChar(64), data.ip_address || null);
+        request.input('details', sql.NVarChar(1000), data.details ? String(data.details).slice(0, 1000) : null);
+        await request.query(`
+            INSERT INTO crm_translation_audit_log
+                (translation_id, crm_id, msg_id, source_filename, action, user_id, user_name, ip_address, details)
+            VALUES
+                (@translation_id, @crm_id, @msg_id, @source_filename, @action, @user_id, @user_name, @ip_address, @details)
+        `);
+    }
+}

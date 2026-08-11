@@ -4,6 +4,7 @@ import CRMModel from '../model/CRM.js';
 import { validateUserId } from "../../Middleware/validateUserId.js";
 import CRMController from '../controllers/CRM.js';
 import CRMPdfController from '../controllers/CRM_pdf.js';
+import CRMTranslationsController from '../controllers/crm_translations.js';
 import cron from 'node-cron';
 import { requireAuth } from '../../Middleware/requireAuth.js';
 
@@ -213,6 +214,28 @@ export default function (app) {
     });
     app.post('/crm-pdf/text/apply', requireAuth, async (req, res) => {
         await CRMPdfController.applyTextWrites(sqlConfig, req, res);
+    });
+    // ── Traduccion de documentos ──────────────────────────────
+    app.get('/crm-translate/languages', requireAuth, async (req, res) => {
+        await CRMTranslationsController.getLanguages(sqlConfig, req, res);
+    });
+    app.post('/crm-translate/create', requireAuth, async (req, res) => {
+        await CRMTranslationsController.createTranslation(sqlConfig, req, res);
+    });
+    app.get('/crm-translate/list', requireAuth, async (req, res) => {
+        await CRMTranslationsController.listTranslations(sqlConfig, req, res);
+    });
+    app.get('/crm-translate/counts', requireAuth, async (req, res) => {
+        await CRMTranslationsController.getCounts(sqlConfig, req, res);
+    });
+    app.get('/crm-translate/status', requireAuth, async (req, res) => {
+        await CRMTranslationsController.getStatus(sqlConfig, req, res);
+    });
+    app.get('/crm-translate/file', requireAuth, async (req, res) => {
+        await CRMTranslationsController.serveTranslationFile(sqlConfig, req, res);
+    });
+    app.post('/crm-translate/delete', requireAuth, async (req, res) => {
+        await CRMTranslationsController.deleteTranslation(sqlConfig, req, res);
     });
     app.get('/crm-msg-content', requireAuth, async (req, res) => {
         await CRMController.getCrmMsgContent(sqlConfig, req, res);

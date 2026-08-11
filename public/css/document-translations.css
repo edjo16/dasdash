@@ -1,7 +1,8 @@
 /* ═══════════════════════════════════════════════════════════
-   Approval Document Translations
+   Document Translations (APPROVALS y CRM)
    Reutiliza el contenedor `.app-modal` del mixin modal-container
    y solo aporta los estilos propios de la funcionalidad.
+   Lo consume /js/document-translations-core.js (clases atr-*).
    ═══════════════════════════════════════════════════════════ */
 
 :root {

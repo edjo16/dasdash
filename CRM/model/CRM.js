@@ -22,6 +22,23 @@ export default class CRMModel {
         return recordset[0];
   }
 
+    /**
+     * Nombres de los adjuntos de un mensaje. Se usa para comprobar que un
+     * archivo pedido (por ejemplo para traducirlo) pertenece de verdad a ese
+     * mensaje, sin confiar en el nombre que llega del cliente.
+     */
+    static async getMessageFileNames(transaction, id_main, id_msg) {
+        const request = new sql.Request(transaction);
+        request.input('id_main', sql.Int, id_main);
+        request.input('id_msg', sql.Int, id_msg);
+        const { recordset } = await request.query(`
+            SELECT xname
+            FROM crm_archivos
+            WHERE id_main = @id_main AND id_msg = @id_msg
+        `);
+        return (recordset || []).map(r => r.xname);
+    }
+
 static async validateCrmAccess(conection, crm_id, userid) {
         try {
             const pool = await sql.connect(conection);

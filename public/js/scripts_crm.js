@@ -562,6 +562,47 @@ function openCrmMsgViewer(crm_id, msg_id, filename) {
     return false;
 }
 
+/* Extensiones que el backend sabe traducir (PDF + imagenes con OCR).
+   Debe coincidir con isTranslatableFile() del servicio de traduccion. */
+function isCrmTranslatableFile(filename) {
+    var ext = getCrmFileExtension(filename);
+    return ext === '.pdf' || ext === '.png' || ext === '.jpg' ||
+           ext === '.jpeg' || ext === '.webp';
+}
+
+/**
+ * Agrega los botones de traduccion a la fila de un archivo.
+ *
+ * - "Translate": abre el modal de seleccion de idioma (encola un job).
+ * - "Open translation": nace oculto y lo revela CRMTranslations.refreshBadges()
+ *   cuando el caso ya tiene traducciones para ese archivo. Se hace asi porque
+ *   la lista de adjuntos de CRM se arma en el cliente desde un string y no
+ *   trae metadata por archivo.
+ *
+ * Toda la logica vive en window.CRMTranslations (public/js/crm-translations.js);
+ * aqui solo se cablean los botones.
+ */
+function appendCrmTranslationActions(actions, crm_id, msg_id, filename) {
+    if (!actions || !isCrmTranslatableFile(filename)) return;
+    if (!window.CRMTranslations) return; // modulo no cargado en esta vista
+
+    actions.appendChild(createCrmActionButton(
+        'Translate this document',
+        '<i class="fas fa-language secondIcon"></i>',
+        function () { window.CRMTranslations.openTranslateModal(crm_id, msg_id, filename); }
+    ));
+
+    var btnOpen = createCrmActionButton(
+        'Open translation',
+        '<i class="fas fa-globe secondIcon"></i>',
+        function () { window.CRMTranslations.openTranslationsModal(crm_id, msg_id, filename); }
+    );
+    btnOpen.style.display = 'none';
+    btnOpen.setAttribute('data-crm-translation-file', filename);
+    btnOpen.setAttribute('data-crm-msg-id', msg_id);
+    actions.appendChild(btnOpen);
+}
+
 function buildCrmFileActions(crm_id, msg_id, filename) {
     var endpoints = getCrmFileEndpoints(crm_id, msg_id, filename);
     var ext = getCrmFileExtension(filename);
@@ -591,6 +632,7 @@ function buildCrmFileActions(crm_id, msg_id, filename) {
             'Download',
             '<i class="fas fa-download secondIcon"></i>'
         ));
+        appendCrmTranslationActions(actions, crm_id, msg_id, filename);
         return actions;
     }
 
@@ -1400,6 +1442,11 @@ function crm_case_details(crm_id) {
                 // Apply default message type filter (user messages only)
                 filterCrmMessages();
                 refreshFavoritesPanel();
+                // Revela los botones "Open translation" de los archivos que
+                // ya tienen traducciones (una sola consulta para todo el caso).
+                if (window.CRMTranslations) {
+                    window.CRMTranslations.refreshBadges(crm_id);
+                }
             } else {
                 launch_toast("Error loading CRM", 2)
             }

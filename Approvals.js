@@ -24,6 +24,9 @@ import badacoRoutes from './mercadeo/routes/badaco-routes.js';
 import aiRoutes from './AI/routes/ai-routes.js';
 import toolsRoutes from './Tools/routes/tools-routes.js'
 import { startTranslationJobRunner } from './Approvals_functions/services/translation-job-runner.js';
+// Registra la cola de traducciones de CRM en el mismo runner (import por
+// efecto secundario: debe ocurrir antes de startTranslationJobRunner).
+import './CRM/services/crm-translation-source.js';
 import { createRequire } from 'module';
 import fs from 'fs';
 import { session_config, sqlConfig } from "./dbConfig.js";
