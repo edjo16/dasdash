@@ -1172,20 +1172,25 @@ function appendTranslationActions(actionsContainer, rowId, item) {
     };
     actionsContainer.appendChild(btnTranslate);
 
-    var hasTranslations = item.has_translations || Number(item.translation_pending) > 0;
-    if (!hasTranslations) return;
-
     var count = Number(item.translation_count) || 0;
+    var preview = Number(item.translation_preview) || 0;
     var pending = Number(item.translation_pending) || 0;
 
+    if (!item.has_translations && !preview && !pending) return;
+
+    // `preview` son traducciones con el texto listo esperando a que alguien
+    // lo revise: se marcan aparte porque piden una accion del usuario.
     var btnOpen = document.createElement('a');
     btnOpen.href = '#';
     btnOpen.title = pending > 0
         ? 'Open translation (' + pending + ' in progress)'
-        : 'Open translation';
+        : preview > 0
+            ? 'Open translation (' + preview + ' ready to review)'
+            : 'Open translation';
     btnOpen.className = 'file_action_btn';
     btnOpen.innerHTML = '<i class="fas fa-globe secondIcon"></i>' +
         (count > 0 ? '<span class="file_translation_count">' + count + '</span>' : '') +
+        (preview > 0 ? '<i class="fas fa-eye secondIcon" style="margin-left:3px;"></i>' : '') +
         (pending > 0 ? '<i class="fas fa-spinner fa-spin secondIcon" style="margin-left:3px;"></i>' : '');
     btnOpen.onclick = function (e) {
         e.preventDefault();
@@ -1350,13 +1355,15 @@ function ArchivosApproval(RowID = 0, options = {}) {
                         actions.appendChild(btnOpenMsg);
                         actions.appendChild(msgDownloadBtn);
                     } else {
-                        // Other files: download
+                        // Other files: download and, if the backend can read
+                        // them (Word, OpenDocument, RTF, text), translation.
                         var dlBtn = document.createElement("a");
                         dlBtn.href = item.download_url;
                         dlBtn.title = "Download";
                         dlBtn.className = 'file_action_btn';
                         dlBtn.innerHTML = '<i class="fas fa-download secondIcon"></i>';
                         actions.appendChild(dlBtn);
+                        appendTranslationActions(actions, id, item);
                     }
 
                     row.appendChild(actions);

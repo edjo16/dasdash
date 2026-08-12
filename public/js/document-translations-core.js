@@ -30,6 +30,8 @@
   var POLL_INTERVAL_MS = 4000;
   var POLL_MAX_ATTEMPTS = 450; // ~30 min
 
+  var MODAL_IDS = ['dtrTranslateModal', 'dtrTranslationsModal', 'dtrPreviewModal'];
+
   // Markup e ids son unicos en la pagina; `activeInstance` decide a que
   // instancia van los eventos cuando hay mas de un modulo cargado.
   var markupReady = false;
@@ -37,6 +39,21 @@
 
   // ── Utilidades ───────────────────────────────────────────
   function el(id) { return document.getElementById(id); }
+
+  /** Icono FontAwesome segun la extension del archivo de origen. */
+  function fileIconFor(filename) {
+    var name = String(filename || '').toLowerCase();
+    if (/\.pdf$/.test(name)) return 'fa-file-pdf';
+    if (/\.(docx?|dotx?|docm|dotm)$/.test(name)) return 'fa-file-word';
+    if (/\.(png|jpe?g|webp|gif|bmp)$/.test(name)) return 'fa-file-image';
+    if (/\.(odt|ott|rtf|txt|md|markdown|log)$/.test(name)) return 'fa-file-alt';
+    if (/\.csv$/.test(name)) return 'fa-file-csv';
+    return 'fa-file';
+  }
+
+  function fileLabel(filename) {
+    return '<i class="fas ' + fileIconFor(filename) + ' me-1"></i>' + escapeHtml(filename);
+  }
 
   function escapeHtml(value) {
     return String(value == null ? '' : value)
@@ -147,6 +164,32 @@
       '      </button>',
       '    </div>',
       '  </div>',
+      '</div>',
+      // Modal: preview del texto traducido (paso previo a generar el documento)
+      '<div id="dtrPreviewModal" class="app-modal atr-modal">',
+      '  <div class="app-modal-dialog atr-preview-dialog">',
+      '    <div class="app-modal-header">',
+      '      <h6 class="app-modal-title"><i class="fas fa-eye me-2"></i>Translation preview</h6>',
+      '      <button type="button" class="app-modal-close" data-atr-close="dtrPreviewModal" aria-label="Close">&times;</button>',
+      '    </div>',
+      '    <div class="app-modal-body atr-preview-body">',
+      '      <p class="atr-filename" id="atrPreviewFilename"></p>',
+      '      <p class="atr-hint" id="atrPreviewHint"></p>',
+      '      <textarea id="atrPreviewText" class="atr-preview-text" spellcheck="false"></textarea>',
+      '      <div class="atr-preview-meta">',
+      '        <span id="atrPreviewCount"></span>',
+      '        <span id="atrPreviewDirty" class="atr-preview-dirty"></span>',
+      '      </div>',
+      '      <div id="atrPreviewFeedback" class="atr-feedback"></div>',
+      '    </div>',
+      '    <div class="app-modal-footer">',
+      '      <div id="atrPreviewDocLinks" class="atr-preview-links"></div>',
+      '      <button type="button" class="btn btn-outline-secondary btn-sm" data-atr-close="dtrPreviewModal">Close</button>',
+      '      <button type="button" id="atrGenerateBtn" class="btn btn-sm atr-btn-primary">',
+      '        <i class="fas fa-file-pdf me-1"></i>Generate document',
+      '      </button>',
+      '    </div>',
+      '  </div>',
       '</div>'
     ].join('');
 
@@ -158,7 +201,7 @@
         closeModal(this.getAttribute('data-atr-close'));
       });
     });
-    ['dtrTranslateModal', 'dtrTranslationsModal'].forEach(function (id) {
+    MODAL_IDS.forEach(function (id) {
       var modal = el(id);
       if (!modal) return;
       modal.addEventListener('click', function (e) {
@@ -175,14 +218,40 @@
       activeInstance.openTranslateModal(activeInstance.currentRef);
     });
     el('atrTargetLang').addEventListener('change', renderTargetHint);
+    el('atrGenerateBtn').addEventListener('click', function () {
+      if (activeInstance) activeInstance.generateDocument();
+    });
+    el('atrPreviewText').addEventListener('input', renderPreviewMeta);
 
     document.addEventListener('keydown', function (e) {
       if (e.key !== 'Escape') return;
-      ['dtrTranslateModal', 'dtrTranslationsModal'].forEach(function (id) {
+      MODAL_IDS.forEach(function (id) {
         var modal = el(id);
         if (modal && modal.classList.contains('open')) closeModal(id);
       });
     });
+  }
+
+  /* Idiomas de escritura derecha-a-izquierda, para orientar el textarea. */
+  var RTL_LANGS = { ara: 1, heb: 1 };
+
+  /** Contador de caracteres y aviso de cambios sin generar. */
+  function renderPreviewMeta() {
+    var textarea = el('atrPreviewText');
+    var count = el('atrPreviewCount');
+    var dirty = el('atrPreviewDirty');
+    if (!textarea || !count) return;
+
+    var value = textarea.value;
+    count.textContent = value.length.toLocaleString() + ' characters';
+
+    if (!dirty) return;
+    var changed = activeInstance
+      && activeInstance.previewOriginalText !== null
+      && value !== activeInstance.previewOriginalText;
+    dirty.innerHTML = changed
+      ? '<i class="fas fa-pen me-1"></i>Edited — your changes are saved when you generate the document.'
+      : '';
   }
 
   /** Avisa antes de encolar si el idioma no tiene fuente PDF instalada. */
@@ -199,7 +268,8 @@
         'Ask IT to install it before translating.';
     } else {
       hint.className = 'atr-hint';
-      hint.textContent = 'The translated PDF is saved next to the original file.';
+      hint.textContent = 'The text is translated first so you can review it. '
+        + 'Nothing is written next to the original until you generate the document.';
     }
   }
 
@@ -228,8 +298,8 @@
     renderTargetHint();
   }
 
-  function setFeedback(message, kind) {
-    var box = el('atrCreateFeedback');
+  function setFeedbackIn(boxId, message, kind) {
+    var box = el(boxId);
     if (!box) return;
     if (!message) {
       box.textContent = '';
@@ -240,11 +310,20 @@
     box.innerHTML = message;
   }
 
+  function setFeedback(message, kind) {
+    setFeedbackIn('atrCreateFeedback', message, kind);
+  }
+
+  function setPreviewFeedback(message, kind) {
+    setFeedbackIn('atrPreviewFeedback', message, kind);
+  }
+
   function statusBadge(status) {
     var map = {
       pending: ['atr-badge--wait', 'fa-clock', 'Queued'],
       processing: ['atr-badge--wait', 'fa-spinner fa-spin', 'Translating'],
-      completed: ['atr-badge--ok', 'fa-check', 'Ready'],
+      translated: ['atr-badge--review', 'fa-eye', 'Ready to review'],
+      completed: ['atr-badge--ok', 'fa-check', 'Document ready'],
       failed: ['atr-badge--error', 'fa-times', 'Failed']
     };
     var cfg = map[status] || map.pending;
@@ -253,14 +332,15 @@
 
   /** Aviso no bloqueante al terminar el job. */
   function notifyFinished(translation) {
-    var ok = translation.status === 'completed';
+    var ok = translation.status === 'translated' || translation.status === 'completed';
     var toast = document.createElement('div');
     toast.className = 'atr-toast ' + (ok ? 'atr-toast--ok' : 'atr-toast--error');
     toast.innerHTML =
       '<i class="fas ' + (ok ? 'fa-check-circle' : 'fa-exclamation-circle') + ' me-2"></i>' +
       '<div><strong>' + escapeHtml(translation.source_filename) + '</strong><br>' +
       (ok
-        ? 'Translation to ' + escapeHtml(translation.target_lang_name || translation.target_lang) + ' is ready.'
+        ? 'Translation to ' + escapeHtml(translation.target_lang_name || translation.target_lang) +
+          ' is ready to review.'
         : escapeHtml(translation.error_message || 'Translation failed.')) +
       '</div>';
 
@@ -284,8 +364,13 @@
 
     var api = {
       currentRef: null,
+      // Texto tal y como vino del servidor, para detectar ediciones.
+      previewOriginalText: null,
+      previewTranslation: null,
       openTranslateModal: openTranslateModal,
       openTranslationsModal: openTranslationsModal,
+      openPreview: openPreview,
+      generateDocument: generateDocument,
       resumePolling: startPolling,
       submitTranslation: submitTranslation
     };
@@ -305,7 +390,7 @@
       activeInstance = api;
       api.currentRef = ref;
 
-      el('atrSourceFilename').innerHTML = '<i class="fas fa-file-pdf me-1"></i>' + escapeHtml(ref.filename);
+      el('atrSourceFilename').innerHTML = fileLabel(ref.filename);
       setFeedback('');
       el('atrSubmitBtn').disabled = true;
       openModal('dtrTranslateModal');
@@ -343,7 +428,8 @@
           var translation = data.translation || {};
           var message = data.alreadyQueued
             ? 'This translation is already in progress.'
-            : 'Translation queued. It runs in the background — you can keep working.';
+            : 'Translation queued. It runs in the background — you can keep working. '
+              + 'When it finishes you can review the text and then generate the document.';
 
           setFeedback('<i class="fas fa-check-circle me-1"></i>' + message, 'success');
           startPolling(ref, translation.id);
@@ -359,6 +445,127 @@
         .finally(function () {
           btn.disabled = false;
           btn.innerHTML = '<i class="fas fa-language me-1"></i>Translate';
+        });
+    }
+
+    // ── Preview y generacion del documento ─────────────────
+
+    /**
+     * Abre el texto traducido para revisarlo. Es el paso intermedio del
+     * flujo: hasta que no se pulsa "Generate document" no se escribe nada
+     * junto al archivo original.
+     */
+    function openPreview(ref, translationId) {
+      if (!ref || !translationId) return;
+      ensureMarkup();
+      activeInstance = api;
+      api.currentRef = ref;
+      api.previewOriginalText = null;
+      api.previewTranslation = null;
+
+      var textarea = el('atrPreviewText');
+      el('atrPreviewFilename').innerHTML = fileLabel(ref.filename);
+      el('atrPreviewHint').textContent = 'Loading the translated text...';
+      el('atrPreviewDocLinks').innerHTML = '';
+      el('atrPreviewCount').textContent = '';
+      el('atrPreviewDirty').innerHTML = '';
+      textarea.value = '';
+      textarea.disabled = true;
+      textarea.dir = 'auto';
+      el('atrGenerateBtn').disabled = true;
+      setPreviewFeedback('');
+      openModal('dtrPreviewModal');
+
+      var query = scopeParams(ref);
+      query.id = translationId;
+
+      request(endpointBase + '/preview?' + toQuery(query))
+        .then(function (data) {
+          var t = data.translation || {};
+          api.previewTranslation = t;
+          api.previewOriginalText = data.text || '';
+
+          textarea.value = api.previewOriginalText;
+          textarea.disabled = false;
+          textarea.dir = RTL_LANGS[t.target_lang] ? 'rtl' : 'ltr';
+
+          el('atrPreviewHint').textContent = t.has_document
+            ? 'This translation already has a document. Edit the text and generate it '
+              + 'again to replace it.'
+            : 'Review the machine translation and correct it if needed, then generate '
+              + 'the document. It is saved next to the original file.';
+
+          renderPreviewDocLinks(t);
+          renderPreviewMeta();
+          el('atrGenerateBtn').innerHTML = t.has_document
+            ? '<i class="fas fa-sync-alt me-1"></i>Regenerate document'
+            : '<i class="fas fa-file-pdf me-1"></i>Generate document';
+          el('atrGenerateBtn').disabled = false;
+        })
+        .catch(function (err) {
+          el('atrPreviewHint').textContent = '';
+          setPreviewFeedback(
+            '<i class="fas fa-exclamation-circle me-1"></i>' + escapeHtml(err.message), 'error');
+        });
+    }
+
+    function renderPreviewDocLinks(translation) {
+      var box = el('atrPreviewDocLinks');
+      if (!box) return;
+      box.innerHTML = translation && translation.has_document
+        ? '<a class="atr-action" href="' + escapeHtml(translation.file_url) + '" target="_blank" ' +
+          'title="Open current document"><i class="fas fa-external-link-alt"></i></a>' +
+          '<a class="atr-action" href="' + escapeHtml(translation.download_url) + '" ' +
+          'title="Download current document"><i class="fas fa-download"></i></a>'
+        : '';
+    }
+
+    function generateDocument() {
+      var btn = el('atrGenerateBtn');
+      var textarea = el('atrPreviewText');
+      var ref = api.currentRef;
+      var translation = api.previewTranslation;
+      if (!ref || !translation) return;
+
+      var text = textarea.value;
+      if (!text.trim()) {
+        setPreviewFeedback('The translated text cannot be empty.', 'error');
+        return;
+      }
+
+      var label = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Generating...';
+      setPreviewFeedback('');
+
+      var body = scopeParams(ref);
+      body.id = translation.id;
+      body.text = text;
+
+      request(endpointBase + '/generate', { method: 'POST', body: body })
+        .then(function (data) {
+          var t = data.translation || {};
+          api.previewTranslation = t;
+          api.previewOriginalText = text;
+
+          setPreviewFeedback(
+            '<i class="fas fa-check-circle me-1"></i>Document generated and saved next to ' +
+            'the original file.', 'success');
+          renderPreviewDocLinks(t);
+          renderPreviewMeta();
+          btn.innerHTML = '<i class="fas fa-sync-alt me-1"></i>Regenerate document';
+
+          var listModal = el('dtrTranslationsModal');
+          if (listModal && listModal.classList.contains('open')) loadTranslations(ref);
+          onChanged(ref);
+        })
+        .catch(function (err) {
+          setPreviewFeedback(
+            '<i class="fas fa-exclamation-circle me-1"></i>' + escapeHtml(err.message), 'error');
+          btn.innerHTML = label;
+        })
+        .finally(function () {
+          btn.disabled = false;
         });
     }
 
@@ -382,7 +589,9 @@
             var t = data.translation;
             if (!t) return;
 
-            if (t.status === 'completed' || t.status === 'failed') {
+            // `translated` es terminal para el motor: a partir de ahi el
+            // avance depende de que el usuario genere el documento.
+            if (t.status === 'translated' || t.status === 'completed' || t.status === 'failed') {
               stopPolling(translationId);
               notifyFinished(t);
               // Refrescar la lista abierta y la vista del modulo.
@@ -411,7 +620,7 @@
       activeInstance = api;
       api.currentRef = ref;
 
-      el('atrListFilename').innerHTML = '<i class="fas fa-file-pdf me-1"></i>' + escapeHtml(ref.filename);
+      el('atrListFilename').innerHTML = fileLabel(ref.filename);
       el('atrList').innerHTML = '<div class="atr-loading"><i class="fas fa-spinner fa-spin me-2"></i>Loading translations...</div>';
       openModal('dtrTranslationsModal');
       loadTranslations(ref);
@@ -442,12 +651,19 @@
         var meta = [
           t.created_by_name ? escapeHtml(t.created_by_name) : null,
           formatDate(t.created_at),
-          t.page_count ? t.page_count + ' page(s)' : null
+          t.has_document && t.page_count ? t.page_count + ' page(s)' : null,
+          !t.has_document && t.char_count ? t.char_count.toLocaleString() + ' characters' : null
         ].filter(Boolean).join(' · ');
 
         var actions = '';
-        if (t.status === 'completed') {
-          actions =
+        if (t.has_preview) {
+          actions +=
+            '<button type="button" class="atr-action" data-atr-preview="' + t.id + '" ' +
+            'title="' + (t.has_document ? 'Review text / regenerate' : 'Review text and generate the document') + '">' +
+            '<i class="fas fa-eye"></i></button>';
+        }
+        if (t.has_document) {
+          actions +=
             '<a class="atr-action" href="' + escapeHtml(t.file_url) + '" target="_blank" title="Open translation">' +
             '<i class="fas fa-external-link-alt"></i></a>' +
             '<a class="atr-action" href="' + escapeHtml(t.download_url) + '" title="Download">' +
@@ -480,6 +696,12 @@
         if (t.status === 'pending' || t.status === 'processing') {
           startPolling(ref, t.id);
         }
+      });
+
+      list.querySelectorAll('[data-atr-preview]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          openPreview(ref, Number(this.getAttribute('data-atr-preview')));
+        });
       });
 
       list.querySelectorAll('[data-atr-delete]').forEach(function (btn) {

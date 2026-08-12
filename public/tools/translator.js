@@ -53,12 +53,18 @@
 
   /* ---------------- File handling ---------------- */
 
-  var ALLOWED = /\.(png|jpe?g|webp|pdf)$/i;
+  /* Debe coincidir con lo que acepta /api/tools/extract. `.doc` (Word
+     97-2003) queda fuera: hay que guardarlo como .docx primero. */
+  var ALLOWED = /\.(png|jpe?g|webp|pdf|docx|docm|dotx|dotm|odt|ott|rtf|txt|md|markdown|csv|log)$/i;
+  var IMAGE_EXT = /\.(png|jpe?g|webp)$/i;
 
   function setFile(file) {
     if (!file) return;
     if (!ALLOWED.test(file.name)) {
-      setStatus('Unsupported file type. Use PNG, JPG, JPEG, WEBP or PDF.', 'error');
+      setStatus(/\.(doc|dot)$/i.test(file.name)
+        ? 'Word 97-2003 files (.doc) are not supported. Save the document as .docx and try again.'
+        : 'Unsupported file type. Use PDF, an image (PNG, JPG, WEBP), Word (.docx), '
+          + 'OpenDocument, RTF or plain text.', 'error');
       return;
     }
     clearPreviewUrl();
@@ -67,22 +73,46 @@
     renderPreview(file);
     els.preview.classList.remove('d-none');
     els.processBtn.disabled = false;
+    toggleOcrOptions(file.name);
     hideStatus();
+  }
+
+  /**
+   * Word, OpenDocument, RTF y texto se leen directamente: no pasan por OCR,
+   * asi que las opciones de OCR se ocultan en lugar de dejar controles que
+   * no hacen nada.
+   */
+  function toggleOcrOptions(name) {
+    var usesOcr = IMAGE_EXT.test(name) || /\.pdf$/i.test(name);
+    var field = els.preprocess && els.preprocess.closest('.tt-field');
+    if (field) field.style.display = usesOcr ? '' : 'none';
+    var sourceField = els.sourceLang && els.sourceLang.closest('.tt-field');
+    if (sourceField) sourceField.style.display = usesOcr ? '' : 'none';
+  }
+
+  /** Icono FontAwesome para los formatos que no se pueden previsualizar. */
+  function fileIconFor(name) {
+    if (/\.pdf$/i.test(name)) return 'fa-file-pdf';
+    if (/\.(docx|docm|dotx|dotm)$/i.test(name)) return 'fa-file-word';
+    if (/\.csv$/i.test(name)) return 'fa-file-csv';
+    return 'fa-file-alt';
   }
 
   function renderPreview(file) {
     els.previewBody.innerHTML = '';
-    if (/pdf$/i.test(file.name)) {
-      els.previewBody.innerHTML =
-        '<div class="tt-preview__pdf"><i class="fas fa-file-pdf"></i>' +
-        '<span>' + escapeHtml(file.name) + '</span>' +
-        '<small>' + formatBytes(file.size) + '</small></div>';
-    } else {
+    // Solo las imagenes se pueden mostrar tal cual; el resto se representa
+    // con una ficha (icono + nombre + tamano).
+    if (IMAGE_EXT.test(file.name)) {
       state.previewUrl = URL.createObjectURL(file);
       var img = new Image();
       img.src = state.previewUrl;
       img.alt = file.name;
       els.previewBody.appendChild(img);
+    } else {
+      els.previewBody.innerHTML =
+        '<div class="tt-preview__pdf"><i class="fas ' + fileIconFor(file.name) + '"></i>' +
+        '<span>' + escapeHtml(file.name) + '</span>' +
+        '<small>' + formatBytes(file.size) + '</small></div>';
     }
   }
 
@@ -100,6 +130,7 @@
     els.preview.classList.add('d-none');
     els.previewBody.innerHTML = '';
     els.processBtn.disabled = true;
+    toggleOcrOptions('.pdf'); // sin archivo se muestran todas las opciones
     hideStatus();
   }
 

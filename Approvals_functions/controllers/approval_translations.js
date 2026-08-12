@@ -6,11 +6,18 @@
    usuario, delegar en modelo/servicios y formatear la respuesta.
    No genera PDFs ni arma rutas de disco por su cuenta.
 
+   El flujo tiene dos pasos: primero se traduce el texto en background
+   (`create`), y solo cuando el usuario ha revisado el preview se genera
+   el documento (`generate`). Asi no aparecen PDFs sin revisar dentro
+   del expediente.
+
    Endpoints:
      GET  /approval-translate/languages   idiomas disponibles
      POST /approval-translate/create      encola una traduccion
      GET  /approval-translate/list        traducciones de un archivo
      GET  /approval-translate/status      estado de un job (polling)
+     GET  /approval-translate/preview     texto traducido para revisar
+     POST /approval-translate/generate    genera el PDF con el texto final
      GET  /approval-translate/file        sirve/descarga el PDF
      POST /approval-translate/delete      borrado logico
    ============================================================ */
@@ -24,6 +31,10 @@ import { getClientIp, isFileLockedError } from '../services/pdf-text-writer.js';
 import { isTranslatableFile } from '../services/translation-pdf-service.js';
 import { getSupportedTargetLanguages } from '../services/translation-fonts.js';
 import { notifyNewJob } from '../services/translation-job-runner.js';
+import {
+    renderTranslationDocument,
+    translationErrorMessage,
+} from '../services/translation-job-engine.js';
 import { OCR_LANGUAGES, TARGET_LANGUAGES, isValidOcrCode } from '../../Tools/utils/languages.js';
 
 /** Rechaza nombres de archivo con separadores o traversal. */
@@ -31,8 +42,26 @@ function isUnsafeFilename(filename) {
     return !filename || /[/\\]/.test(filename) || filename === '.' || filename === '..';
 }
 
+/** Ejecuta `fn` dentro de una transaccion, con rollback ante error. */
+async function withTransaction(connection, fn) {
+    await sql.connect(connection);
+    const transaction = new sql.Transaction();
+    await transaction.begin();
+    try {
+        const result = await fn(transaction);
+        await transaction.commit();
+        return result;
+    } catch (error) {
+        try { await transaction.rollback(); } catch (_) {}
+        throw error;
+    }
+}
+
 /** Proyeccion segura de una fila hacia el cliente (sin rutas de disco). */
 function toPublicTranslation(row, approvalId) {
+    const ready = row.status === TRANSLATION_STATUS.COMPLETED;
+    // El texto existe desde `translated`; el documento, solo desde `completed`.
+    const hasText = ready || row.status === TRANSLATION_STATUS.TRANSLATED;
     return {
         id: row.id,
         approval_id: row.approval_id,
@@ -49,11 +78,14 @@ function toPublicTranslation(row, approvalId) {
         extraction_method: row.extraction_method,
         created_by_name: row.created_by_name,
         created_at: row.created_at,
+        preview_ready_at: row.preview_ready_at,
         completed_at: row.completed_at,
-        file_url: row.status === TRANSLATION_STATUS.COMPLETED
+        has_preview: hasText,
+        has_document: ready,
+        file_url: ready
             ? `/approval-translate/file?RowID=${approvalId}&id=${row.id}`
             : null,
-        download_url: row.status === TRANSLATION_STATUS.COMPLETED
+        download_url: ready
             ? `/approval-translate/file?RowID=${approvalId}&id=${row.id}&dl=1`
             : null,
     };
@@ -112,7 +144,9 @@ export default class ApprovalTranslationsController {
         if (!isTranslatableFile(filename)) {
             return res.status(415).send({
                 result: 0,
-                error: 'Only PDF and image files (PNG, JPG, WEBP) can be translated',
+                error: 'Only PDF, image (PNG, JPG, WEBP), Word (.docx), OpenDocument, '
+                     + 'RTF and plain text files can be translated. Word 97-2003 (.doc) '
+                     + 'must be saved as .docx first.',
             });
         }
 
@@ -238,6 +272,135 @@ export default class ApprovalTranslationsController {
             try { await transaction.rollback(); } catch (_) {}
             console.error('[Translations] getStatus error:', error);
             return res.status(500).send({ result: 0, error: 'Could not read the translation status' });
+        }
+    }
+
+    /**
+     * GET /approval-translate/preview?RowID=&id=
+     * Texto traducido para revisarlo (y corregirlo) antes de generar el
+     * documento. Se sirve aparte del resto de campos porque puede pesar
+     * cientos de KB y no tiene sentido en cada tick de polling.
+     */
+    static async getPreviewText(connection, req, res) {
+        const RowID = Number(req.query.RowID);
+        const id = Number(req.query.id);
+
+        if (!RowID || !id) return res.status(400).send({ result: 0, error: 'Invalid parameters' });
+
+        await sql.connect(connection);
+        const transaction = new sql.Transaction();
+        try {
+            await transaction.begin();
+            const row = await ApprovalTranslationsModel.getPreview(transaction, id);
+            await transaction.commit();
+
+            if (!row || Number(row.approval_id) !== RowID) {
+                return res.status(404).send({ result: 0, error: 'Translation not found' });
+            }
+            if (row.status !== TRANSLATION_STATUS.TRANSLATED
+                && row.status !== TRANSLATION_STATUS.COMPLETED) {
+                return res.status(409).send({ result: 0, error: 'The translation is not ready yet' });
+            }
+
+            return res.send({
+                result: 1,
+                translation: toPublicTranslation(row, RowID),
+                text: row.translated_text || '',
+            });
+        } catch (error) {
+            try { await transaction.rollback(); } catch (_) {}
+            console.error('[Translations] getPreviewText error:', error);
+            return res.status(500).send({ result: 0, error: 'Could not load the translated text' });
+        }
+    }
+
+    /**
+     * POST /approval-translate/generate
+     * Body: { RowID, id, text? }
+     * Segunda etapa del flujo: compone el PDF con el texto (ya revisado) y
+     * lo guarda junto al original. Sincrono a proposito — aqui no hay OCR
+     * ni llamadas a la IA, solo composicion con pdf-lib.
+     */
+    static async generateDocument(connection, req, res) {
+        const RowID = Number(req.body.RowID);
+        const id = Number(req.body.id);
+        const editedText = req.body.text === undefined ? null : String(req.body.text);
+        const userId = req.session?.userID;
+
+        if (!userId) return res.status(401).send({ result: 0, error: 'Not authenticated' });
+        if (!RowID || !id) return res.status(400).send({ result: 0, error: 'Invalid parameters' });
+        if (editedText !== null && !editedText.trim()) {
+            return res.status(400).send({ result: 0, error: 'The translated text cannot be empty' });
+        }
+
+        // 1) Leer el job y guardar las correcciones del usuario.
+        //    (withTransaction ya abre la conexion.)
+        let job;
+        try {
+            job = await withTransaction(connection, async (transaction) => {
+                const row = await ApprovalTranslationsModel.getPreview(transaction, id);
+                if (!row || Number(row.approval_id) !== RowID) return null;
+
+                if (editedText !== null && editedText !== row.translated_text) {
+                    await ApprovalTranslationsModel.updateTranslatedText(transaction, id, editedText);
+                    row.translated_text = editedText;
+                }
+                return row;
+            });
+        } catch (error) {
+            console.error('[Translations] generateDocument (read) error:', error);
+            return res.status(500).send({ result: 0, error: 'Could not read the translation' });
+        }
+
+        if (!job) return res.status(404).send({ result: 0, error: 'Translation not found' });
+        if (job.status !== TRANSLATION_STATUS.TRANSLATED
+            && job.status !== TRANSLATION_STATUS.COMPLETED) {
+            return res.status(409).send({ result: 0, error: 'The translation is not ready yet' });
+        }
+
+        // 2) Componer y escribir el documento (fuera de transaccion: es I/O).
+        let rendered;
+        try {
+            rendered = await renderTranslationDocument('approvals', job, job.translated_text);
+        } catch (error) {
+            console.error('[Translations] generateDocument (render) error:', error);
+            const status = error.code === 'FONT_UNAVAILABLE' ? 422 : 500;
+            return res.status(status).send({ result: 0, error: translationErrorMessage(error) });
+        }
+
+        // 3) Persistir el resultado.
+        try {
+            const row = await withTransaction(connection, async (transaction) => {
+                await ApprovalTranslationsModel.markCompleted(transaction, id, {
+                    translated_filename: rendered.translatedFilename,
+                    file_path: rendered.filePath,
+                    file_hash: rendered.fileHash,
+                    page_count: rendered.pageCount,
+                    char_count: String(job.translated_text || '').length,
+                    extraction_method: job.extraction_method,
+                });
+                await ApprovalTranslationsModel.insertAuditLog(transaction, {
+                    translation_id: id,
+                    approval_id: RowID,
+                    source_filename: job.source_filename,
+                    action: 'translation_completed',
+                    user_id: userId,
+                    ip_address: getClientIp(req),
+                    details: `lang=${job.target_lang}; file=${rendered.translatedFilename}; `
+                           + `pages=${rendered.pageCount}${editedText !== null ? '; edited' : ''}`,
+                });
+                return ApprovalTranslationsModel.getById(transaction, id);
+            });
+
+            return res.send({ result: 1, translation: toPublicTranslation(row, RowID) });
+        } catch (error) {
+            // El PDF ya esta en disco; solo fallo el registro. Se avisa para
+            // que el usuario reintente en lugar de creer que no se genero.
+            console.error('[Translations] generateDocument (persist) error:', error);
+            return res.status(500).send({
+                result: 0,
+                error: 'The document was generated but could not be registered. Please try again.',
+            });
         }
     }
 

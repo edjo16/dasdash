@@ -1,12 +1,19 @@
 /* ============================================================
    Translation PDF — generation service
    ------------------------------------------------------------
-   Orquesta el pipeline completo de una traduccion:
+   Orquesta el pipeline de una traduccion, en dos mitades separadas
+   a proposito:
 
-       archivo original (pdf/imagen)
-            -> extraccion de texto  (Tools/services/extraction-service)
+     extractAndTranslate()  — la parte cara, en background
+       archivo original (pdf / imagen / documento ofimatico)
+            -> extraccion de texto  (extraction-service / office-extraction-service)
             -> traduccion por IA    (Tools/services/translation-service)
-            -> PDF nuevo con el texto traducido  (pdf-lib)
+
+     buildTranslatedPdf()   — la parte barata, a peticion del usuario
+       texto revisado -> PDF nuevo (pdf-lib)
+
+   Entre las dos, el usuario revisa (y corrige) el texto. Asi no se
+   escriben documentos que nadie ha mirado dentro del expediente.
 
    Decision de diseno (acordada con el usuario): el resultado es un
    PDF NUEVO que contiene solo el texto traducido, no un calco del
@@ -20,6 +27,10 @@
 import path from 'path';
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 import { extractFromPdf, extractFromImage } from '../../Tools/services/extraction-service.js';
+import {
+    extractFromDocument,
+    isSupportedDocument,
+} from '../../Tools/services/office-extraction-service.js';
 import { translateText } from '../../Tools/services/translation-service.js';
 import { nameFromCode } from '../../Tools/utils/languages.js';
 import { resolveTranslationFont } from './translation-fonts.js';
@@ -46,10 +57,17 @@ const META_SIZE = 8.5;
  */
 const TRANSLATION_CHUNK_CHARS = Number(process.env.TRANSLATION_CHUNK_CHARS || 3500);
 
-/** True si el archivo es traducible por esta funcionalidad. */
+/**
+ * True si el archivo es traducible por esta funcionalidad.
+ * Cubre PDF, imagenes (via OCR) y documentos ofimaticos: Word moderno
+ * (.docx y variantes), OpenDocument, RTF y texto plano.
+ *
+ * Word 97-2003 (.doc) queda fuera a proposito — ver
+ * Tools/services/office-extraction-service.js.
+ */
 export function isTranslatableFile(filename) {
     const name = String(filename || '');
-    return PDF_EXT.test(name) || IMAGE_EXT.test(name);
+    return PDF_EXT.test(name) || IMAGE_EXT.test(name) || isSupportedDocument(name);
 }
 
 /**
@@ -292,29 +310,27 @@ export async function buildTranslatedPdf(params) {
 }
 
 /**
- * Pipeline completo: bytes del archivo original -> bytes del PDF traducido.
+ * Etapa cara del pipeline: bytes del archivo original -> texto traducido.
+ *
+ * Se separa de la composicion del PDF porque es la unica parte lenta
+ * (OCR + varias llamadas al modelo) y porque su resultado es lo que el
+ * usuario revisa en el preview antes de decidir si quiere el documento.
  *
  * @param {object} params
  * @param {Buffer} params.sourceBytes
  * @param {string} params.sourceFilename
  * @param {string} params.targetCode
  * @param {string} [params.sourceCode='auto']
- * @param {string} [params.createdByName]
- * @param {number} [params.approvalId]
- * @param {string} [params.documentRef]
  * @param {(stage:string, detail:object)=>void} [params.onProgress]
- * @returns {Promise<{ bytes:Buffer, pageCount:number, charCount:number,
+ * @returns {Promise<{ translatedText:string, charCount:number,
  *                     extractionMethod:string, sourcePageCount:number }>}
  */
-export async function generateTranslatedPdf(params) {
+export async function extractAndTranslate(params) {
     const {
         sourceBytes,
         sourceFilename,
         targetCode,
         sourceCode = 'auto',
-        createdByName,
-        approvalId,
-        documentRef,
         onProgress = () => {},
     } = params;
 
@@ -324,11 +340,19 @@ export async function generateTranslatedPdf(params) {
         throw error;
     }
 
-    // 1) Extraccion (embebido o OCR, lo decide el servicio de Tools).
+    // 1) Extraccion segun el tipo de archivo.
+    //    - PDF:        texto embebido y, si es escaneo, OCR.
+    //    - Imagen:     siempre OCR.
+    //    - Documentos: lectura directa del formato (sin OCR).
     onProgress('extracting', {});
-    const extraction = PDF_EXT.test(sourceFilename)
-        ? await extractFromPdf(sourceBytes, { code: sourceCode, preprocess: true })
-        : await extractFromImage(sourceBytes, { code: sourceCode, preprocess: true });
+    let extraction;
+    if (PDF_EXT.test(sourceFilename)) {
+        extraction = await extractFromPdf(sourceBytes, { code: sourceCode, preprocess: true });
+    } else if (IMAGE_EXT.test(sourceFilename)) {
+        extraction = await extractFromImage(sourceBytes, { code: sourceCode, preprocess: true });
+    } else {
+        extraction = await extractFromDocument(sourceBytes, sourceFilename);
+    }
 
     const sourceText = String(extraction?.text || '').trim();
     if (!sourceText) {
@@ -354,23 +378,17 @@ export async function generateTranslatedPdf(params) {
 
     const translatedText = translatedChunks.join('\n\n');
 
-    // 3) Composicion del PDF.
-    onProgress('rendering', {});
-    const { bytes, pageCount } = await buildTranslatedPdf({
-        translatedText,
-        sourceFilename,
-        targetCode,
-        sourceCode,
-        createdByName,
-        approvalId,
-        documentRef,
-    });
-
     return {
-        bytes,
-        pageCount,
+        translatedText,
         charCount: translatedText.length,
         extractionMethod: extraction.method || null,
         sourcePageCount: extraction.pageCount || 0,
     };
 }
+
+/*
+ * No hay un `generateTranslatedPdf` de un solo paso a proposito: el flujo
+ * es siempre traducir -> revisar -> generar. Quien necesite encadenarlo
+ * sin intervencion del usuario compone `extractAndTranslate` y
+ * `buildTranslatedPdf`, que es exactamente lo que hace el motor de jobs.
+ */

@@ -492,6 +492,7 @@ export default class ApprovalFunctionsController {
                 for (const row of counts) {
                     translationCounts.set(row.source_filename, {
                         completed: Number(row.completed_count) || 0,
+                        preview: Number(row.preview_count) || 0,
                         pending: Number(row.pending_count) || 0,
                     });
                 }
@@ -574,7 +575,8 @@ export default class ApprovalFunctionsController {
                     ? `/pdf-sign/signed-file?RowID=${RowID}&filename=${encodeURIComponent(filename)}&version=latest&dl=1`
                     : `/approval-file?RowID=${RowID}&filename=${encodeURIComponent(filename)}&dl=1`;
 
-                const translations = translationCounts.get(filename) || { completed: 0, pending: 0 };
+                const translations = translationCounts.get(filename)
+                    || { completed: 0, preview: 0, pending: 0 };
 
                 files.push({
                     type: 'file',
@@ -590,8 +592,11 @@ export default class ApprovalFunctionsController {
                     // ── Traduccion de documentos ──────────────────────
                     is_translatable: isTranslatableFile(filename),
                     translation_count: translations.completed,
+                    translation_preview: translations.preview,
                     translation_pending: translations.pending,
-                    has_translations: translations.completed > 0,
+                    // Basta con que haya texto traducido (aunque el documento
+                    // no se haya generado) para ofrecer "Open translation".
+                    has_translations: translations.completed > 0 || translations.preview > 0,
                 });
             }
 

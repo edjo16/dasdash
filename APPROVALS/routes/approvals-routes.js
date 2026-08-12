@@ -662,6 +662,12 @@ router.get("/", checkServerAvailability, requireAuth, async (req, res) => {
     router.get("/approval-translate/status", requireAuth, async (req, res) => {
         await ApprovalTranslationsController.getStatus(sqlConfig, req, res);
     })
+    router.get("/approval-translate/preview", requireAuth, async (req, res) => {
+        await ApprovalTranslationsController.getPreviewText(sqlConfig, req, res);
+    })
+    router.post("/approval-translate/generate", requireAuth, async (req, res) => {
+        await ApprovalTranslationsController.generateDocument(sqlConfig, req, res);
+    })
     router.get("/approval-translate/file", requireAuth, async (req, res) => {
         await ApprovalTranslationsController.serveTranslationFile(sqlConfig, req, res);
     })

@@ -231,6 +231,12 @@ export default function (app) {
     app.get('/crm-translate/status', requireAuth, async (req, res) => {
         await CRMTranslationsController.getStatus(sqlConfig, req, res);
     });
+    app.get('/crm-translate/preview', requireAuth, async (req, res) => {
+        await CRMTranslationsController.getPreviewText(sqlConfig, req, res);
+    });
+    app.post('/crm-translate/generate', requireAuth, async (req, res) => {
+        await CRMTranslationsController.generateDocument(sqlConfig, req, res);
+    });
     app.get('/crm-translate/file', requireAuth, async (req, res) => {
         await CRMTranslationsController.serveTranslationFile(sqlConfig, req, res);
     });

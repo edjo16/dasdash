@@ -1,5 +1,9 @@
 /**
- * Controlador de la herramienta "Traducción Multiidioma desde Imágenes y PDFs".
+ * Controlador de la herramienta "Traducción Multiidioma".
+ *
+ * Acepta imágenes y PDFs (vía OCR cuando hace falta) y documentos
+ * ofimáticos: Word moderno (.docx y variantes), OpenDocument, RTF y
+ * texto plano. Word 97-2003 (.doc) se rechaza con instrucciones.
  *
  * Parte del módulo Tools. Sigue las convenciones del proyecto:
  *   - `sqlConfig` (config de conexión) se recibe como primer argumento.
@@ -12,6 +16,11 @@ import Rules from '../../USERS/rule/DevTeam.js';
 import USERModel from '../../USERS/model/USER.js';
 import { OCR_LANGUAGES, TARGET_LANGUAGES, isValidOcrCode } from '../utils/languages.js';
 import { extractFromImage, extractFromPdf } from '../services/extraction-service.js';
+import {
+  extractFromDocument,
+  isSupportedDocument,
+  isLegacyDoc
+} from '../services/office-extraction-service.js';
 import { translateText } from '../services/translation-service.js';
 
 const MAX_FILE_BYTES = Number(process.env.TOOLS_MAX_FILE_BYTES || 25 * 1024 * 1024); // 25 MB
@@ -73,15 +82,27 @@ export default class TranslatorController {
 
       const isPdf = file.mimetype === 'application/pdf' || /\.pdf$/i.test(file.name);
       const isImage = IMAGE_MIME.has(file.mimetype) || IMAGE_EXT.test(file.name);
+      // Word moderno, OpenDocument, RTF y texto: lectura directa, sin OCR.
+      const isDocument = !isPdf && !isImage && isSupportedDocument(file.name);
 
-      if (!isPdf && !isImage) {
-        return res.status(415).json({ result: 0, error: 'Unsupported file type' });
+      if (!isPdf && !isImage && !isDocument) {
+        return res.status(415).json({
+          result: 0,
+          error: isLegacyDoc(file.name)
+            ? 'Word 97-2003 files (.doc) are not supported. Save the document as .docx and try again.'
+            : 'Unsupported file type'
+        });
       }
 
       const buffer = file.data;
-      const extraction = isPdf
-        ? await extractFromPdf(buffer, { code, preprocess, dpi })
-        : await extractFromImage(buffer, { code, preprocess });
+      let extraction;
+      if (isPdf) {
+        extraction = await extractFromPdf(buffer, { code, preprocess, dpi });
+      } else if (isImage) {
+        extraction = await extractFromImage(buffer, { code, preprocess });
+      } else {
+        extraction = await extractFromDocument(buffer, file.name);
+      }
 
       return res.json({
         result: 1,
@@ -95,6 +116,18 @@ export default class TranslatorController {
       });
     } catch (error) {
       console.error('[Tools] extract error:', error);
+      // Los errores de formato son culpa del archivo, no del servidor:
+      // se devuelven con su mensaje para que el usuario sepa que hacer.
+      const FILE_ERRORS = {
+        INVALID_DOCX: 'The Word file could not be read. It may be corrupted — '
+          + 'try opening it and saving it again as .docx.',
+        INVALID_ODT: 'The OpenDocument file could not be read. It may be corrupted.',
+        LEGACY_DOC_UNSUPPORTED: error.message,
+        UNSUPPORTED_FILE: 'Unsupported file type'
+      };
+      if (FILE_ERRORS[error.code]) {
+        return res.status(415).json({ result: 0, error: FILE_ERRORS[error.code] });
+      }
       return res.status(500).json({ result: 0, error: 'Failed to extract text from the file' });
     }
   }

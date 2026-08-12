@@ -11,20 +11,33 @@
    ============================================================ */
 import sql from 'mssql';
 
-/** Estados posibles de un job de traduccion. */
+/**
+ * Estados posibles de un job de traduccion.
+ *
+ * `TRANSLATED` es el estado intermedio del flujo de dos pasos: el texto
+ * ya esta traducido y guardado, pero el documento aun no se ha generado.
+ * Es terminal para el motor de background; el salto a `COMPLETED` lo
+ * dispara el usuario tras revisar el preview.
+ */
 export const TRANSLATION_STATUS = Object.freeze({
     PENDING: 'pending',
     PROCESSING: 'processing',
+    TRANSLATED: 'translated',
     COMPLETED: 'completed',
     FAILED: 'failed',
     CANCELLED: 'cancelled',
 });
 
+/**
+ * Columnas de uso general. Deliberadamente SIN `translated_text`: el texto
+ * completo puede pesar cientos de KB y estas columnas viajan en cada
+ * listado y en cada tick de polling. El texto se pide aparte (getPreview).
+ */
 const SELECT_COLUMNS = `
     id, crm_id, msg_id, source_filename, target_lang, source_lang, version,
     translated_filename, file_path, file_hash, page_count, char_count,
     extraction_method, status, error_message, created_by, created_by_name,
-    created_at, started_at, completed_at
+    created_at, started_at, preview_ready_at, completed_at
 `;
 
 export default class CRMTranslationsModel {
@@ -93,11 +106,26 @@ export default class CRMTranslationsModel {
         return result.recordset || [];
     }
 
+    /** Fila completa CON el texto traducido, para la pantalla de preview. */
+    static async getPreview(transaction, id) {
+        const request = new sql.Request(transaction);
+        request.input('id', sql.Int, id);
+        const result = await request.query(`
+            SELECT ${SELECT_COLUMNS}, translated_text
+            FROM crm_translations WHERE id = @id
+        `);
+        return result.recordset[0] || null;
+    }
+
     /**
      * Conteo por (mensaje, archivo) para pintar los botones de todos los
      * mensajes del caso con una sola consulta. En CRM la lista de archivos
      * llega como un string separado por `;` dentro de cada mensaje, asi que
      * los contadores se piden aparte y se cruzan en el cliente.
+     *
+     * `preview_count` son las traducciones con texto listo pendientes de
+     * generar el documento: la UI las marca aparte porque requieren una
+     * accion del usuario, no solo esperar.
      */
     static async countByCase(transaction, crmId) {
         const request = new sql.Request(transaction);
@@ -107,6 +135,7 @@ export default class CRMTranslationsModel {
                 msg_id,
                 source_filename,
                 SUM(CASE WHEN status = '${TRANSLATION_STATUS.COMPLETED}' THEN 1 ELSE 0 END) AS completed_count,
+                SUM(CASE WHEN status = '${TRANSLATION_STATUS.TRANSLATED}' THEN 1 ELSE 0 END) AS preview_count,
                 SUM(CASE WHEN status IN ('${TRANSLATION_STATUS.PENDING}', '${TRANSLATION_STATUS.PROCESSING}') THEN 1 ELSE 0 END) AS pending_count
             FROM crm_translations
             WHERE crm_id = @crm_id
@@ -152,6 +181,43 @@ export default class CRMTranslationsModel {
             WHERE t.status = '${TRANSLATION_STATUS.PENDING}'
         `);
         return result.recordset[0] || null;
+    }
+
+    /**
+     * Cierra la etapa cara (extraccion + IA): guarda el texto traducido y
+     * deja el job en `translated`, a la espera de que el usuario revise el
+     * preview y pida generar el documento.
+     */
+    static async markTranslated(transaction, id, data) {
+        const request = new sql.Request(transaction);
+        request.input('id', sql.Int, id);
+        request.input('translated_text', sql.NVarChar(sql.MAX), String(data.translated_text || ''));
+        request.input('char_count', sql.Int, data.char_count ?? null);
+        request.input('extraction_method', sql.NVarChar(20), data.extraction_method || null);
+        await request.query(`
+            UPDATE crm_translations
+            SET status = '${TRANSLATION_STATUS.TRANSLATED}',
+                translated_text = @translated_text,
+                char_count = @char_count,
+                extraction_method = @extraction_method,
+                error_message = NULL,
+                preview_ready_at = GETDATE()
+            WHERE id = @id
+        `);
+    }
+
+    /** Guarda las correcciones que el usuario hizo sobre el preview. */
+    static async updateTranslatedText(transaction, id, text) {
+        const request = new sql.Request(transaction);
+        request.input('id', sql.Int, id);
+        request.input('translated_text', sql.NVarChar(sql.MAX), String(text || ''));
+        request.input('char_count', sql.Int, String(text || '').length);
+        await request.query(`
+            UPDATE crm_translations
+            SET translated_text = @translated_text,
+                char_count = @char_count
+            WHERE id = @id
+        `);
     }
 
     static async markCompleted(transaction, id, data) {

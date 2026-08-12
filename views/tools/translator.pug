@@ -6,20 +6,21 @@ block layout-content
       div.container-fluid.px-4
         h3#titlename.mt-4 Multi-Language Translator
         ol.breadcrumb.mb-4
-          li.breadcrumb-item.active Extract text from images and PDFs in any language and translate it into the language you choose.
+          li.breadcrumb-item.active Extract text from documents, images and PDFs in any language and translate it into the language you choose.
 
         div.tools-translator
           //- Panel izquierdo: carga y configuración
           div.tt-panel.tt-panel--input
             //- Zona drag & drop
             div#ttDropzone.tt-dropzone(tabindex="0" role="button" aria-label="Upload file")
-              input#ttFileInput.tt-file-input(type="file" accept=".png,.jpg,.jpeg,.webp,.pdf")
+              input#ttFileInput.tt-file-input(type="file" accept=".png,.jpg,.jpeg,.webp,.pdf,.docx,.docm,.dotx,.dotm,.odt,.ott,.rtf,.txt,.md,.markdown,.csv,.log")
               div.tt-dropzone__inner
                 i.fas.fa-cloud-upload-alt.tt-dropzone__icon
                 p.tt-dropzone__title Drag & drop your file here
                 p.tt-dropzone__hint or
                 button#ttBrowseBtn.btn.btn-primary.btn-sm(type="button") Browse files
-                p.tt-dropzone__formats Supported: PNG, JPG, JPEG, WEBP, PDF
+                p.tt-dropzone__formats Supported: PDF, images (PNG, JPG, WEBP), Word (.docx), OpenDocument, RTF and plain text
+                p.tt-dropzone__formats Word 97-2003 (.doc) is not supported — save it as .docx first.
 
             //- Vista previa del archivo
             div#ttPreview.tt-preview.d-none

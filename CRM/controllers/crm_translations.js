@@ -11,12 +11,19 @@
      - el control de acceso es el del caso (validateCrmReadAccess),
        no el de equipos de APPROVALS.
 
+   El flujo tiene dos pasos: primero se traduce el texto en background
+   (`create`), y solo cuando el usuario ha revisado el preview se genera
+   el documento (`generate`). Asi no aparecen PDFs sin revisar dentro
+   del caso.
+
    Endpoints:
      GET  /crm-translate/languages   idiomas disponibles
      POST /crm-translate/create      encola una traduccion
      GET  /crm-translate/list        traducciones de un archivo
      GET  /crm-translate/counts      contadores de todo el caso
      GET  /crm-translate/status      estado de un job (polling)
+     GET  /crm-translate/preview     texto traducido para revisar
+     POST /crm-translate/generate    genera el PDF con el texto final
      GET  /crm-translate/file        sirve/descarga el PDF
      POST /crm-translate/delete      borrado logico
    ============================================================ */
@@ -31,11 +38,32 @@ import { getClientIp, isFileLockedError } from '../../Approvals_functions/servic
 import { isTranslatableFile } from '../../Approvals_functions/services/translation-pdf-service.js';
 import { getSupportedTargetLanguages } from '../../Approvals_functions/services/translation-fonts.js';
 import { notifyNewJob } from '../services/crm-translation-source.js';
+import {
+    renderTranslationDocument,
+    translationErrorMessage,
+} from '../../Approvals_functions/services/translation-job-engine.js';
 import { OCR_LANGUAGES, TARGET_LANGUAGES, isValidOcrCode } from '../../Tools/utils/languages.js';
+
+/** Ejecuta `fn` dentro de una transaccion, con rollback ante error. */
+async function withTransaction(connection, fn) {
+    await sql.connect(connection);
+    const transaction = new sql.Transaction();
+    await transaction.begin();
+    try {
+        const result = await fn(transaction);
+        await transaction.commit();
+        return result;
+    } catch (error) {
+        try { await transaction.rollback(); } catch (_) {}
+        throw error;
+    }
+}
 
 /** Proyeccion segura de una fila hacia el cliente (sin rutas de disco). */
 function toPublicTranslation(row) {
     const ready = row.status === TRANSLATION_STATUS.COMPLETED;
+    // El texto existe desde `translated`; el documento, solo desde `completed`.
+    const hasText = ready || row.status === TRANSLATION_STATUS.TRANSLATED;
     const base = `/crm-translate/file?crm_id=${row.crm_id}&id=${row.id}`;
     return {
         id: row.id,
@@ -54,7 +82,10 @@ function toPublicTranslation(row) {
         extraction_method: row.extraction_method,
         created_by_name: row.created_by_name,
         created_at: row.created_at,
+        preview_ready_at: row.preview_ready_at,
         completed_at: row.completed_at,
+        has_preview: hasText,
+        has_document: ready,
         file_url: ready ? base : null,
         download_url: ready ? `${base}&dl=1` : null,
     };
@@ -114,7 +145,9 @@ export default class CRMTranslationsController {
         if (!isTranslatableFile(filename)) {
             return res.status(415).send({
                 result: 0,
-                error: 'Only PDF and image files (PNG, JPG, WEBP) can be translated',
+                error: 'Only PDF, image (PNG, JPG, WEBP), Word (.docx), OpenDocument, '
+                     + 'RTF and plain text files can be translated. Word 97-2003 (.doc) '
+                     + 'must be saved as .docx first.',
             });
         }
 
@@ -249,6 +282,7 @@ export default class CRMTranslationsController {
                     msg_id: row.msg_id,
                     filename: row.source_filename,
                     completed: Number(row.completed_count) || 0,
+                    preview: Number(row.preview_count) || 0,
                     pending: Number(row.pending_count) || 0,
                 })),
             });
@@ -287,6 +321,141 @@ export default class CRMTranslationsController {
             try { await transaction.rollback(); } catch (_) {}
             console.error('[CRM Translations] getStatus error:', error);
             return res.status(500).send({ result: 0, error: 'Could not read the translation status' });
+        }
+    }
+
+    /**
+     * GET /crm-translate/preview?crm_id=&id=
+     * Texto traducido para revisarlo (y corregirlo) antes de generar el
+     * documento. Se sirve aparte del resto de campos porque puede pesar
+     * cientos de KB y no tiene sentido en cada tick de polling.
+     */
+    static async getPreviewText(connection, req, res) {
+        const crmId = Number(req.query.crm_id);
+        const id = Number(req.query.id);
+
+        if (!crmId || !id) return res.status(400).send({ result: 0, error: 'Invalid parameters' });
+
+        const access = await validateCrmReadAccess(connection, req, crmId);
+        if (!access.ok) return res.status(access.status).send({ result: 0, error: access.error });
+
+        await sql.connect(connection);
+        const transaction = new sql.Transaction();
+        try {
+            await transaction.begin();
+            const row = await CRMTranslationsModel.getPreview(transaction, id);
+            await transaction.commit();
+
+            if (!row || Number(row.crm_id) !== crmId) {
+                return res.status(404).send({ result: 0, error: 'Translation not found' });
+            }
+            if (row.status !== TRANSLATION_STATUS.TRANSLATED
+                && row.status !== TRANSLATION_STATUS.COMPLETED) {
+                return res.status(409).send({ result: 0, error: 'The translation is not ready yet' });
+            }
+
+            return res.send({
+                result: 1,
+                translation: toPublicTranslation(row),
+                text: row.translated_text || '',
+            });
+        } catch (error) {
+            try { await transaction.rollback(); } catch (_) {}
+            console.error('[CRM Translations] getPreviewText error:', error);
+            return res.status(500).send({ result: 0, error: 'Could not load the translated text' });
+        }
+    }
+
+    /**
+     * POST /crm-translate/generate
+     * Body: { crm_id, id, text? }
+     * Segunda etapa del flujo: compone el PDF con el texto (ya revisado) y
+     * lo guarda junto al original. Sincrono a proposito — aqui no hay OCR
+     * ni llamadas a la IA, solo composicion con pdf-lib.
+     */
+    static async generateDocument(connection, req, res) {
+        const crmId = Number(req.body.crm_id);
+        const id = Number(req.body.id);
+        const editedText = req.body.text === undefined ? null : String(req.body.text);
+        const userId = req.session?.userID;
+
+        if (!userId) return res.status(401).send({ result: 0, error: 'Not authenticated' });
+        if (!crmId || !id) return res.status(400).send({ result: 0, error: 'Invalid parameters' });
+        if (editedText !== null && !editedText.trim()) {
+            return res.status(400).send({ result: 0, error: 'The translated text cannot be empty' });
+        }
+
+        const access = await validateCrmReadAccess(connection, req, crmId);
+        if (!access.ok) return res.status(access.status).send({ result: 0, error: access.error });
+
+        // 1) Leer el job y guardar las correcciones del usuario.
+        let job;
+        try {
+            job = await withTransaction(connection, async (transaction) => {
+                const row = await CRMTranslationsModel.getPreview(transaction, id);
+                if (!row || Number(row.crm_id) !== crmId) return null;
+
+                if (editedText !== null && editedText !== row.translated_text) {
+                    await CRMTranslationsModel.updateTranslatedText(transaction, id, editedText);
+                    row.translated_text = editedText;
+                }
+                return row;
+            });
+        } catch (error) {
+            console.error('[CRM Translations] generateDocument (read) error:', error);
+            return res.status(500).send({ result: 0, error: 'Could not read the translation' });
+        }
+
+        if (!job) return res.status(404).send({ result: 0, error: 'Translation not found' });
+        if (job.status !== TRANSLATION_STATUS.TRANSLATED
+            && job.status !== TRANSLATION_STATUS.COMPLETED) {
+            return res.status(409).send({ result: 0, error: 'The translation is not ready yet' });
+        }
+
+        // 2) Componer y escribir el documento (fuera de transaccion: es I/O).
+        let rendered;
+        try {
+            rendered = await renderTranslationDocument('crm', job, job.translated_text);
+        } catch (error) {
+            console.error('[CRM Translations] generateDocument (render) error:', error);
+            const status = error.code === 'FONT_UNAVAILABLE' ? 422 : 500;
+            return res.status(status).send({ result: 0, error: translationErrorMessage(error) });
+        }
+
+        // 3) Persistir el resultado.
+        try {
+            const row = await withTransaction(connection, async (transaction) => {
+                await CRMTranslationsModel.markCompleted(transaction, id, {
+                    translated_filename: rendered.translatedFilename,
+                    file_path: rendered.filePath,
+                    file_hash: rendered.fileHash,
+                    page_count: rendered.pageCount,
+                    char_count: String(job.translated_text || '').length,
+                    extraction_method: job.extraction_method,
+                });
+                await CRMTranslationsModel.insertAuditLog(transaction, {
+                    translation_id: id,
+                    crm_id: crmId,
+                    msg_id: job.msg_id,
+                    source_filename: job.source_filename,
+                    action: 'translation_completed',
+                    user_id: userId,
+                    ip_address: getClientIp(req),
+                    details: `lang=${job.target_lang}; file=${rendered.translatedFilename}; `
+                           + `pages=${rendered.pageCount}${editedText !== null ? '; edited' : ''}`,
+                });
+                return CRMTranslationsModel.getById(transaction, id);
+            });
+
+            return res.send({ result: 1, translation: toPublicTranslation(row) });
+        } catch (error) {
+            // El PDF ya esta en disco; solo fallo el registro. Se avisa para
+            // que el usuario reintente en lugar de creer que no se genero.
+            console.error('[CRM Translations] generateDocument (persist) error:', error);
+            return res.status(500).send({
+                result: 0,
+                error: 'The document was generated but could not be registered. Please try again.',
+            });
         }
     }
 

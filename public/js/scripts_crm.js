@@ -562,12 +562,22 @@ function openCrmMsgViewer(crm_id, msg_id, filename) {
     return false;
 }
 
-/* Extensiones que el backend sabe traducir (PDF + imagenes con OCR).
-   Debe coincidir con isTranslatableFile() del servicio de traduccion. */
+/* Extensiones que el backend sabe traducir: PDF, imagenes (via OCR) y
+   documentos ofimaticos (Word moderno, OpenDocument, RTF y texto plano).
+   Debe coincidir con isTranslatableFile() del servicio de traduccion.
+   `.doc` (Word 97-2003) queda fuera a proposito: hay que guardarlo como
+   .docx primero. */
+var CRM_TRANSLATABLE_EXTS = [
+    '.pdf',
+    '.png', '.jpg', '.jpeg', '.webp',
+    '.docx', '.docm', '.dotx', '.dotm',
+    '.odt', '.ott',
+    '.rtf',
+    '.txt', '.md', '.markdown', '.csv', '.log'
+];
+
 function isCrmTranslatableFile(filename) {
-    var ext = getCrmFileExtension(filename);
-    return ext === '.pdf' || ext === '.png' || ext === '.jpg' ||
-           ext === '.jpeg' || ext === '.webp';
+    return CRM_TRANSLATABLE_EXTS.indexOf(getCrmFileExtension(filename)) !== -1;
 }
 
 /**
@@ -650,11 +660,14 @@ function buildCrmFileActions(crm_id, msg_id, filename) {
         return actions;
     }
 
+    // Resto de formatos: descarga y, si el backend sabe leerlos (Word,
+    // OpenDocument, RTF, texto), tambien traduccion.
     actions.appendChild(createCrmActionLink(
         endpoints.downloadUrl,
         'Download',
         '<i class="fas fa-download secondIcon"></i>'
     ));
+    appendCrmTranslationActions(actions, crm_id, msg_id, filename);
     return actions;
 }
 

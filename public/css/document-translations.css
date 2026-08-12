@@ -269,13 +269,78 @@
   letter-spacing: .02em;
 }
 
-.atr-badge--ok    { background: #d6f2e0; color: #1a7f45; }
-.atr-badge--wait  { background: #fdf1d4; color: #8a6100; }
-.atr-badge--error { background: #fadbd8; color: #a4271c; }
+.atr-badge--ok     { background: #d6f2e0; color: #1a7f45; }
+.atr-badge--wait   { background: #fdf1d4; color: #8a6100; }
+.atr-badge--review { background: #d8ecf3; color: #0e5c74; }
+.atr-badge--error  { background: #fadbd8; color: #a4271c; }
 
-:root[data-theme="dark"] .atr-badge--ok    { background: #1c3b2a; color: #6fd79c; }
-:root[data-theme="dark"] .atr-badge--wait  { background: #3b3320; color: #e0b45e; }
-:root[data-theme="dark"] .atr-badge--error { background: #3d2320; color: #ef8a80; }
+:root[data-theme="dark"] .atr-badge--ok     { background: #1c3b2a; color: #6fd79c; }
+:root[data-theme="dark"] .atr-badge--wait   { background: #3b3320; color: #e0b45e; }
+:root[data-theme="dark"] .atr-badge--review { background: #1b3540; color: #74c4dd; }
+:root[data-theme="dark"] .atr-badge--error  { background: #3d2320; color: #ef8a80; }
+
+/* ── Preview del texto traducido ──────────────────────────── */
+.atr-preview-dialog {
+  width: min(860px, 94vw);
+  max-width: 860px;
+}
+
+/* El textarea crece con el modal en lugar de dejar el hueco vacio. */
+.atr-modal .app-modal-body.atr-preview-body {
+  display: flex;
+  flex-direction: column;
+  gap: .5rem;
+}
+
+.atr-preview-text {
+  width: 100%;
+  min-height: 320px;
+  flex: 1 1 auto;
+  resize: vertical;
+  padding: .75rem .85rem;
+  font-family: Consolas, Monaco, "Courier New", monospace;
+  font-size: .85rem;
+  line-height: 1.55;
+  color: var(--atr-text);
+  background: var(--atr-surface);
+  border: 1px solid var(--atr-border);
+  border-radius: 6px;
+  white-space: pre-wrap;
+}
+
+.atr-preview-text:focus {
+  outline: none;
+  border-color: var(--atr-primary);
+  box-shadow: 0 0 0 2px rgba(0, 88, 111, .15);
+}
+
+.atr-preview-text:disabled {
+  opacity: .6;
+}
+
+.atr-preview-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  font-size: .75rem;
+  color: var(--atr-muted);
+}
+
+.atr-preview-dirty {
+  color: #8a6100;
+}
+
+:root[data-theme="dark"] .atr-preview-dirty {
+  color: #e0b45e;
+}
+
+/* Los enlaces al documento ya generado quedan a la izquierda del footer. */
+.atr-preview-links {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-right: auto;
+}
 
 /* ── Toast de fin de job ──────────────────────────────────── */
 .atr-toast {

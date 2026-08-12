@@ -27,7 +27,11 @@ import path from 'path';
 import { readFile, mkdir } from 'fs/promises';
 import { existsSync } from 'fs';
 import { hashBuffer, writeFileSafe, isFileLockedError } from './pdf-text-writer.js';
-import { generateTranslatedPdf, buildTranslatedFilename } from './translation-pdf-service.js';
+import {
+    extractAndTranslate,
+    buildTranslatedPdf,
+    buildTranslatedFilename,
+} from './translation-pdf-service.js';
 
 const MAX_CONCURRENT = Number(process.env.TRANSLATION_MAX_CONCURRENT || 1);
 const IDLE_POLL_MS = Number(process.env.TRANSLATION_IDLE_POLL_MS || 15000);
@@ -74,7 +78,12 @@ function toUserMessage(error) {
         case 'NO_TEXT':
             return 'No readable text was found in this document.';
         case 'FONT_UNAVAILABLE':
+        case 'LEGACY_DOC_UNSUPPORTED':
             return error.message;
+        case 'INVALID_DOCX':
+            return 'The Word file could not be read. It may be corrupted — try opening it and saving it again as .docx.';
+        case 'INVALID_ODT':
+            return 'The OpenDocument file could not be read. It may be corrupted.';
         case 'UNSUPPORTED_FILE':
             return 'This file type cannot be translated.';
         case 'EMPTY_TRANSLATION':
@@ -92,11 +101,12 @@ function describeJob(source, job) {
         : `${source.key} job ${job.id}`;
 }
 
-/** Procesa un job ya reclamado (estado `processing`). */
-async function processJob(source, job) {
-    const sourceFilename = job.source_filename;
-
-    // 1) Localizar el archivo original (cada modulo tiene su propio layout).
+/**
+ * Ruta absoluta del archivo original de un job, verificando que existe.
+ * Cada modulo tiene su propio layout de carpetas, de ahi el `resolveSourcePath`
+ * de la fuente.
+ */
+async function resolveSourceFilePath(source, job) {
     const resolved = await source.resolveSourcePath(job, connectionConfig);
 
     if (!resolved?.ok || !resolved.fullPath) {
@@ -109,10 +119,13 @@ async function processJob(source, job) {
         error.code = 'FILE_NOT_FOUND';
         throw error;
     }
+    return resolved.fullPath;
+}
 
-    let sourceBytes;
+/** Contenido del archivo original, traduciendo el bloqueo a un codigo propio. */
+async function readSourceFile(fullPath) {
     try {
-        sourceBytes = await readFile(resolved.fullPath);
+        return await readFile(fullPath);
     } catch (readErr) {
         if (isFileLockedError(readErr)) {
             const error = new Error('The file is locked by another process');
@@ -121,39 +134,32 @@ async function processJob(source, job) {
         }
         throw readErr;
     }
+}
 
-    // 2) Extraer + traducir + componer el PDF.
-    const result = await generateTranslatedPdf({
+/**
+ * Procesa un job ya reclamado (estado `processing`).
+ *
+ * Termina en `translated`, NO en `completed`: el motor solo hace la parte
+ * cara (extraccion + traduccion) y deja el texto guardado. El documento se
+ * genera despues, cuando el usuario lo pide desde el preview — asi no se
+ * escriben PDFs en el expediente que nadie ha revisado.
+ */
+async function processJob(source, job) {
+    const sourceFilename = job.source_filename;
+
+    const sourcePath = await resolveSourceFilePath(source, job);
+    const sourceBytes = await readSourceFile(sourcePath);
+
+    const result = await extractAndTranslate({
         sourceBytes,
         sourceFilename,
         targetCode: job.target_lang,
         sourceCode: job.source_lang || 'auto',
-        createdByName: job.created_by_name,
-        ...(typeof source.pdfContext === 'function' ? source.pdfContext(job) : {}),
     });
 
-    // 3) Guardar junto al original.
-    const targetDir = path.dirname(resolved.fullPath);
-    if (!existsSync(targetDir)) {
-        await mkdir(targetDir, { recursive: true });
-    }
-
-    const translatedFilename = buildTranslatedFilename(
-        sourceFilename,
-        job.target_lang,
-        job.version,
-    );
-    const outputPath = path.join(targetDir, translatedFilename).replace(/\\/g, '/');
-
-    await writeFileSafe(outputPath, result.bytes);
-
-    // 4) Marcar como completado.
     await withTransaction(async (transaction) => {
-        await source.model.markCompleted(transaction, job.id, {
-            translated_filename: translatedFilename,
-            file_path: outputPath,
-            file_hash: hashBuffer(result.bytes),
-            page_count: result.pageCount,
+        await source.model.markTranslated(transaction, job.id, {
+            translated_text: result.translatedText,
             char_count: result.charCount,
             extraction_method: result.extractionMethod,
         });
@@ -161,15 +167,85 @@ async function processJob(source, job) {
             ...source.auditScope(job),
             translation_id: job.id,
             source_filename: sourceFilename,
-            action: 'translation_completed',
+            action: 'translation_ready',
             user_id: job.created_by,
             user_name: job.created_by_name,
-            details: `lang=${job.target_lang}; file=${translatedFilename}; pages=${result.pageCount}`,
+            details: `lang=${job.target_lang}; chars=${result.charCount}; method=${result.extractionMethod}`,
         });
     });
 
-    console.log(`[Translations] ${describeJob(source, job)} completed -> ${translatedFilename}`);
+    console.log(
+        `[Translations] ${describeJob(source, job)} translated ` +
+        `(${result.charCount} chars) — awaiting document generation`,
+    );
 }
+
+/**
+ * Segunda etapa: compone el documento con el texto ya revisado y lo escribe
+ * junto al archivo original. La invoca el controlador dentro del request,
+ * porque solo compone el PDF (sin OCR ni IA) y tarda decimas de segundo.
+ *
+ * No toca la base de datos: devuelve los datos del archivo para que el
+ * controlador los persista en su propia transaccion.
+ *
+ * @param {string} sourceKey clave de la fuente registrada ('crm', 'approvals')
+ * @param {object} job fila del job (necesita source_filename, target_lang, version)
+ * @param {string} translatedText texto final, posiblemente editado por el usuario
+ * @returns {Promise<{ translatedFilename:string, filePath:string,
+ *                     fileHash:string, pageCount:number }>}
+ */
+export async function renderTranslationDocument(sourceKey, job, translatedText) {
+    const source = sources.get(sourceKey);
+    if (!source) throw new Error(`Unknown translation source: ${sourceKey}`);
+    if (!connectionConfig) {
+        // Solo puede pasar si se llama antes de arrancar el motor.
+        throw new Error('The translation engine has not been started yet');
+    }
+
+    const text = String(translatedText || '').trim();
+    if (!text) {
+        const error = new Error('There is no translated text to generate the document from');
+        error.code = 'NO_TEXT';
+        throw error;
+    }
+
+    // Solo hace falta la ruta del original (el documento se guarda a su
+    // lado), no su contenido: el texto ya esta traducido y guardado.
+    const fullPath = await resolveSourceFilePath(source, job);
+
+    const { bytes, pageCount } = await buildTranslatedPdf({
+        translatedText: text,
+        sourceFilename: job.source_filename,
+        targetCode: job.target_lang,
+        sourceCode: job.source_lang || 'auto',
+        createdByName: job.created_by_name,
+        ...(typeof source.pdfContext === 'function' ? source.pdfContext(job) : {}),
+    });
+
+    const targetDir = path.dirname(fullPath);
+    if (!existsSync(targetDir)) {
+        await mkdir(targetDir, { recursive: true });
+    }
+
+    const translatedFilename = buildTranslatedFilename(
+        job.source_filename,
+        job.target_lang,
+        job.version,
+    );
+    const outputPath = path.join(targetDir, translatedFilename).replace(/\\/g, '/');
+
+    await writeFileSafe(outputPath, bytes);
+
+    return {
+        translatedFilename,
+        filePath: outputPath,
+        fileHash: hashBuffer(bytes),
+        pageCount,
+    };
+}
+
+/** Mensaje de error de usuario, reexportado para los controladores. */
+export { toUserMessage as translationErrorMessage };
 
 /** Persiste el fallo de un job sin dejar que un error de BD lo enmascare. */
 async function persistFailure(source, job, error) {
