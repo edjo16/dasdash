@@ -3,7 +3,7 @@ import CRMModel from '../../CRM/model/CRM.js';
 import { existsSync } from 'fs';
 import {
   buildPdfContextFromCandidates,
-  isPdfFile,
+  isAiReadableFile,
   trimContextText
 } from './shared/pdf-context.js';
 
@@ -110,7 +110,7 @@ async function buildCrmPdfContext(crmId, rows) {
       .split(';')
       .map((f) => f.trim())
       .filter(Boolean)
-      .filter((f) => isPdfFile(f));
+      .filter((f) => isAiReadableFile(f));
 
     for (const filename of files) {
       candidates.push({

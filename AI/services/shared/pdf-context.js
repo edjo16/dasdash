@@ -1,5 +1,9 @@
 import { existsSync, statSync } from 'fs';
 import { readFile } from 'fs/promises';
+import {
+  extractFromDocument,
+  isSupportedDocument
+} from '../../../Tools/services/office-extraction-service.js';
 
 const MAX_PDF_FILES = Number(process.env.AI_CRM_MAX_PDFS || 8);
 const MAX_PDF_BYTES = Number(process.env.AI_CRM_MAX_PDF_BYTES || (8 * 1024 * 1024));
@@ -23,6 +27,19 @@ export function isSafeFilename(filename) {
 
 export function isPdfFile(filename) {
   return /\.pdf$/i.test(String(filename || '').trim());
+}
+
+/**
+ * Formatos cuyo texto se puede incorporar al contexto del asistente:
+ * PDF mas los documentos ofimaticos que sabe leer office-extraction-service
+ * (Word moderno, OpenDocument, RTF y texto plano).
+ *
+ * A diferencia de la traduccion, aqui NO hay OCR: un PDF escaneado o una
+ * imagen no aportan texto, asi que las imagenes quedan fuera.
+ */
+export function isAiReadableFile(filename) {
+  const value = String(filename || '').trim();
+  return isPdfFile(value) || isSupportedDocument(value);
 }
 
 async function getPdfParser() {
@@ -92,14 +109,11 @@ export async function buildPdfContextFromCandidates(candidates, resolveFilePath)
   const documents = [];
   const warnings = [];
 
-  if (!parserApi || (!parserApi.parserClass && !parserApi.parserFunction)) {
+  // Si falta el parser de PDF, los documentos ofimaticos siguen siendo
+  // legibles: solo se avisa y se saltan los PDFs.
+  const pdfAvailable = !!(parserApi && (parserApi.parserClass || parserApi.parserFunction));
+  if (!pdfAvailable) {
     warnings.push('PDF parser is unavailable on the server.');
-    return {
-      documentContextText: '',
-      documents,
-      warnings,
-      truncated: false
-    };
   }
 
   const normalized = (Array.isArray(candidates) ? candidates : []).map(normalizeCandidate);
@@ -111,7 +125,7 @@ export async function buildPdfContextFromCandidates(candidates, resolveFilePath)
 
   let selected = Array.from(dedup.values());
   if (selected.length > MAX_PDF_FILES) {
-    warnings.push('Only the first ' + MAX_PDF_FILES + ' PDF files were processed due to safety limits.');
+    warnings.push('Only the first ' + MAX_PDF_FILES + ' documents were processed due to safety limits.');
     selected = selected.slice(0, MAX_PDF_FILES);
   }
 
@@ -151,9 +165,22 @@ export async function buildPdfContextFromCandidates(candidates, resolveFilePath)
       continue;
     }
 
+    const isPdf = isPdfFile(filename);
+    if (isPdf && !pdfAvailable) {
+      documents.push({ id_msg: idMsg, filename, status: 'parser_unavailable' });
+      continue;
+    }
+    if (!isPdf && !isSupportedDocument(filename)) {
+      documents.push({ id_msg: idMsg, filename, status: 'unsupported_type' });
+      continue;
+    }
+
     try {
       const buffer = await readFile(filePath);
-      const extracted = await extractPdfText(buffer, parserApi);
+      // El PDF va por pdf-parse; Word/ODT/RTF/texto por el lector propio.
+      const extracted = isPdf
+        ? await extractPdfText(buffer, parserApi)
+        : await extractFromDocument(buffer, filename);
       let text = String(extracted?.text || '')
         .replace(/\r\n?/g, '\n')
         .replace(/\n{3,}/g, '\n\n')
@@ -186,7 +213,8 @@ export async function buildPdfContextFromCandidates(candidates, resolveFilePath)
 
       usedChars += chunk.length;
       const refLabel = item.source_label || ('msg_id=' + idMsg);
-      blocks.push('[PDF ' + (i + 1) + '] file=' + filename + ' ' + refLabel + '\n' + chunk);
+      blocks.push('[' + (isPdf ? 'PDF' : 'DOC') + ' ' + (i + 1) + '] file=' + filename +
+        ' ' + refLabel + '\n' + chunk);
 
       documents.push({
         id_msg: idMsg,

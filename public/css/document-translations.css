@@ -372,17 +372,8 @@
 .atr-toast--ok    { border-left-color: #1a7f45; }
 .atr-toast--error { border-left-color: #c0392b; }
 
-/* ── Botones en la lista de archivos ──────────────────────── */
-.file_action_btn .fa-language {
-  color: var(--atr-primary);
-}
-
-.file_translation_count {
-  font-size: .7rem;
-  font-weight: 600;
-  color: var(--atr-primary);
-  margin-left: 2px;
-}
+/* Las acciones de traduccion de la lista de archivos ya no son iconos
+   sueltos: viven dentro del menu de opciones (/css/file-actions-menu.css). */
 
 @media (max-width: 768px) {
   .atr-modal {

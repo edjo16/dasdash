@@ -6,7 +6,7 @@ import Rules from '../../USERS/rule/DevTeam.js';
 import { resolveApprovalBasePath } from '../../Approvals_functions/shared/approval-file-routing.js';
 import {
   buildPdfContextFromCandidates,
-  isPdfFile,
+  isAiReadableFile,
   trimContextText
 } from './shared/pdf-context.js';
 
@@ -142,7 +142,7 @@ async function buildApprovalPdfContext(approvalId, approvalFlow, log, archivos) 
       meta: fileRow
     }))
     .filter((candidate) => candidate.filename)
-    .filter((candidate) => isPdfFile(candidate.filename));
+    .filter((candidate) => isAiReadableFile(candidate.filename));
 
   return buildPdfContextFromCandidates(candidates, (item) => {
     const basePath = resolveApprovalBasePath(approvalFlow, log, item.process || '');

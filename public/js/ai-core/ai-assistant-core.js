@@ -283,7 +283,7 @@
       sendEndpoint: '/api/ai/send',
       includeDocsByDefault: true,
       noContextMessage: 'No case details were found.',
-      docsMissingMessage: 'No PDF context selected.',
+      docsMissingMessage: 'No document context selected.',
       chatActionName: 'chat',
       addToCaseLabel: 'Add to case',
       enableSaveAction: false,
@@ -533,7 +533,7 @@
       var panel = g(cfg.filesPanelId);
       if (panel) panel.classList.add('ai-files-row--loading');
       var statusEl = g(cfg.docsStatusId);
-      if (statusEl) statusEl.textContent = 'Loading PDF context...';
+      if (statusEl) statusEl.textContent = 'Loading document context...';
 
       state.inFlightContextPromise = fetchCaseContext(contextId, cfg.includeDocsByDefault)
         .then(function (payload) {
@@ -551,7 +551,7 @@
         })
         .catch(function (error) {
           console.error('[AI Assistant] context load error:', error);
-          if (statusEl) statusEl.textContent = 'Could not load PDF context';
+          if (statusEl) statusEl.textContent = 'Could not load document context';
           return null;
         })
         .then(function (result) {
@@ -1005,6 +1005,94 @@
       else updateDocsStatusText();
     }
 
+    /**
+     * Abre el asistente centrado en UN archivo concreto: restringe la
+     * seleccion de documentos a ese archivo y, opcionalmente, lanza la
+     * pregunta de inmediato.
+     *
+     * Lo usan los menus de acciones de cada archivo (Approvals y CRM), donde
+     * la pregunta es siempre sobre el documento de esa fila, no sobre todo
+     * el expediente.
+     *
+     * @param {object} options
+     * @param {string} options.filename   nombre exacto del archivo
+     * @param {string|number} [options.msgId] mensaje al que pertenece (CRM)
+     * @param {string} [options.prompt]   pregunta a enviar
+     * @param {string} [options.action]   accion registrada en el log
+     * @param {boolean} [options.send=true] false para dejar el prompt escrito
+     *                                      en el input sin enviarlo
+     */
+    function openForDocument(options) {
+      var opts = options || {};
+      var filename = String(opts.filename || '');
+      if (!filename) return;
+
+      openModal();
+
+      var contextId = getContextId();
+      if (!contextId) {
+        appendBubble('bot', '⚠️ Could not determine the case ID.');
+        return;
+      }
+
+      setLoading(true);
+      ensureCaseContextLoaded(contextId).then(function (payload) {
+        if (!payload) {
+          appendBubble('bot', '⚠️ Could not load case context. Please try again.');
+          setLoading(false);
+          return;
+        }
+
+        var documents = Array.isArray(payload.documents) ? payload.documents : [];
+        var target = null;
+        for (var i = 0; i < documents.length; i++) {
+          var doc = documents[i];
+          if (String(doc.filename || '') !== filename) continue;
+          // En CRM el mismo nombre puede repetirse en distintos mensajes.
+          if (opts.msgId != null && String(doc.id_msg || '') !== String(opts.msgId)) continue;
+          target = doc;
+          break;
+        }
+
+        if (!target) {
+          appendBubble('bot', '⚠️ "' + filename + '" is not available as AI context for this case.');
+          setLoading(false);
+          return;
+        }
+        if (target.status !== 'ok') {
+          appendBubble('bot', '⚠️ The text of "' + filename + '" could not be read' +
+            (target.error ? ' (' + target.error + ')' : '') + '.');
+          setLoading(false);
+          return;
+        }
+
+        // Solo ese documento entra en el contexto, para que la respuesta no
+        // se mezcle con el resto de adjuntos del expediente.
+        state.selectedFileKeys = new Set([fileKey(target)]);
+        renderFilesPanel(payload);
+        rebuildCaseContext();
+
+        if (!opts.prompt) {
+          setLoading(false);
+          var input = g(cfg.promptId);
+          if (input) input.focus();
+          return;
+        }
+
+        if (opts.send === false) {
+          setLoading(false);
+          var textarea = g(cfg.promptId);
+          if (textarea) {
+            textarea.value = opts.prompt;
+            textarea.focus();
+          }
+          return;
+        }
+
+        dispatchMessage(opts.prompt, opts.action || cfg.chatActionName);
+      });
+    }
+
     function closeModal() {
       var overlay = g(cfg.modalId);
       if (overlay) overlay.classList.remove('open');
@@ -1064,7 +1152,8 @@
     return {
       open: openModal,
       close: closeModal,
-      handleSend: handleSend
+      handleSend: handleSend,
+      openForDocument: openForDocument
     };
   }
 

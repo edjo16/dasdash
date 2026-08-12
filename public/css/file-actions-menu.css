@@ -1,0 +1,158 @@
+/* ═══════════════════════════════════════════════════════════
+   File actions menu — estilos del boton y del desplegable.
+   Lo consume /js/file-actions-menu.js (clases fam-*).
+   ═══════════════════════════════════════════════════════════ */
+
+:root {
+  --fam-primary: #00586f;
+  --fam-surface: #ffffff;
+  --fam-text: #212529;
+  --fam-muted: #6c757d;
+  --fam-border: #dee2e6;
+  --fam-hover: #f1f5f7;
+}
+
+:root[data-theme="dark"] {
+  --fam-primary: #2f95ad;
+  --fam-surface: #1d2128;
+  --fam-text: #e4e7ec;
+  --fam-muted: #96a1af;
+  --fam-border: #2b313a;
+  --fam-hover: #252b34;
+}
+
+/* ── Boton de opciones ────────────────────────────────────── */
+.fam-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--fam-primary);
+  font-size: .9rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.fam-btn:hover,
+.fam-btn--active {
+  background: var(--fam-hover);
+}
+
+.fam-btn:focus-visible {
+  outline: 2px solid var(--fam-primary);
+  outline-offset: 1px;
+}
+
+/* Punto de aviso: algo dentro del menu requiere atencion (p. ej. una
+   traduccion lista para revisar) y no se veria con el menu cerrado. */
+.fam-btn__dot {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #d9822b;
+}
+
+/* ── Panel ────────────────────────────────────────────────── */
+.fam-panel {
+  position: fixed;
+  z-index: 1090;
+  min-width: 208px;
+  max-width: 280px;
+  padding: 4px;
+  background: var(--fam-surface);
+  color: var(--fam-text);
+  border: 1px solid var(--fam-border);
+  border-radius: 6px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, .16);
+  font-size: .85rem;
+}
+
+.fam-item {
+  display: flex;
+  align-items: center;
+  gap: .55rem;
+  width: 100%;
+  padding: .45rem .6rem;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.fam-item:hover:not(.fam-item--disabled),
+.fam-item:focus-visible:not(.fam-item--disabled) {
+  background: var(--fam-hover);
+  color: inherit;
+  outline: none;
+  text-decoration: none;
+}
+
+.fam-item__icon {
+  width: 15px;
+  flex-shrink: 0;
+  text-align: center;
+  font-size: .82rem;
+  color: var(--fam-primary);
+}
+
+.fam-item__label {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.fam-item__badge {
+  flex-shrink: 0;
+  min-width: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--fam-hover);
+  color: var(--fam-muted);
+  font-size: .7rem;
+  font-weight: 600;
+  text-align: center;
+}
+
+.fam-item__badge--attention {
+  background: #fdf1d4;
+  color: #8a6100;
+}
+
+:root[data-theme="dark"] .fam-item__badge--attention {
+  background: #3b3320;
+  color: #e0b45e;
+}
+
+.fam-item--disabled {
+  color: var(--fam-muted);
+  cursor: default;
+}
+
+.fam-item--disabled .fam-item__icon {
+  color: var(--fam-muted);
+}
+
+.fam-item--danger,
+.fam-item--danger .fam-item__icon {
+  color: #c0392b;
+}
+
+.fam-separator {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--fam-border);
+}

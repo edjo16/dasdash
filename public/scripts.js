@@ -1146,58 +1146,184 @@ function openApprovalMsgViewer(RowID, filename) {
     return false;
 }
 
+/* Formatos cuyo texto puede leer el contexto de IA. Debe coincidir con
+   AI/services/shared/pdf-context.js (isAiReadableFile). */
+var APPROVAL_AI_READABLE = /\.(pdf|docx|docm|dotx|dotm|odt|ott|rtf|txt|md|markdown|csv|log)$/i;
+
 /**
- * Agrega los botones de traduccion a la fila de un archivo.
+ * Acciones de traduccion de un archivo, para el menu de opciones.
  *
  * - "Translate": abre el modal de seleccion de idioma (encola un job).
- * - "Open translation": solo si el archivo ya tiene traducciones; abre el
- *   listado, porque un mismo archivo puede tener varias.
+ * - "Translations": solo si el archivo ya tiene alguna; abre el listado,
+ *   porque un mismo archivo puede tener varias.
  *
  * Toda la logica vive en window.ApprovalTranslations
- * (public/js/approval-translations.js); aqui solo se cablean los botones.
+ * (public/js/approval-translations.js); aqui solo se cablean las acciones.
  */
-function appendTranslationActions(actionsContainer, rowId, item) {
-    if (!actionsContainer || !item || !item.is_translatable) return;
-    if (!window.ApprovalTranslations) return; // modulo no cargado en esta vista
+function buildTranslationActions(rowId, item) {
+    if (!item || !item.is_translatable) return [];
+    if (!window.ApprovalTranslations) return []; // modulo no cargado en esta vista
 
-    var btnTranslate = document.createElement('a');
-    btnTranslate.href = '#';
-    btnTranslate.title = 'Translate this document';
-    btnTranslate.className = 'file_action_btn';
-    btnTranslate.innerHTML = '<i class="fas fa-language secondIcon"></i>';
-    btnTranslate.onclick = function (e) {
-        e.preventDefault();
-        window.ApprovalTranslations.openTranslateModal(rowId, item.filename);
-        return false;
-    };
-    actionsContainer.appendChild(btnTranslate);
+    var actions = [{
+        icon: 'fa-language',
+        label: 'Translate…',
+        title: 'Translate this document',
+        onClick: function () {
+            window.ApprovalTranslations.openTranslateModal(rowId, item.filename);
+        }
+    }];
 
     var count = Number(item.translation_count) || 0;
     var preview = Number(item.translation_preview) || 0;
     var pending = Number(item.translation_pending) || 0;
 
-    if (!item.has_translations && !preview && !pending) return;
+    if (!item.has_translations && !preview && !pending) return actions;
 
     // `preview` son traducciones con el texto listo esperando a que alguien
     // lo revise: se marcan aparte porque piden una accion del usuario.
-    var btnOpen = document.createElement('a');
-    btnOpen.href = '#';
-    btnOpen.title = pending > 0
-        ? 'Open translation (' + pending + ' in progress)'
-        : preview > 0
-            ? 'Open translation (' + preview + ' ready to review)'
-            : 'Open translation';
-    btnOpen.className = 'file_action_btn';
-    btnOpen.innerHTML = '<i class="fas fa-globe secondIcon"></i>' +
-        (count > 0 ? '<span class="file_translation_count">' + count + '</span>' : '') +
-        (preview > 0 ? '<i class="fas fa-eye secondIcon" style="margin-left:3px;"></i>' : '') +
-        (pending > 0 ? '<i class="fas fa-spinner fa-spin secondIcon" style="margin-left:3px;"></i>' : '');
-    btnOpen.onclick = function (e) {
-        e.preventDefault();
-        window.ApprovalTranslations.openTranslationsModal(rowId, item.filename);
-        return false;
-    };
-    actionsContainer.appendChild(btnOpen);
+    var badge = pending > 0 ? String(pending) + ' running'
+        : preview > 0 ? String(preview) + ' to review'
+            : String(count);
+
+    actions.push({
+        icon: 'fa-globe',
+        label: 'Translations',
+        badge: badge,
+        badgeAttention: preview > 0,
+        onClick: function () {
+            window.ApprovalTranslations.openTranslationsModal(rowId, item.filename);
+        }
+    });
+
+    return actions;
+}
+
+/** Accion de IA: resume el documento de esta fila y nada mas del expediente. */
+function buildAiActions(item) {
+    if (!window.ApprovalAI || typeof window.ApprovalAI.openForDocument !== 'function') return [];
+
+    var readable = APPROVAL_AI_READABLE.test(item.filename || '');
+    return [{
+        // fa-magic existe en FontAwesome 5, que es la version que carga layout.pug.
+        icon: 'fa-magic',
+        label: 'Summarize with AI',
+        disabled: !readable,
+        disabledReason: 'The AI assistant can only read PDF, Word, OpenDocument, RTF and text files',
+        onClick: function () {
+            window.ApprovalAI.openForDocument({
+                filename: item.filename,
+                action: 'summarize',
+                prompt: 'Summarize the document "' + item.filename + '". Cover its purpose, '
+                    + 'the key points, any amounts, dates and parties involved, and anything '
+                    + 'that needs attention before approving. Use only the attached extract.'
+            });
+        }
+    }];
+}
+
+/** ¿Hay algo dentro del menu que reclame atencion del usuario? */
+function fileNeedsAttention(item) {
+    return Number(item.translation_preview) > 0;
+}
+
+/** Icono de accion directa (el que queda fuera del menu). */
+function createApprovalPrimaryAction(config) {
+    var el = document.createElement('a');
+    el.className = 'file_action_btn';
+    el.href = config.href || '#';
+    el.title = config.title;
+    el.innerHTML = '<i class="fas ' + config.icon + ' secondIcon"></i>';
+    if (config.target) el.target = config.target;
+    if (config.onClick) {
+        el.onclick = function (e) {
+            e.preventDefault();
+            config.onClick();
+            return false;
+        };
+    }
+    return el;
+}
+
+/**
+ * Pinta las acciones de un archivo: la mas frecuente (abrir) como icono
+ * suelto y el resto dentro de un menu de opciones.
+ *
+ * Antes eran cuatro o cinco iconos por fila, ilegibles y sin etiqueta.
+ */
+function buildApprovalFileActions(container, rowId, item) {
+    var ext = getApprovalFileExtension(item.filename);
+    var isMsg = ext === '.msg';
+    var menu = [];
+
+    // ── Accion directa ────────────────────────────────────────
+    if (item.is_image || item.is_pdf) {
+        container.appendChild(createApprovalPrimaryAction({
+            href: item.file_url,
+            target: '_blank',
+            title: item.is_image ? 'Open image' : 'Open in browser',
+            icon: item.is_image ? 'fa-external-link-alt' : 'fa-globe'
+        }));
+    } else if (isMsg) {
+        container.appendChild(createApprovalPrimaryAction({
+            title: 'Open email message',
+            icon: 'fa-envelope-open',
+            onClick: function () { openApprovalMsgViewer(rowId, item.filename); }
+        }));
+    } else {
+        // Formatos que el navegador no muestra: descargar es "abrir".
+        container.appendChild(createApprovalPrimaryAction({
+            href: item.download_url,
+            title: 'Download',
+            icon: 'fa-download'
+        }));
+    }
+
+    // ── Menu de opciones ──────────────────────────────────────
+    if (item.is_pdf) {
+        menu.push({
+            icon: 'fa-signature',
+            label: 'Preview versions & sign',
+            onClick: function () {
+                if (window.PdfViewerSign) {
+                    PdfViewerSign.open(rowId, item.filename, { version: 'latest' });
+                }
+            }
+        });
+    }
+
+    // La descarga ya es la accion directa en los formatos no visualizables.
+    if (item.is_image || item.is_pdf || isMsg) {
+        menu.push({ icon: 'fa-download', label: 'Download', href: item.download_url });
+    }
+
+    var translationActions = buildTranslationActions(rowId, item);
+    if (translationActions.length) {
+        menu.push({ separator: true });
+        menu = menu.concat(translationActions);
+    }
+
+    // El .msg no se traduce ni se lee como contexto de IA.
+    if (!isMsg) {
+        var aiActions = buildAiActions(item);
+        if (aiActions.length) {
+            menu.push({ separator: true });
+            menu = menu.concat(aiActions);
+        }
+    }
+
+    if (!window.FileActionsMenu) return;
+
+    // Un menu cuyas opciones estan todas deshabilitadas (p. ej. un .zip, que
+    // ni se traduce ni se lee) solo estorba: mejor no pintar el boton.
+    var hasEnabled = menu.some(function (action) {
+        return !action.separator && !action.disabled;
+    });
+    if (!hasEnabled) return;
+
+    container.appendChild(window.FileActionsMenu.create(menu, {
+        ariaLabel: 'Actions for ' + item.filename,
+        attention: fileNeedsAttention(item)
+    }));
 }
 
 function ArchivosApproval(RowID = 0, options = {}) {
@@ -1290,81 +1416,7 @@ function ArchivosApproval(RowID = 0, options = {}) {
                     var actions = document.createElement("span");
                     actions.className = "file_actions";
 
-                    if (item.is_image) {
-                        // Images: open directly in browser
-                        var link = document.createElement("a");
-                        link.href = item.file_url;
-                        link.target = "_blank";
-                        link.title = "Open image";
-                        link.innerHTML = '<i class="fas fa-external-link-alt secondIcon"></i>';
-                        actions.appendChild(link);
-                        appendTranslationActions(actions, id, item);
-                    } else if (item.is_pdf) {
-                        // PDFs: preview/sign (with version selector), browser, download
-                        var btnViewer = document.createElement("a");
-                        btnViewer.href = "#";
-                        btnViewer.title = "Preview versions & sign";
-                        btnViewer.className = "file_action_btn";
-                        btnViewer.innerHTML = '<i class="fas fa-signature secondIcon"></i>';
-                        btnViewer.onclick = (function(rowId, fname) {
-                            return function(e) {
-                                e.preventDefault();
-                                if (window.PdfViewerSign) {
-                                    PdfViewerSign.open(rowId, fname, { version: 'latest' });
-                                }
-                            };
-                        })(id, item.filename);
-
-                        var btnBrowser = document.createElement("a");
-                        btnBrowser.href = item.file_url;
-                        btnBrowser.target = "_blank";
-                        btnBrowser.title = "Open in browser";
-                        btnBrowser.className = "file_action_btn";
-                        btnBrowser.innerHTML = '<i class="fas fa-globe secondIcon"></i>';
-
-                        var btnDownload = document.createElement("a");
-                        btnDownload.href = item.download_url;
-                        btnDownload.title = "Download";
-                        btnDownload.className = "file_action_btn";
-                        btnDownload.innerHTML = '<i class="fas fa-download secondIcon"></i>';
-
-                        actions.appendChild(btnViewer);
-                        actions.appendChild(btnBrowser);
-                        actions.appendChild(btnDownload);
-                        appendTranslationActions(actions, id, item);
-                    } else if (getApprovalFileExtension(item.filename) === '.msg') {
-                        var btnOpenMsg = document.createElement('a');
-                        btnOpenMsg.href = '#';
-                        btnOpenMsg.title = 'Open email message';
-                        btnOpenMsg.className = 'file_action_btn';
-                        btnOpenMsg.innerHTML = '<i class="fas fa-envelope-open secondIcon"></i>';
-                        btnOpenMsg.onclick = (function (rowId, fname) {
-                            return function (e) {
-                                e.preventDefault();
-                                openApprovalMsgViewer(rowId, fname);
-                                return false;
-                            };
-                        })(id, item.filename);
-
-                        var msgDownloadBtn = document.createElement('a');
-                        msgDownloadBtn.href = item.download_url;
-                        msgDownloadBtn.title = 'Download';
-                        msgDownloadBtn.className = 'file_action_btn';
-                        msgDownloadBtn.innerHTML = '<i class="fas fa-download secondIcon"></i>';
-
-                        actions.appendChild(btnOpenMsg);
-                        actions.appendChild(msgDownloadBtn);
-                    } else {
-                        // Other files: download and, if the backend can read
-                        // them (Word, OpenDocument, RTF, text), translation.
-                        var dlBtn = document.createElement("a");
-                        dlBtn.href = item.download_url;
-                        dlBtn.title = "Download";
-                        dlBtn.className = 'file_action_btn';
-                        dlBtn.innerHTML = '<i class="fas fa-download secondIcon"></i>';
-                        actions.appendChild(dlBtn);
-                        appendTranslationActions(actions, id, item);
-                    }
+                    buildApprovalFileActions(actions, id, item);
 
                     row.appendChild(actions);
                     object.appendChild(row);

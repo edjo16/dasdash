@@ -580,42 +580,93 @@ function isCrmTranslatableFile(filename) {
     return CRM_TRANSLATABLE_EXTS.indexOf(getCrmFileExtension(filename)) !== -1;
 }
 
+/* Formatos cuyo texto puede leer el contexto de IA. Debe coincidir con
+   AI/services/shared/pdf-context.js (isAiReadableFile). */
+var CRM_AI_READABLE_EXTS = [
+    '.pdf',
+    '.docx', '.docm', '.dotx', '.dotm',
+    '.odt', '.ott',
+    '.rtf',
+    '.txt', '.md', '.markdown', '.csv', '.log'
+];
+
 /**
- * Agrega los botones de traduccion a la fila de un archivo.
+ * Acciones de traduccion de un adjunto, para el menu de opciones.
  *
- * - "Translate": abre el modal de seleccion de idioma (encola un job).
- * - "Open translation": nace oculto y lo revela CRMTranslations.refreshBadges()
- *   cuando el caso ya tiene traducciones para ese archivo. Se hace asi porque
- *   la lista de adjuntos de CRM se arma en el cliente desde un string y no
- *   trae metadata por archivo.
- *
- * Toda la logica vive en window.CRMTranslations (public/js/crm-translations.js);
- * aqui solo se cablean los botones.
+ * Los contadores salen de la cache de CRMTranslations (la alimenta
+ * refreshBadges), porque la lista de adjuntos de CRM se arma en el cliente
+ * desde un string y no trae metadata por archivo.
  */
-function appendCrmTranslationActions(actions, crm_id, msg_id, filename) {
-    if (!actions || !isCrmTranslatableFile(filename)) return;
-    if (!window.CRMTranslations) return; // modulo no cargado en esta vista
+function buildCrmTranslationActions(crm_id, msg_id, filename) {
+    if (!isCrmTranslatableFile(filename)) return [];
+    if (!window.CRMTranslations) return []; // modulo no cargado en esta vista
 
-    actions.appendChild(createCrmActionButton(
-        'Translate this document',
-        '<i class="fas fa-language secondIcon"></i>',
-        function () { window.CRMTranslations.openTranslateModal(crm_id, msg_id, filename); }
-    ));
+    var actions = [{
+        icon: 'fa-language',
+        label: 'Translate…',
+        title: 'Translate this document',
+        onClick: function () {
+            window.CRMTranslations.openTranslateModal(crm_id, msg_id, filename);
+        }
+    }];
 
-    var btnOpen = createCrmActionButton(
-        'Open translation',
-        '<i class="fas fa-globe secondIcon"></i>',
-        function () { window.CRMTranslations.openTranslationsModal(crm_id, msg_id, filename); }
-    );
-    btnOpen.style.display = 'none';
-    btnOpen.setAttribute('data-crm-translation-file', filename);
-    btnOpen.setAttribute('data-crm-msg-id', msg_id);
-    actions.appendChild(btnOpen);
+    var counts = typeof window.CRMTranslations.getCounts === 'function'
+        ? window.CRMTranslations.getCounts(msg_id, filename)
+        : { completed: 0, preview: 0, pending: 0 };
+
+    if (!counts.completed && !counts.preview && !counts.pending) return actions;
+
+    var badge = counts.pending > 0 ? counts.pending + ' running'
+        : counts.preview > 0 ? counts.preview + ' to review'
+            : String(counts.completed);
+
+    actions.push({
+        icon: 'fa-globe',
+        label: 'Translations',
+        badge: badge,
+        badgeAttention: counts.preview > 0,
+        onClick: function () {
+            window.CRMTranslations.openTranslationsModal(crm_id, msg_id, filename);
+        }
+    });
+
+    return actions;
 }
 
+/** Accion de IA: resume este adjunto y nada mas del caso. */
+function buildCrmAiActions(crm_id, msg_id, filename) {
+    if (!window.CrmAI || typeof window.CrmAI.openForDocument !== 'function') return [];
+
+    var readable = CRM_AI_READABLE_EXTS.indexOf(getCrmFileExtension(filename)) !== -1;
+    return [{
+        icon: 'fa-magic',
+        label: 'Summarize with AI',
+        disabled: !readable,
+        disabledReason: 'The AI assistant can only read PDF, Word, OpenDocument, RTF and text files',
+        onClick: function () {
+            window.CrmAI.openForDocument({
+                filename: filename,
+                msgId: msg_id,
+                action: 'summarize',
+                prompt: 'Summarize the document "' + filename + '". Cover its purpose, the key '
+                    + 'points, any amounts, dates and parties involved, and any pending actions. '
+                    + 'Use only the attached extract.'
+            });
+        }
+    }];
+}
+
+/**
+ * Pinta las acciones de un adjunto: la mas frecuente (abrir) como icono
+ * suelto y el resto dentro de un menu de opciones.
+ *
+ * Antes eran hasta cinco iconos por fila, ilegibles y sin etiqueta.
+ */
 function buildCrmFileActions(crm_id, msg_id, filename) {
     var endpoints = getCrmFileEndpoints(crm_id, msg_id, filename);
     var ext = getCrmFileExtension(filename);
+    var isViewable = ext === '.pdf' || ext === '.png' || ext === '.jpg' || ext === '.jpeg';
+    var isMsg = ext === '.msg';
 
     var actions = document.createElement('div');
     actions.style.display = 'flex';
@@ -623,51 +674,86 @@ function buildCrmFileActions(crm_id, msg_id, filename) {
     actions.style.gap = '8px';
     actions.style.marginLeft = 'auto';
 
-    if (ext === '.pdf' || ext === '.png' || ext === '.jpg' || ext === '.jpeg') {
-         if (ext === '.pdf'){
-             actions.appendChild(createCrmActionButton(
-                 'Open viewer (write comments)',
-                 '<i class="fas fa-edit secondIcon"></i>',
-                 function () { openCrmPdfViewer(crm_id, msg_id, filename); }
-                ));
-        }
+    // ── Accion directa ────────────────────────────────────────
+    if (isViewable) {
         actions.appendChild(createCrmActionLink(
             endpoints.fileUrl,
             'Open in browser',
             '<i class="fas fa-globe secondIcon"></i>',
             '_blank'
         ));
-        actions.appendChild(createCrmActionLink(
-            endpoints.downloadUrl,
-            'Download',
-            '<i class="fas fa-download secondIcon"></i>'
-        ));
-        appendCrmTranslationActions(actions, crm_id, msg_id, filename);
-        return actions;
-    }
-
-    if (ext === '.msg') {
+    } else if (isMsg) {
         actions.appendChild(createCrmActionButton(
             'Open in Outlook',
             '<i class="fas fa-envelope-open secondIcon"></i>',
             function () { openCrmFileFromBackend(crm_id, msg_id, filename, 'MSG'); }
         ));
+    } else {
+        // Formatos que el navegador no muestra: descargar es "abrir".
         actions.appendChild(createCrmActionLink(
             endpoints.downloadUrl,
             'Download',
             '<i class="fas fa-download secondIcon"></i>'
         ));
-        return actions;
     }
 
-    // Resto de formatos: descarga y, si el backend sabe leerlos (Word,
-    // OpenDocument, RTF, texto), tambien traduccion.
-    actions.appendChild(createCrmActionLink(
-        endpoints.downloadUrl,
-        'Download',
-        '<i class="fas fa-download secondIcon"></i>'
-    ));
-    appendCrmTranslationActions(actions, crm_id, msg_id, filename);
+    if (!window.FileActionsMenu) return actions;
+
+    /*
+     * Un menu cuyas opciones estan todas deshabilitadas (p. ej. un .zip, que
+     * ni se traduce ni se lee) solo estorba: mejor no pintar el boton.
+     */
+    var hasMenu = isViewable || isMsg
+        || isCrmTranslatableFile(filename)
+        || CRM_AI_READABLE_EXTS.indexOf(ext) !== -1;
+    if (!hasMenu) return actions;
+
+    /*
+     * El menu se construye al abrirlo, no ahora: los contadores de
+     * traduccion llegan despues (refreshBadges) y quedarian congelados.
+     */
+    var buildMenu = function () {
+        var menu = [];
+
+        if (ext === '.pdf') {
+            menu.push({
+                icon: 'fa-edit',
+                label: 'Open viewer (write comments)',
+                onClick: function () { openCrmPdfViewer(crm_id, msg_id, filename); }
+            });
+        }
+
+        // La descarga ya es la accion directa en los formatos no visualizables.
+        if (isViewable || isMsg) {
+            menu.push({ icon: 'fa-download', label: 'Download', href: endpoints.downloadUrl });
+        }
+
+        var translationActions = buildCrmTranslationActions(crm_id, msg_id, filename);
+        if (translationActions.length) {
+            menu.push({ separator: true });
+            menu = menu.concat(translationActions);
+        }
+
+        // El .msg no se traduce ni se lee como contexto de IA.
+        if (!isMsg) {
+            var aiActions = buildCrmAiActions(crm_id, msg_id, filename);
+            if (aiActions.length) {
+                menu.push({ separator: true });
+                menu = menu.concat(aiActions);
+            }
+        }
+
+        return menu;
+    };
+
+    var menuBtn = window.FileActionsMenu.create(buildMenu, {
+        ariaLabel: 'Actions for ' + filename
+    });
+    // Marcadores para que refreshBadges pueda pintarle el punto de aviso.
+    menuBtn.setAttribute('data-crm-translation-file', filename);
+    menuBtn.setAttribute('data-crm-msg-id', msg_id);
+    actions.appendChild(menuBtn);
+
     return actions;
 }
 

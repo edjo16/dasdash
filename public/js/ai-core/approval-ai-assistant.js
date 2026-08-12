@@ -6,13 +6,13 @@
   var AI_SYSTEM_PROMPT = [
     'You are an AI assistant specialized in analyzing Approval cases.',
     '',
-    'Use the approval detail context and optional PDF extracts below to answer questions.',
+    'Use the approval detail context and optional document extracts below to answer questions.',
     'Do not invent facts that are not present in the provided context.',
     '',
     'Approval context:',
     '{{MESSAGES}}',
     '',
-    'PDF document extracts:',
+    'Document extracts:',
     '{{DOCUMENTS}}',
     '',
     'If linked CRM references are included in the approval context, use them only as supporting context.'
@@ -22,14 +22,17 @@
     summarize: 'Summarize this approval with the key business context, current status, and pending items.',
     keypoints: 'List the key points of this approval in concise bullets.',
     actions: 'Extract all pending actions and owners based on the approval detail and comments.',
-    documents: 'Answer using the attached PDF extracts and indicate which file supports each conclusion.'
+    documents: 'Answer using the attached document extracts and indicate which file supports each conclusion.'
   };
 
   function getById(id) {
     return document.getElementById(id);
   }
 
-  global.AIAssistantCore.create({
+  // La instancia se publica en window.ApprovalAI para que los menus de
+  // acciones de cada archivo puedan abrir el asistente sobre ese documento
+  // concreto (ver public/scripts.js).
+  global.ApprovalAI = global.AIAssistantCore.create({
     openButtonId: 'openApprovalAiModal',
     modalId: 'aiSummaryModal',
     closeButtonId: 'closeAiModal',
@@ -51,7 +54,7 @@
     enableSaveAction: false,
     normalizeCurrency: false,
     noContextMessage: 'No approval detail was found for this case.',
-    docsMissingMessage: 'No PDF context selected.',
+    docsMissingMessage: 'No document context selected.',
     getContextId: function () {
       var hidden = getById('approval_id_ai');
       if (hidden && hidden.value) return hidden.value;

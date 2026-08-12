@@ -51,7 +51,8 @@ mixin ai-chat-modal(modalId='aiSummaryModal', closeId='closeAiModal', chatWindow
           button.ai-files-toggle(type="button" id="aiFilesToggle" aria-expanded="true" aria-controls="aiFilesList")
             i.fas.fa-chevron-down.ai-files-chevron(id="aiFilesChevron")
             span.ai-files-toggle-label
-              i.fas.fa-file-pdf(style="margin-right:6px;color:#c0392b;")
+              //- Los adjuntos ya no son solo PDF (tambien Word, ODT, RTF y texto).
+              i.fas.fa-paperclip(style="margin-right:6px;color:#00586f;")
               span#aiFilesCount 0
               |  Attachment(s)
           span#aiDocsStatus.ai-docs-status(aria-live="polite")
